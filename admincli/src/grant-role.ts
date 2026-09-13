@@ -20,15 +20,23 @@
 //     <account-address>. acl-granters is the *gateway's own* trust
 //     decision — see docs/adr/0005-acl-record-schema.md.
 //
-// The caller (SEPOLIA_PRIVATE_KEY) must already hold the corresponding admin
-// role — ROLE_REGISTRAR_ADMIN for "enroll"/"relay-registrar", or ALL_ROLES/
-// ROLE_SET_TEXT_ADMIN on the device's resolver for "rotate"/"revoke" (true
-// for whoever deployed that resolver, e.g. via enroll.ts).
+// The caller (SEPOLIA_PRIVATE_KEY, or the Ledger under LEDGER_SIGN=1) must
+// already hold the corresponding admin role — ROLE_REGISTRAR_ADMIN for
+// "enroll"/"relay-registrar", or ALL_ROLES/ROLE_SET_TEXT_ADMIN on the
+// device's resolver for "rotate"/"revoke"/"acl"/"acl-granters" (true for
+// whoever deployed that resolver, e.g. via enroll.ts's LEDGER_SIGN path —
+// which is exactly why this script needs the same option: delegating a
+// narrow setter role off a Ledger-enrolled device's resolver to the plain
+// software account used by set-acl.ts/revoke.ts is a one-off transaction,
+// not a per-call one, so it doesn't hit ledger-eth-sign.ts's "can't open
+// both Ledger apps in one run" constraint the way set-acl.ts's own write
+// would — no Key Ring decrypt happens anywhere in this file.
 import { createWalletClient, http, getAddress } from 'viem'
 import { normalize } from 'viem/ens'
 import { RPC_URL, tailnetName, tailnetRegistry, relayRegistry, ROLE_REGISTRAR } from '../../sidecar/src/ens/config'
 import { accountFromEnv, hackathonSepolia, publicClient } from './setup'
 import { registryWriteAbi, resolverWriteAbi, pubkeySetter, revokedSetter, aclSetter, aclGrantersSetter } from './roles'
+import { connectLedgerAccount } from './ledger-eth-sign'
 
 const RESOLVER_SCOPED_ROLES = {
   rotate: { key: 'pubkey', setter: pubkeySetter },
@@ -39,7 +47,11 @@ const RESOLVER_SCOPED_ROLES = {
 
 async function main() {
   const [role, ...rest] = process.argv.slice(2)
-  const account = accountFromEnv()
+
+  const useLedger = process.env.LEDGER_SIGN === '1'
+  const ledger = useLedger ? await connectLedgerAccount() : null
+  const account = ledger ? ledger.account : accountFromEnv()
+  if (useLedger) console.log(`signing as Ledger account ${account.address} -- confirm the transaction on-device`)
   const wallet = createWalletClient({ account, chain: hackathonSepolia, transport: http(RPC_URL) })
 
   async function writeAndWait(label: string, args: Parameters<typeof wallet.writeContract>[0]) {
@@ -50,58 +62,66 @@ async function main() {
     return receipt
   }
 
-  if (role === 'enroll') {
-    const [grantee] = rest
-    if (!grantee) throw new Error('usage: bun run grant-role.ts enroll <account-address>')
-    console.log(`Granting ROLE_REGISTRAR on ${tailnetRegistry()} to ${grantee}...`)
-    await writeAndWait('grantRootRoles(ROLE_REGISTRAR)', {
-      address: tailnetRegistry(),
-      abi: registryWriteAbi,
-      functionName: 'grantRootRoles',
-      args: [ROLE_REGISTRAR, getAddress(grantee)],
-    })
-    console.log('done — that account can now call register() on this tailnet.')
-    return
-  }
-
-  if (role === 'relay-registrar') {
-    const [grantee] = rest
-    if (!grantee) throw new Error('usage: bun run grant-role.ts relay-registrar <account-address>')
-    const registry = relayRegistry()
-    if (!registry) throw new Error('BRAMBLE_RELAY_REGISTRY not set — run setup-relay-registry.ts first')
-    console.log(`Granting ROLE_REGISTRAR on relay registry ${registry} to ${grantee}...`)
-    await writeAndWait('grantRootRoles(ROLE_REGISTRAR)', {
-      address: registry,
-      abi: registryWriteAbi,
-      functionName: 'grantRootRoles',
-      args: [ROLE_REGISTRAR, getAddress(grantee)],
-    })
-    console.log('done — that account can now call register-relay.ts on this tailnet.')
-    return
-  }
-
-  if (role in RESOLVER_SCOPED_ROLES) {
-    const { key, setter } = RESOLVER_SCOPED_ROLES[role as keyof typeof RESOLVER_SCOPED_ROLES]
-    const [deviceLabel, grantee] = rest
-    if (!deviceLabel || !grantee) {
-      throw new Error(`usage: bun run grant-role.ts ${role} <device-label> <account-address>`)
+  async function runRole() {
+    if (role === 'enroll') {
+      const [grantee] = rest
+      if (!grantee) throw new Error('usage: bun run grant-role.ts enroll <account-address>')
+      console.log(`Granting ROLE_REGISTRAR on ${tailnetRegistry()} to ${grantee}...`)
+      await writeAndWait('grantRootRoles(ROLE_REGISTRAR)', {
+        address: tailnetRegistry(),
+        abi: registryWriteAbi,
+        functionName: 'grantRootRoles',
+        args: [ROLE_REGISTRAR, getAddress(grantee)],
+      })
+      console.log('done — that account can now call register() on this tailnet.')
+      return
     }
-    const fullname = normalize(`${deviceLabel}.${tailnetName()}`)
-    const resolverAddress = await publicClient.getEnsResolver({ name: fullname })
-    if (!resolverAddress) throw new Error(`no resolver found for ${fullname}`)
 
-    console.log(`Granting ROLE_SET_TEXT(${key}) on ${fullname}'s resolver to ${grantee}...`)
-    await writeAndWait(`grantSetterRoles(${role})`, {
-      address: resolverAddress,
-      abi: resolverWriteAbi,
-      functionName: 'grantSetterRoles',
-      args: [setter(), getAddress(grantee)],
-    })
-    console.log(`done — that account now controls ${key} on ${deviceLabel}.`)
-    return
+    if (role === 'relay-registrar') {
+      const [grantee] = rest
+      if (!grantee) throw new Error('usage: bun run grant-role.ts relay-registrar <account-address>')
+      const registry = relayRegistry()
+      if (!registry) throw new Error('BRAMBLE_RELAY_REGISTRY not set — run setup-relay-registry.ts first')
+      console.log(`Granting ROLE_REGISTRAR on relay registry ${registry} to ${grantee}...`)
+      await writeAndWait('grantRootRoles(ROLE_REGISTRAR)', {
+        address: registry,
+        abi: registryWriteAbi,
+        functionName: 'grantRootRoles',
+        args: [ROLE_REGISTRAR, getAddress(grantee)],
+      })
+      console.log('done — that account can now call register-relay.ts on this tailnet.')
+      return
+    }
+
+    if (role in RESOLVER_SCOPED_ROLES) {
+      const { key, setter } = RESOLVER_SCOPED_ROLES[role as keyof typeof RESOLVER_SCOPED_ROLES]
+      const [deviceLabel, grantee] = rest
+      if (!deviceLabel || !grantee) {
+        throw new Error(`usage: bun run grant-role.ts ${role} <device-label> <account-address>`)
+      }
+      const fullname = normalize(`${deviceLabel}.${tailnetName()}`)
+      const resolverAddress = await publicClient.getEnsResolver({ name: fullname })
+      if (!resolverAddress) throw new Error(`no resolver found for ${fullname}`)
+
+      console.log(`Granting ROLE_SET_TEXT(${key}) on ${fullname}'s resolver to ${grantee}...`)
+      await writeAndWait(`grantSetterRoles(${role})`, {
+        address: resolverAddress,
+        abi: resolverWriteAbi,
+        functionName: 'grantSetterRoles',
+        args: [setter(), getAddress(grantee)],
+      })
+      console.log(`done — that account now controls ${key} on ${deviceLabel}.`)
+      return
+    }
+
+    throw new Error(`usage: bun run grant-role.ts <enroll|relay-registrar|rotate|revoke|acl|acl-granters> ...`)
   }
 
-  throw new Error(`usage: bun run grant-role.ts <enroll|relay-registrar|rotate|revoke|acl|acl-granters> ...`)
+  try {
+    await runRole()
+  } finally {
+    if (ledger) await ledger.close()
+  }
 }
 
 main().catch((err) => {

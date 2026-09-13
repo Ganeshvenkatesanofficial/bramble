@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bufio"
 	"context"
 	"io"
 	"net"
@@ -12,6 +13,51 @@ import (
 
 	"github.com/WhyAsh5114/bramble/brambled/wgnode"
 )
+
+func TestForwarderWaitsForLiveGatewayDecision(t *testing.T) {
+	localLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer localLn.Close()
+
+	fwd := &Forwarder{
+		Listener: localLn,
+		DialTunnel: func() (net.Conn, error) {
+			forward, gateway := net.Pipe()
+			go func() {
+				defer gateway.Close()
+				reader := bufio.NewReader(gateway)
+				if _, err := reader.ReadString('\n'); err != nil {
+					return
+				}
+				time.Sleep(6 * time.Second)
+				_, _ = io.WriteString(gateway, "OK\nhealth response")
+			}()
+			return forward, nil
+		},
+		Service: "web",
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go fwd.Serve(ctx)
+
+	conn, err := net.Dial("tcp", localLn.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if err := conn.SetReadDeadline(time.Now().Add(8 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(conn)
+	if err != nil && err != io.EOF {
+		t.Fatalf("reading forwarded response: %v", err)
+	}
+	if string(got) != "health response" {
+		t.Fatalf("forwarded response = %q, want health response", got)
+	}
+}
 
 // TestForwarder_PlainClientProxiedThroughACL is the property the whole
 // package exists to provide: an ordinary net.Dial client — no CONNECT

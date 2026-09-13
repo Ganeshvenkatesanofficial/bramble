@@ -77,7 +77,7 @@ func (f *Forwarder) handle(local net.Conn) {
 		return
 	}
 
-	if err := tunnel.SetReadDeadline(time.Now().Add(connectLineDeadline)); err != nil {
+	if err := tunnel.SetReadDeadline(time.Now().Add(gatewayDecisionDeadline)); err != nil {
 		f.logf("forward: %s: setting read deadline failed: %v", local.RemoteAddr(), err)
 		return
 	}

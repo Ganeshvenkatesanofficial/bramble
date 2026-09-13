@@ -16,10 +16,15 @@ import (
 // short line, never an arbitrary stream, before deciding to proxy or deny.
 const maxRequestLineLen = 256
 
-// connectLineDeadline bounds how long a peer has to send its CONNECT line
-// before the connection is dropped — prevents a slow/silent peer from
+// connectRequestLineDeadline bounds how long a peer has to send its CONNECT
+// line before the connection is dropped — prevents a slow/silent peer from
 // holding a listener slot open indefinitely.
-const connectLineDeadline = 5 * time.Second
+const connectRequestLineDeadline = 5 * time.Second
+
+// gatewayDecisionDeadline bounds how long a local forward waits for the
+// gateway's OK or DENY. The gateway resolves the live ENS ACL before it can
+// answer, which can take longer than receiving the short CONNECT line itself.
+const gatewayDecisionDeadline = 20 * time.Second
 
 // Server is the gateway's single fixed-port CONNECT listener (adr/0005 §
 // "What Section C still owns", adr/0006). It never trusts a self-declared
@@ -176,7 +181,7 @@ func (s *Server) readRequest(conn net.Conn) (requesterLabel, service string, rea
 		return "", "", nil, fmt.Errorf("no tracked peer for tunnel address %s", remoteAddr.AddrPort().Addr())
 	}
 
-	if err := conn.SetReadDeadline(time.Now().Add(connectLineDeadline)); err != nil {
+	if err := conn.SetReadDeadline(time.Now().Add(connectRequestLineDeadline)); err != nil {
 		return "", "", nil, fmt.Errorf("setting read deadline: %w", err)
 	}
 	reader = bufio.NewReaderSize(conn, maxRequestLineLen)
