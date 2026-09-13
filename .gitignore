@@ -4,6 +4,7 @@
 admincli/granter-key.ring
 
 node_modules
+.pnpm-store
 
 # Turborepo cache
 .turbo
