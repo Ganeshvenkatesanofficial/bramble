@@ -562,6 +562,9 @@ func relayRoutedEndpoint(node keepaliveSetter, m *sidecar.Manager, pool dataRela
 	}
 	fmt.Fprintf(os.Stderr, "data-relay: bought session %s from %s (tx %s), routing %s via %s\n",
 		session.id, session.relayLabel, session.settlementTxID, peerPubkey, session.candidate)
+	if u := hashscanTestnetTxURL(session.settlementTxID); u != "" {
+		fmt.Fprintf(os.Stderr, "  %s\n", u)
+	}
 	if _, _, err := exchangeAnyMetered(relays, m, own, peerPubkey, session.candidate, ttl); err != nil {
 		return nil, "", err
 	}
@@ -682,6 +685,7 @@ func exchangeAnyMetered(relays []sidecar.RendezvousRelay, m *sidecar.Manager, ow
 				token = resp.Token
 				if resp.SettlementTxID != "" {
 					fmt.Fprintf(os.Stderr, "rendezvous: paid %s for a rendezvous token (tx %s)\n", r.Label, resp.SettlementTxID)
+					fmt.Fprintf(os.Stderr, "  %s\n", hashscanTestnetTxURL(resp.SettlementTxID))
 				}
 			}
 			candidate, err := rendezvous.Exchange(r.Address, ownPubkey, peerPubkey, myCandidate, token, exchangeTimeout)

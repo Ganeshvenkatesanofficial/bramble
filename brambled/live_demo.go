@@ -15,12 +15,74 @@ import (
 	"fmt"
 	"net/netip"
 	"os"
+	"sort"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/WhyAsh5114/bramble/brambled/sidecar"
 	"github.com/WhyAsh5114/bramble/brambled/wgnode"
 )
+
+// hashscanTestnetTxURL turns a Hedera consensus transaction ID (the
+// "0.0.X@seconds.nanos" form the sidecar already returns, not the mirror
+// node's dash form dashboard/src/app/api/hedera/payments/route.ts converts
+// from) into a clickable HashScan testnet link — Luke Forrest's own advice
+// (docs/sources/hedera_workshop_clean.md) is that judges check this, so
+// the demo output should make it one click away, not just printable text.
+func hashscanTestnetTxURL(txID string) string {
+	if txID == "" {
+		return ""
+	}
+	return "https://hashscan.io/testnet/transaction/" + txID
+}
+
+// resolveDemoRelayEndpoints tries the ENS relay directory first (real
+// on-chain discovery via the sidecar's /relays route, which mirrors
+// sidecar/src/ens/relays.ts's resolveRelays) and falls back to the
+// caller's static -primary/-backup/-rendezvous/-rendezvous-backup flags
+// whenever ENS doesn't publish at least two priced data relays with a
+// matching rendezvous-address record each. Same fallback contract
+// sidecar/client.go's Relays() already documents ("callers should fall
+// back to their own static overrides") — this is that fallback, made
+// explicit here instead of silently trusting ENS mid-recording.
+func resolveDemoRelayEndpoints(m *sidecar.Manager, fallbackPrimaryURL, fallbackBackupURL, fallbackRendezvous, fallbackRendezvousBackup string) (primaryURL, backupURL, rendezvousAddr, rendezvousBackupAddr string, viaENS bool) {
+	resp, err := m.Relays()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "relays-from-ens: lookup failed (%v) -- falling back to static flags\n", err)
+		return fallbackPrimaryURL, fallbackBackupURL, fallbackRendezvous, fallbackRendezvousBackup, false
+	}
+	if len(resp.DataRelays) < 2 {
+		fmt.Fprintf(os.Stderr, "relays-from-ens: found %d priced data relay(s), need 2 -- falling back to static flags\n", len(resp.DataRelays))
+		return fallbackPrimaryURL, fallbackBackupURL, fallbackRendezvous, fallbackRendezvousBackup, false
+	}
+
+	rendezvousByLabel := make(map[string]string, len(resp.Rendezvous))
+	for _, r := range resp.Rendezvous {
+		rendezvousByLabel[r.Label] = r.Address
+	}
+
+	relays := append([]sidecar.DataRelay(nil), resp.DataRelays...)
+	sort.Slice(relays, func(i, j int) bool {
+		pi, erri := strconv.ParseInt(relays[i].PricePerByte, 10, 64)
+		pj, errj := strconv.ParseInt(relays[j].PricePerByte, 10, 64)
+		if erri != nil || errj != nil {
+			return false
+		}
+		return pi < pj
+	})
+	cheap, expensive := relays[0], relays[1]
+	cheapRendezvous, cheapOK := rendezvousByLabel[cheap.Label]
+	expensiveRendezvous, expensiveOK := rendezvousByLabel[expensive.Label]
+	if !cheapOK || !expensiveOK {
+		fmt.Fprintln(os.Stderr, "relays-from-ens: a priced data relay published no matching rendezvous-address record -- falling back to static flags")
+		return fallbackPrimaryURL, fallbackBackupURL, fallbackRendezvous, fallbackRendezvousBackup, false
+	}
+
+	fmt.Fprintf(os.Stderr, "relays-from-ens: %s quotes %s atomic/byte (primary), %s quotes %s atomic/byte (backup)\n",
+		cheap.Label, cheap.PricePerByte, expensive.Label, expensive.PricePerByte)
+	return cheap.SidecarURL, expensive.SidecarURL, cheapRendezvous, expensiveRendezvous, true
+}
 
 func runDemoDataRelay(args []string) error {
 	fs := flag.NewFlagSet("demo-data-relay", flag.ContinueOnError)
@@ -34,6 +96,7 @@ func runDemoDataRelay(args []string) error {
 	maxPricePerByte := fs.Int64("max-price-per-byte", 1000, "maximum relay price accepted during this deliberately high-price comparison")
 	maxSessionCost := fs.Int64("max-session-cost", 10_000_000, "maximum session cost in atomic USDC for this demo; also set HEDERA_MAX_PAYMENT_ATOMIC to at least this value")
 	sidecarDir := fs.String("sidecar-dir", "../sidecar", "brambled's own ENS sidecar project directory")
+	relaysFromENS := fs.Bool("relays-from-ens", false, "resolve both relays' rendezvous address, sidecar URL, and price from the ENS relay directory instead of -primary/-backup/-rendezvous/-rendezvous-backup; falls back to those flags if ENS doesn't publish at least two priced data relays")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -68,17 +131,28 @@ func runDemoDataRelay(args []string) error {
 	}
 	defer scaleM.Stop()
 
-	small, err := buyDataRelaySession(scaleM, dataRelayFlag{"primary": *primaryURL}, *smallBytes, policy)
+	primaryEndpoint, backupEndpoint, rendezvousPrimary, rendezvousBackup := *primaryURL, *backupURL, *rendezvousAddr, *rendezvousBackupAddr
+	if *relaysFromENS {
+		primaryEndpoint, backupEndpoint, rendezvousPrimary, rendezvousBackup, _ = resolveDemoRelayEndpoints(scaleM, *primaryURL, *backupURL, *rendezvousAddr, *rendezvousBackupAddr)
+	}
+
+	small, err := buyDataRelaySession(scaleM, dataRelayFlag{"primary": primaryEndpoint}, *smallBytes, policy)
 	if err != nil {
 		return fmt.Errorf("buying small session: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "small session (%d bytes): id=%s tx=%s\n", *smallBytes, small.id, small.settlementTxID)
+	if u := hashscanTestnetTxURL(small.settlementTxID); u != "" {
+		fmt.Fprintf(os.Stderr, "  %s\n", u)
+	}
 
-	large, err := buyDataRelaySession(scaleM, dataRelayFlag{"primary": *primaryURL}, *largeBytes, policy)
+	large, err := buyDataRelaySession(scaleM, dataRelayFlag{"primary": primaryEndpoint}, *largeBytes, policy)
 	if err != nil {
 		return fmt.Errorf("buying large session: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "large session (%d bytes): id=%s tx=%s\n", *largeBytes, large.id, large.settlementTxID)
+	if u := hashscanTestnetTxURL(large.settlementTxID); u != "" {
+		fmt.Fprintf(os.Stderr, "  %s\n", u)
+	}
 
 	fmt.Fprintln(os.Stderr, "=== Gate 4.3: selection + kill-mid-transfer failover (two relays, real prices) ===")
 	aliceM, err := newManager(8000)
@@ -117,7 +191,7 @@ func runDemoDataRelay(args []string) error {
 	}
 	defer bob.Close()
 
-	pool := dataRelayFlag{"primary": *primaryURL, "backup": *backupURL}
+	pool := dataRelayFlag{"primary": primaryEndpoint, "backup": backupEndpoint}
 	// Each relay paired with its OWN payment sidecar — not just a flat list
 	// of TCP addresses. This pairing is the fix docs/adr/0008 records:
 	// every relay mints rendezvous tokens under its own process-local
@@ -127,8 +201,8 @@ func runDemoDataRelay(args []string) error {
 	// watchDataRelayAdopt) now buys a fresh token from whichever relay it's
 	// actually about to try.
 	relays := []sidecar.RendezvousRelay{
-		{Label: "primary", Address: *rendezvousAddr, SidecarURL: *primaryURL},
-		{Label: "backup", Address: *rendezvousBackupAddr, SidecarURL: *backupURL},
+		{Label: "primary", Address: rendezvousPrimary, SidecarURL: primaryEndpoint},
+		{Label: "backup", Address: rendezvousBackup, SidecarURL: backupEndpoint},
 	}
 
 	// Asymmetric, matching docs/adr/0008 and runServe's actual wiring:
