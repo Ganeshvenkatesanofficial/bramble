@@ -6,12 +6,14 @@
 #                                                     inet (192.0.2.1, .5, .9) -- server 192.0.2.10
 #   nodeB 10.2.0.2 -- natB (10.2.0.1 | 192.0.2.6) --/
 #
-# `server` stands for the relay and STUN host. Run brambled for node A and B
+# `server` stands for the relay and STUN host. It answers on 192.0.2.10 and
+# 192.0.2.20 (a /32 on its lo) so the NAT probe can reach two destinations
+# through the same NAT boundary. Run brambled for node A and B
 # with `ip netns exec nodeA ...` and `ip netns exec nodeB ...`.
 #
 # Uplink: `inet` also has a veth to the host (198.18.0.0/30), and the host
 # source-NATs the lab's 192.0.2.0/24 addresses to the internet. Nodes then reach
-# the Sepolia proxy by name; resolv.conf files are written for nodeA/nodeB/server.
+# the Sepolia proxy by name; the host routes 192.0.2.0/24 back via inet-up; resolv.conf files are written for nodeA/nodeB/server.
 # Set NETLAB_UPLINK=0 for a fully isolated lab (nodes then need test fixtures
 # for ENS reads). NETLAB_DNS overrides the resolvers (default 1.1.1.1 9.9.9.9).
 #
@@ -84,6 +86,8 @@ case "$cmd" in
     ip netns exec natA ip route add default via 192.0.2.1
     ip netns exec natB ip route add default via 192.0.2.5
     ip netns exec server ip route add default via 192.0.2.9
+    ip netns exec server ip addr add 192.0.2.20/32 dev lo
+    ip netns exec inet ip route add 192.0.2.20/32 via 192.0.2.10
     for n in natA natB inet; do ip netns exec "$n" sysctl -qw net.ipv4.ip_forward=1; done
     nat_rules a-i 10.1.0.0/24 "$mode" | ip netns exec natA nft -f -
     nat_rules b-i 10.2.0.0/24 "$mode" | ip netns exec natB nft -f -
@@ -93,6 +97,7 @@ case "$cmd" in
       ip addr add 198.18.0.1/30 dev lab-up; ip link set lab-up up
       ip netns exec inet ip addr add 198.18.0.2/30 dev inet-up; ip netns exec inet ip link set inet-up up
       ip netns exec inet ip route add default via 198.18.0.1
+      ip route add 192.0.2.0/24 via 198.18.0.2 dev lab-up
       sysctl -qw net.ipv4.ip_forward=1
       host_rules | nft -f -
       for n in nodeA nodeB server; do
@@ -100,7 +105,7 @@ case "$cmd" in
         for d in $DNS_SERVERS; do echo "nameserver $d"; done > "/etc/netns/$n/resolv.conf"
       done
     fi
-    echo "lab up, NAT mode $mode, uplink $UPLINK. Server (relay + STUN) address: 192.0.2.10"
+    echo "lab up, NAT mode $mode, uplink $UPLINK. Server (relay + STUN) addresses: 192.0.2.10 and 192.0.2.20"
     ;;
   block-direct)
     block_rules | ip netns exec inet nft -f -

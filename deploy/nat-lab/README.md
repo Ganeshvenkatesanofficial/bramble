@@ -20,7 +20,7 @@ Needs `iproute2`, `nftables` and `python3`. The lab has an uplink by default: th
 1. Build the lab: `sudo deploy/nat-lab/netns-lab.sh up cone`. Open.
 2. Check it: `sudo deploy/nat-lab/netns-lab.sh status`. Open.
 3. Run the relay and STUN server in the `server` namespace (address `192.0.2.10`) and one `brambled` in each of `nodeA` and `nodeB`, with `ip netns exec <ns> ...`. Give each node its own state directory and key, and set `SEPOLIA_RPC_URL` to the proxy URL. Open.
-4. Check the NAT type from `nodeA` with the probe in the "Check the NAT type" section, using `192.0.2.10:3478` and a public STUN server reachable through the uplink. Open.
+4. Check the NAT type from `nodeA` with the probe in the "Check the NAT type" section, using `192.0.2.10:3478` and `192.0.2.20:3478`. Both sit behind the node's NAT only, so the host's masquerading cannot change the result. Run the STUN server in the `server` namespace listening on each address separately (for `coturn`: two `listening-ip` lines with `stun-only`), so each reply comes from the address that was queried. Do not use a public server here: it adds the host's own NAT to the path and can show a false symmetric result. Open.
 5. Repeat from step 1 with `symmetric` to see the relay fallback. Open.
 6. Remove everything: `sudo deploy/nat-lab/netns-lab.sh down`. Open.
 
@@ -48,9 +48,9 @@ sudo ip netns exec bramble-node python3 deploy/scripts/stun-probe.py \
   <relays-machine-public-name>:3478 <second-stun-server>:3478
 ```
 
-Exit code 0 means the mapped port was the same for every server, 1 means it differed, 2 means a server did not answer. The second destination comes from item 14 in `../README.md` (a second STUN server, or a second public address of the relays machine). Open.
+Exit code 0 means the mapped port was the same for every server, 1 means it differed, 2 means a server did not answer. On the cloud NAT box the second destination comes from item 14 in `../README.md` (a second STUN server, or a second public address of the relays machine); both destinations must be reached through the same NAT boundary. Open.
 
-Evidence: `python3 deploy/scripts/stun-probe.py --selftest` ran on the development machine on 6 Nov 2026 against two local fake servers and classified both a same-mapping and a different-mapping case correctly. That checks the request encoding, the response parsing and the comparison. It does not test a real NAT or `coturn`, so the probe against real servers is Open.
+Evidence: `python3 deploy/scripts/stun-probe.py --selftest` ran on the development machine on 6 Nov 2026 against local fake servers and classified a same-mapping case, a different-port case and a different-address, same-port case correctly. That checks the request encoding, the response parsing and the comparison. It does not test a real NAT or `coturn`, so the probe against real servers is Open.
 
 The probe diagnoses the NAT with its own socket. The W8 discovery gate (handoff section 5.4) must query from the WireGuard socket itself; that belongs to ETH-36 and is Open.
 
