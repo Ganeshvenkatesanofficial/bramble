@@ -6,3 +6,4 @@ packages:
   - scripts/provision-dev-tailnet
   - admincli
   - dashboard
+  - hedera-audit
