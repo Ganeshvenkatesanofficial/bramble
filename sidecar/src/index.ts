@@ -49,7 +49,7 @@ console.log(`bramble sidecar listening on 127.0.0.1:${SIDECAR_PORT}`)
 // Bootstrap Tor in the background so /health answers at once. A failed
 // attempt is recorded in /tor/status and retried after 30 s.
 const torStartedAt = Date.now()
-console.log('starting Tor (MemoryStorage, no snapshot; expect about 1 minute)')
+console.log('starting Tor (MemoryStorage, no snapshot; can take up to a minute)')
 startTor().then(
   () => console.log(`Tor ready after ${((Date.now() - torStartedAt) / 1000).toFixed(1)} s`),
   () => console.error(`Tor failed to start: ${getTorStatus().lastError}; retrying in 30 s`)
