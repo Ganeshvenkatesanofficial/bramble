@@ -5,6 +5,12 @@ Wants=network-online.target
 
 [Service]
 User=bramble
+Environment=RELAY_ADDR=:9420
+Environment=RELAY_SIDECAR_PORT=7891
+Environment=RELAY_INTERNAL_PORT=7895
+Environment=RELAY_PRICE_PER_BYTE=1
+Environment=RELAY_DATA_HOST=0.0.0.0
+# Values in the env file override the defaults above.
 EnvironmentFile=/etc/bramble/relay-%i.env
 WorkingDirectory=/opt/bramble/relay
 ExecStart=/opt/bramble/relay/bin/relay \

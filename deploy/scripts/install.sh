@@ -20,6 +20,9 @@ need bun "see deploy/README.md, step 'Install the toolchain'"
 case "$role" in
   gateway|worker|relays) need go "Go 1.27 or later";;
 esac
+case "$role" in
+  gateway|worker) need nft "apt install nftables (the NAT box needs it)"; need python3 "apt install python3 (the STUN probe needs it)";;
+esac
 [ "$missing" -eq 0 ] || exit 1
 
 id bramble >/dev/null 2>&1 || useradd --system --home-dir /var/lib/bramble --create-home --shell /usr/sbin/nologin bramble

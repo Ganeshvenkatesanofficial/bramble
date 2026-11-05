@@ -5,6 +5,13 @@ Wants=network-online.target bramble-demo-service.service
 
 [Service]
 User=bramble
+Environment=BRAMBLE_SIDECAR_DIR=/opt/bramble/sidecar
+Environment=BRAMBLE_SIDECAR_PORT=7890
+Environment=BRAMBLE_LISTEN_PORT=51820
+Environment=BRAMBLE_TTL=5s
+Environment=HEDERA_MAX_PAYMENT_ATOMIC=100000
+Environment=DEMO_SERVICE_PORT=9100
+# Values in the env file override the defaults above.
 EnvironmentFile=/etc/bramble/gateway.env
 WorkingDirectory=/opt/bramble/brambled
 ExecStart=/opt/bramble/brambled/bin/brambled serve \

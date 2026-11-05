@@ -5,13 +5,11 @@
 set -euo pipefail
 
 role="${1:-}"
+node_req="BRAMBLE_NODE_LABEL BRAMBLE_TAILNET_NAME BRAMBLE_TAILNET_REGISTRY BRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK BRAMBLE_RELAY_REGISTRY BRAMBLE_RELAY_REGISTRY_DEPLOY_BLOCK BRAMBLE_PRIVATE_KEY SEPOLIA_RPC_URL HEDERA_CLIENT_ACCOUNT_ID HEDERA_CLIENT_PRIVATE_KEY BRAMBLE_SERVICE_NAME"
 case "$role" in
-  gateway) file="${2:-/etc/bramble/gateway.env}"
-    req="BRAMBLE_NODE_LABEL BRAMBLE_TAILNET_NAME BRAMBLE_TAILNET_REGISTRY BRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK BRAMBLE_RELAY_REGISTRY BRAMBLE_RELAY_REGISTRY_DEPLOY_BLOCK BRAMBLE_PRIVATE_KEY SEPOLIA_RPC_URL BRAMBLE_SIDECAR_DIR BRAMBLE_LISTEN_PORT BRAMBLE_TTL HEDERA_CLIENT_ACCOUNT_ID HEDERA_CLIENT_PRIVATE_KEY BRAMBLE_SERVICE_NAME DEMO_SERVICE_PORT";;
-  worker) file="${2:-/etc/bramble/worker.env}"
-    req="BRAMBLE_NODE_LABEL BRAMBLE_TAILNET_NAME BRAMBLE_TAILNET_REGISTRY BRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK BRAMBLE_RELAY_REGISTRY BRAMBLE_RELAY_REGISTRY_DEPLOY_BLOCK BRAMBLE_PRIVATE_KEY SEPOLIA_RPC_URL BRAMBLE_SIDECAR_DIR BRAMBLE_LISTEN_PORT BRAMBLE_TTL HEDERA_CLIENT_ACCOUNT_ID HEDERA_CLIENT_PRIVATE_KEY BRAMBLE_SERVICE_NAME BRAMBLE_FORWARD_PORT BRAMBLE_GATEWAY_LABEL";;
-  relay) file="${2:-/etc/bramble/relay-relay1.env}"
-    req="RELAY_ADDR RELAY_PAYEE_ACCOUNT_ID RELAY_SIDECAR_PORT RELAY_INTERNAL_PORT RELAY_PRICE_PER_BYTE RELAY_DATA_HOST";;
+  gateway) file="${2:-/etc/bramble/gateway.env}"; req="$node_req";;
+  worker) file="${2:-/etc/bramble/worker.env}"; req="$node_req BRAMBLE_GATEWAY_LABEL";;
+  relay) file="${2:-/etc/bramble/relay-relay1.env}"; req="RELAY_PAYEE_ACCOUNT_ID";;
   admin) file="${2:-/etc/bramble/admin.env}"
     req="BRAMBLE_TAILNET_NAME BRAMBLE_TAILNET_REGISTRY BRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK BRAMBLE_RELAY_REGISTRY BRAMBLE_RELAY_REGISTRY_DEPLOY_BLOCK SEPOLIA_RPC_URL SEPOLIA_PRIVATE_KEY APPROVAL_DEMO_TOKEN";;
   *) echo "usage: $0 gateway|worker|relay|admin [env-file]" >&2; exit 2;;
@@ -23,6 +21,10 @@ bad=0
 case "$mode" in 600|400) ;; *) echo "FAIL  $file mode is $mode, expected 600"; bad=1;; esac
 for name in $req; do
   if grep -Eq "^${name}=.+" "$file"; then echo "ok    $name"; else echo "FAIL  $name is missing or empty"; bad=1; fi
+done
+# An optional name set to an empty value overrides the unit's default with nothing.
+for name in $(grep -Eo '^[A-Z_]+=$' "$file" | tr -d '=' || true); do
+  case " $req " in *" $name "*) ;; *) echo "FAIL  $name is set but empty; delete the line to use the unit default"; bad=1;; esac
 done
 # SEPOLIA_RPC_URL on a node must be the logging proxy, not a credentialed endpoint.
 if [ "$role" = gateway ] || [ "$role" = worker ]; then
