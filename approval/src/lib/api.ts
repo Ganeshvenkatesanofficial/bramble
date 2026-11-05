@@ -15,6 +15,10 @@ export function createApprovalApi(options: ApiOptions) {
   const json = (value: unknown, status = 200) =>
     Response.json(value, { status, headers: { 'cache-control': 'no-store' } })
 
+  // 202 while a submitted transaction is unconfirmed: the write may still land.
+  const jsonWrite = (value: { status?: string } | undefined) =>
+    json(value, value?.status === 'approving' || value?.status === 'revoking' ? 202 : 200)
+
   return {
     async handle(request: Request): Promise<Response> {
       try {
@@ -34,10 +38,11 @@ export function createApprovalApi(options: ApiOptions) {
         if (path === '/api/requests' && request.method === 'GET') return json({ requests: service.list() })
         const decision = /^\/api\/requests\/([^/]+)\/(approve|deny)$/.exec(path)
         if (decision && request.method === 'POST') {
-          return json(decision[2] === 'approve' ? await service.approve(decision[1]) : service.deny(decision[1]))
+          if (decision[2] === 'deny') return json(service.deny(decision[1]))
+          return jsonWrite(await service.approve(decision[1]))
         }
         const revoke = /^\/api\/grants\/([^/]+)\/revoke$/.exec(path)
-        if (revoke && request.method === 'POST') return json(await service.revoke(label(revoke[1], 'agentLabel')))
+        if (revoke && request.method === 'POST') return jsonWrite(await service.revoke(label(revoke[1], 'agentLabel')))
         const detail = /^\/api\/requests\/([^/]+)$/.exec(path)
         if (detail && request.method === 'GET') return json(service.get(detail[1]))
         throw new ApiError(404, 'route_not_found', 'Route not found.')

@@ -57,7 +57,7 @@ Each agent commits under the git identity shown here. Confirm yours with `git co
 | `README.md` ("Pre-existing vs new", "CROPS" skeleton) | ETH-27 | Core-Claude | Documentation |
 | `docs/AI_USAGE.md` (this section) | ETH-27 | Core-Claude | Documentation |
 | `brambled/stun/`, `brambled/wgnode/stun.go`, `brambled/statusapi/stun_test.go`, `docs/eth-36-stun-spec.md`, `docs/adr/0017-stun-bind-wrapper-source-selection.md` | ETH-36 | Net-Astra, Net-Claude | Code, tests, documentation |
-| `approval/src/lib/chain.ts`, `approval/src/lib/chain-env.ts`, `approval/src/app/api/[...path]/route.ts`, `approval/test/chain.test.ts`, `approval/.env.example`, `approval/README.md` (real signer runbook), `approval/next.config.ts`, `approval/tsconfig.json`, `approval/package.json`, `pnpm-lock.yaml`, `admincli/src/lib.ts` (`clearAcl`, exported `deviceName`), `admincli/src/lib.test.ts` | ETH-30 | Infra-Claude | Code, tests, documentation |
+| `approval/src/lib/chain.ts`, `approval/src/lib/chain-env.ts`, `approval/src/app/api/[...path]/route.ts`, `approval/test/chain.test.ts`, `approval/test/chain-env.test.ts`, `approval/src/lib/service.ts`, `approval/src/lib/api.ts`, `approval/src/lib/contracts.ts`, `approval/.env.example`, `approval/README.md` (real signer runbook), `approval/next.config.ts`, `approval/tsconfig.json`, `approval/package.json`, `pnpm-lock.yaml`, `admincli/src/lib.ts` (`clearAcl`, exported `deviceName`), `admincli/src/lib.test.ts` | ETH-30 | Infra-Claude | Code, tests, documentation |
 
 ## Mumbai approval API (ETH-29)
 

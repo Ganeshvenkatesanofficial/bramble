@@ -47,8 +47,19 @@ How it is wired: `src/lib/chain.ts` adapts the admincli functions (`grantAcl`,
 `IdentityResolver`. `src/lib/chain-env.ts` builds the real viem adapters from
 environment variables. Approve writes the ECDH digest of the service to the agent's
 `acl` record, never the service name. Revoke empties that record. A confirmation
-error after a transaction was submitted is reconciled against chain state, so a
-timeout is not reported as a failure when the write landed.
+error after a transaction was submitted is settled from that transaction's own
+receipt (three checks, two seconds apart). A receipt that shows success confirms
+the write and one that shows a revert fails it. ACL text records are never used as
+proof, because a lagging node can serve an older block. If the receipt stays
+unknown, the API answers `202` with `status: approving` (or `revoking`) and
+`unresolvedWrite.transactionHash`; the service keeps checking that hash every five
+seconds, never resubmits, and refuses a second approve or a revoke for that agent
+with `409 write_unresolved` until it settles. A grant that later confirms gets its
+revoke timer then (the duration counts from the first answer, not the
+confirmation); one found reverted returns to `pending`. While a submission is
+unresolved, open the hash on Sepolia to check it. A restart of this process drops
+the in-memory queue and timers (ADR 0016), so after a restart read the agent's
+`acl` record on Sepolia and revoke by hand if it is unexpectedly set.
 
 Where it runs: only on the human-controlled admin machine. The granter's X25519
 key is decrypted per grant from a `wallet-cli` Key Ring file on that machine and

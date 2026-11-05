@@ -1,6 +1,5 @@
 import {
   clearAcl,
-  computeGrantDigests,
   deviceName,
   grantAcl,
   parseAclRecord,
@@ -9,7 +8,15 @@ import {
   type Resolver,
   type Signer,
 } from '../../../admincli/src/lib'
-import type { GrantSigner, IdentityFacts, IdentityResolver, RequestInput } from './contracts'
+import {
+  UnresolvedWriteError,
+  type GrantSigner,
+  type IdentityFacts,
+  type IdentityResolver,
+  type RequestInput,
+  type SettleOutcome,
+  type TransactionReceipt,
+} from './contracts'
 
 /** What a device read must report; `resolveDevice` in sidecar/src/ens/client.ts satisfies it. */
 export interface DeviceFacts {
@@ -28,7 +35,9 @@ export interface ChainConfig {
   granterLabel: string
   /** Called per grant; the plaintext key is never stored or logged here. */
   loadGranterKey: LoadGranterKey
-  /** Confirmation re-reads after an ambiguous write failure. Defaults to 3. */
+  /** Receipt of a submitted transaction; `'pending'` while it is not yet mined. */
+  getReceiptStatus(hash: string): Promise<'success' | 'reverted' | 'pending'>
+  /** Receipt checks after a failure following submission, before reporting it unresolved. Defaults to 3. */
   reconcileAttempts?: number
   reconcileDelayMs?: number
   sleep?: (ms: number) => Promise<void>
@@ -48,7 +57,7 @@ export function createChainAdapters(config: ChainConfig): ChainAdapters {
   const aclDigests = async (label: string) =>
     parseAclRecord(await resolver.getText(deviceName(label, tailnetName), 'acl'))
 
-  // Records the last submitted hash so a failure after submission can be reconciled.
+  // Records the last submitted hash so a failure after submission can be settled from its receipt.
   function track() {
     let hash: string | undefined
     const signer: Signer = {
@@ -61,18 +70,31 @@ export function createChainAdapters(config: ChainConfig): ChainAdapters {
     return { signer, submittedHash: () => hash }
   }
 
-  // A failed wait or round-trip read can follow a transaction that did land (public RPCs lag).
-  // Treat the write as confirmed only if chain state shows the intended result.
-  async function landed(check: () => Promise<boolean>) {
+  // The submitted transaction's own receipt is the only evidence of its outcome. A text-record
+  // read can come from an older block, so ACL state never confirms or refutes a write.
+  async function settleOnce(hash: string): Promise<SettleOutcome> {
+    try {
+      const status = await config.getReceiptStatus(hash)
+      return status === 'success' ? 'confirmed' : status === 'reverted' ? 'reverted' : 'unresolved'
+    } catch {
+      return 'unresolved'
+    }
+  }
+
+  // A definitive revert is a failure. Anything else leaves the submission unresolved: the
+  // transaction may still land, so surface it with the hash rather than as a clean failure.
+  async function settleAfterFailure(
+    operation: 'grant' | 'revoke',
+    hash: string,
+    original: unknown
+  ): Promise<TransactionReceipt> {
     for (let attempt = 0; attempt < attempts; attempt++) {
       if (attempt > 0) await sleep(delayMs)
-      try {
-        if (await check()) return true
-      } catch {
-        // keep trying; the original error is what the caller rethrows
-      }
+      const outcome = await settleOnce(hash)
+      if (outcome === 'confirmed') return { transactionHash: hash }
+      if (outcome === 'reverted') throw original
     }
-    return false
+    throw new UnresolvedWriteError(operation, hash, () => settleOnce(hash))
   }
 
   return {
@@ -110,17 +132,8 @@ export function createChainAdapters(config: ChainConfig): ChainAdapters {
           return { transactionHash: change.txHash }
         } catch (error) {
           const hash = tracked.submittedHash()
-          if (
-            hash &&
-            (await landed(async () => {
-              const { digests } = await computeGrantDigests(deps, params)
-              const present = new Set(await aclDigests(input.agentLabel))
-              return digests.every((digest) => present.has(digest))
-            }))
-          ) {
-            return { transactionHash: hash }
-          }
-          throw error
+          if (!hash) throw error
+          return settleAfterFailure('grant', hash, error)
         }
       },
 
@@ -133,10 +146,8 @@ export function createChainAdapters(config: ChainConfig): ChainAdapters {
           return { transactionHash: cleared.txHash }
         } catch (error) {
           const hash = tracked.submittedHash()
-          if (hash && (await landed(async () => (await aclDigests(agentLabel)).length === 0))) {
-            return { transactionHash: hash }
-          }
-          throw error
+          if (!hash) throw error
+          return settleAfterFailure('revoke', hash, error)
         }
       },
     },

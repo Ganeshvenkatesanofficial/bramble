@@ -37,14 +37,20 @@ function memoryEns() {
     ])
   )
   const writes: Array<{ name: string; key: string; value: string }> = []
-  const state = { wait: 'ok' as WaitBehavior, staleReads: 0, keyLoads: 0, granterKey: granter.priv }
+  const receipts = new Map<string, 'success' | 'reverted'>()
+  const state = {
+    wait: 'ok' as WaitBehavior,
+    /** After the next write, acl reads return this older snapshot instead of current state. */
+    stale: undefined as { afterWrites: number; value: string | null } | undefined,
+    /** Receipt lookups that report "not mined yet" before the real status shows. */
+    receiptLag: 0,
+    keyLoads: 0,
+    granterKey: granter.priv,
+  }
 
   const resolver: Resolver = {
     async getText(name, key) {
-      if (key === 'acl' && state.staleReads > 0) {
-        state.staleReads -= 1
-        return null
-      }
+      if (key === 'acl' && state.stale && writes.length > state.stale.afterWrites) return state.stale.value
       const value = records.get(`${name}|${key}`)
       return value ? value : null
     },
@@ -54,6 +60,7 @@ function memoryEns() {
       writes.push({ name, key, value })
       const hash = `0x${writes.length.toString(16).padStart(64, '0')}`
       const behavior = state.wait
+      receipts.set(hash, behavior === 'revert' ? 'reverted' : 'success')
       if (behavior !== 'revert') records.set(`${name}|${key}`, value)
       return {
         hash,
@@ -69,6 +76,13 @@ function memoryEns() {
     signer,
     tailnetName: TAILNET,
     granterLabel: 'granter',
+    getReceiptStatus: async (hash) => {
+      if (state.receiptLag > 0) {
+        state.receiptLag -= 1
+        return 'pending'
+      }
+      return receipts.get(hash) ?? 'pending'
+    },
     readDevice: async (label) => devices.get(label) ?? { pubkey: null, revoked: false, expiry: '0' },
     loadGranterKey: async () => {
       state.keyLoads += 1
@@ -77,7 +91,7 @@ function memoryEns() {
     sleep: async () => {},
   })
   const digest = aclDigestECDH(granter.priv, gateway.pub, agent.pub, input.service)
-  return { granter, gateway, agent, records, devices, writes, state, adapters, digest }
+  return { granter, gateway, agent, records, devices, writes, receipts, state, adapters, digest }
 }
 
 function call(path: string, method = 'GET', body?: unknown) {
@@ -232,13 +246,11 @@ describe('ambiguous write failures are reconciled against chain state', () => {
     expect((await response.json()).grantTransaction.transactionHash).toBe(`0x${'1'.padStart(64, '0')}`)
   })
 
-  test('a lagging read is retried before the grant is declared failed', async () => {
+  test('a lagging receipt lookup is retried before the grant is declared failed', async () => {
     const s = service()
     s.chain.state.wait = 'fail-but-landed'
     const { id } = await s.suggest()
-    // Three stale reads: grantAcl's own round-trip does not run (wait threw), so the first
-    // reconcile reads go stale and a later attempt sees the record.
-    s.chain.state.staleReads = 2
+    s.chain.state.receiptLag = 2
     expect((await s.approve(id)).status).toBe(200)
   })
 
@@ -274,5 +286,162 @@ describe('ambiguous write failures are reconciled against chain state', () => {
     expect((await response.json()).error.code).toBe('revoke_failed')
     expect((await (await s.api.handle(call(`/requests/${id}`))).json()).status).toBe('approved')
     expect(s.chain.records.get(`agent-1.${TAILNET}|acl`)).toBe(s.chain.digest)
+  })
+})
+
+describe('a reverted or unconfirmed write is never confirmed by ACL state', () => {
+  test('a reverted revoke stays a failure when a lagging node serves an older, empty acl', async () => {
+    const s = service()
+    const created = await (await s.api.handle(call('/requests', 'POST', { ...input, requestedDuration: 60 }))).json()
+    await s.approve(created.id)
+    s.chain.state.wait = 'revert'
+    s.chain.state.stale = { afterWrites: s.chain.writes.length, value: '' }
+    const response = await s.revoke()
+    expect(response.status).toBe(502)
+    expect((await response.json()).error.code).toBe('revoke_failed')
+    const view = await (await s.api.handle(call(`/requests/${created.id}`))).json()
+    expect(view.status).toBe('approved')
+    expect(view.revokeTransaction).toBeUndefined()
+    expect(s.chain.records.get(`agent-1.${TAILNET}|acl`)).toBe(s.chain.digest)
+  })
+
+  test('a reverted grant stays a failure when a lagging node serves an acl that already holds the digest', async () => {
+    const s = service()
+    s.chain.state.wait = 'revert'
+    s.chain.state.stale = { afterWrites: 0, value: s.chain.digest }
+    const { id } = await s.suggest()
+    const response = await s.approve(id)
+    expect(response.status).toBe(502)
+    expect((await response.json()).error.code).toBe('grant_failed')
+    expect((await (await s.api.handle(call(`/requests/${id}`))).json()).status).toBe('pending')
+  })
+
+  test('a stale empty snapshot does not confirm a grant whose receipt is still unknown', async () => {
+    const s = service()
+    s.chain.state.wait = 'fail-but-landed'
+    s.chain.state.receiptLag = 100
+    const { id } = await s.suggest()
+    const response = await s.approve(id)
+    expect(response.status).toBe(202)
+    expect((await response.json()).unresolvedWrite).toEqual({
+      operation: 'grant',
+      transactionHash: `0x${'1'.padStart(64, '0')}`,
+    })
+  })
+})
+
+describe('a submitted grant whose outcome stays unknown', () => {
+  const lagPastRetries = 8
+
+  async function unresolvedGrant(requestedDuration?: number) {
+    const s = service()
+    s.chain.state.wait = 'fail-but-landed'
+    s.chain.state.receiptLag = lagPastRetries
+    const created = await (await s.api.handle(call('/requests', 'POST', { ...input, requestedDuration }))).json()
+    const response = await s.approve(created.id)
+    return { s, id: created.id as string, response }
+  }
+  const view = async (s: ReturnType<typeof service>, id: string) =>
+    (await (await s.api.handle(call(`/requests/${id}`))).json()) as Record<string, unknown>
+
+  test('is reported as unresolved with its hash, not as a failed grant, and is not resubmitted', async () => {
+    const { s, id, response } = await unresolvedGrant(60)
+    expect(response.status).toBe(202)
+    const body = await response.json()
+    expect(body.status).toBe('approving')
+    expect(body.unresolvedWrite.transactionHash).toBe(`0x${'1'.padStart(64, '0')}`)
+    expect(s.chain.writes).toHaveLength(1)
+    const again = await s.approve(id)
+    expect(again.status).toBe(409)
+    expect((await again.json()).error.code).toBe('request_not_pending')
+    const revoke = await s.revoke()
+    expect(revoke.status).toBe(409)
+    expect((await revoke.json()).error.code).toBe('write_unresolved')
+    expect(s.chain.writes).toHaveLength(1)
+  })
+
+  test('another request for the same agent cannot be approved while the write is unresolved', async () => {
+    const { s } = await unresolvedGrant()
+    const other = await s.suggest()
+    const response = await s.approve(other.id)
+    expect(response.status).toBe(409)
+    expect((await response.json()).error.code).toBe('write_unresolved')
+    expect(s.chain.writes).toHaveLength(1)
+  })
+
+  test('once the receipt shows up the grant is confirmed and its duration is enforced', async () => {
+    const { s, id } = await unresolvedGrant(60)
+    for (let i = 0; i < 7; i++) await s.clock.advance(5000)
+    const settled = await view(s, id)
+    expect(settled.status).toBe('approved')
+    expect(settled.unresolvedWrite).toBeUndefined()
+    expect((settled.grantTransaction as { transactionHash: string }).transactionHash).toBe(`0x${'1'.padStart(64, '0')}`)
+    expect(settled.expiryStatus).toBe('scheduled')
+    expect(s.chain.records.get(`agent-1.${TAILNET}|acl`)).toBe(s.chain.digest)
+    await s.clock.advance(61_000)
+    expect(s.chain.records.get(`agent-1.${TAILNET}|acl`)).toBe('')
+    expect((await view(s, id)).status).toBe('revoked')
+  })
+
+  test('a duration that elapsed while unresolved is revoked as soon as the grant is confirmed', async () => {
+    const { s, id } = await unresolvedGrant(10)
+    s.chain.state.receiptLag = 0
+    await s.clock.advance(5000)
+    await s.clock.advance(5000)
+    await s.clock.advance(5000)
+    expect((await view(s, id)).status).toBe('revoked')
+    expect(s.chain.records.get(`agent-1.${TAILNET}|acl`)).toBe('')
+  })
+
+  test('a transaction that is later found reverted returns the request to pending', async () => {
+    const { s, id } = await unresolvedGrant(60)
+    s.chain.state.receiptLag = 0
+    s.chain.state.wait = 'revert'
+    // Rewrite the recorded receipt to a revert, as the node would report it.
+    s.chain.receipts.set(`0x${'1'.padStart(64, '0')}`, 'reverted')
+    await s.clock.advance(5000)
+    const settled = await view(s, id)
+    expect(settled.status).toBe('pending')
+    expect(settled.unresolvedWrite).toBeUndefined()
+    expect(settled.expiresAt).toBeUndefined()
+  })
+})
+
+describe('a submitted revoke whose outcome stays unknown', () => {
+  async function unresolvedRevoke() {
+    const s = service()
+    const { id } = await s.suggest()
+    await s.approve(id)
+    s.chain.state.wait = 'fail-but-landed'
+    s.chain.state.receiptLag = 8
+    const response = await s.revoke()
+    return { s, id, response }
+  }
+
+  test('is reported as revoking with its hash and is not resubmitted', async () => {
+    const { s, response } = await unresolvedRevoke()
+    expect(response.status).toBe(202)
+    const body = await response.json()
+    expect(body.status).toBe('revoking')
+    expect(body.unresolvedWrite.operation).toBe('revoke')
+    expect(s.chain.writes).toHaveLength(2)
+    expect((await s.revoke()).status).toBe(409)
+    expect(s.chain.writes).toHaveLength(2)
+  })
+
+  test('becomes revoked when the receipt confirms it', async () => {
+    const { s, id } = await unresolvedRevoke()
+    for (let i = 0; i < 7; i++) await s.clock.advance(5000)
+    const settled = await (await s.api.handle(call(`/requests/${id}`))).json()
+    expect(settled.status).toBe('revoked')
+    expect(settled.unresolvedWrite).toBeUndefined()
+  })
+
+  test('returns to approved when the transaction is found reverted', async () => {
+    const { s, id } = await unresolvedRevoke()
+    s.chain.state.receiptLag = 0
+    s.chain.receipts.set(`0x${'2'.padStart(64, '0')}`, 'reverted')
+    await s.clock.advance(5000)
+    expect((await (await s.api.handle(call(`/requests/${id}`))).json()).status).toBe('approved')
   })
 })

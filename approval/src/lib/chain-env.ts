@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
-import { createWalletClient, http, toHex, type Hex } from 'viem'
-import { privateKeyToAccount } from 'viem/accounts'
+import { createWalletClient, http, toHex, TransactionReceiptNotFoundError, type Hex } from 'viem'
+import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts'
 import { sepolia } from 'viem/chains'
 import { packetToBytes } from 'viem/ens'
 import { resolverWriteAbi } from '../../../admincli/src/roles'
@@ -14,10 +14,22 @@ type Env = Record<string, string | undefined>
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 
+/** A configuration failure whose message is a fixed diagnostic naming a variable, never a value. */
+export class ConfigError extends Error {}
+
 function required(env: Env, name: string): string {
   const value = env[name]?.trim()
-  if (!value) throw new Error(`${name} is required for the real signer`)
+  if (!value) throw new ConfigError(`${name} is required for the real signer`)
   return value
+}
+
+// Third-party validators (viem) echo the offending value in their messages, so discard them.
+function sanitized<T>(variable: string, problem: string, build: () => T): T {
+  try {
+    return build()
+  } catch {
+    throw new ConfigError(`${variable} ${problem}`)
+  }
 }
 
 /** Decrypts the granter's X25519 key from the Key Ring file on this machine, per call. No plaintext env fallback. */
@@ -35,8 +47,17 @@ function ringKeyLoader(ringPath: string): LoadGranterKey {
   }
 }
 
-function viemSigner(privateKey: Hex): Signer {
-  const account = privateKeyToAccount(privateKey)
+async function receiptStatus(hash: string): Promise<'success' | 'reverted' | 'pending'> {
+  try {
+    const receipt = await publicClient.getTransactionReceipt({ hash: hash as Hex })
+    return receipt.status === 'success' ? 'success' : 'reverted'
+  } catch (error) {
+    if (error instanceof TransactionReceiptNotFoundError) return 'pending'
+    throw error
+  }
+}
+
+function viemSigner(account: PrivateKeyAccount): Signer {
   const wallet = createWalletClient({
     account,
     chain: sepolia,
@@ -67,8 +88,8 @@ function viemSigner(privateKey: Hex): Signer {
 
 /**
  * Real adapters for the admin machine, or `undefined` when `APPROVAL_GRANTER_LABEL` is unset
- * (the service then answers 503 signer_not_configured). Throws, naming the variable only, when
- * the configuration is partial. The granter key is never read from the environment.
+ * (the service then answers 503 signer_not_configured). Throws a ConfigError, naming the variable only, when
+ * the configuration is partial or malformed. The granter key is never read from the environment.
  */
 export function realAdaptersFromEnv(env: Env = process.env): ChainAdapters | undefined {
   const granterLabel = env.APPROVAL_GRANTER_LABEL?.trim()
@@ -76,15 +97,20 @@ export function realAdaptersFromEnv(env: Env = process.env): ChainAdapters | und
 
   const rawKey = required(env, 'SEPOLIA_PRIVATE_KEY')
   const signerKey = rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`
-  if (!/^0x[0-9a-fA-F]{64}$/.test(signerKey)) throw new Error('SEPOLIA_PRIVATE_KEY must be 32 bytes of hex')
+  if (!/^0x[0-9a-fA-F]{64}$/.test(signerKey)) throw new ConfigError('SEPOLIA_PRIVATE_KEY must be 32 bytes of hex')
+  const account = sanitized('SEPOLIA_PRIVATE_KEY', 'is not a valid secp256k1 private key', () =>
+    privateKeyToAccount(signerKey as Hex)
+  )
   const ringPath = required(env, 'BRAMBLE_GRANTER_KEY_RING_PATH')
-  tailnetRegistry()
+  sanitized('BRAMBLE_TAILNET_REGISTRY', 'is not a valid address', () => tailnetRegistry())
+  const tailnet = sanitized('BRAMBLE_TAILNET_NAME', 'is required for the real signer', () => tailnetName())
 
   return createChainAdapters({
     resolver: { getText: (name, key) => publicClient.getEnsText({ name, key }) },
-    signer: viemSigner(signerKey as Hex),
+    signer: viemSigner(account),
     readDevice: resolveDevice,
-    tailnetName: tailnetName(),
+    getReceiptStatus: receiptStatus,
+    tailnetName: tailnet,
     granterLabel,
     loadGranterKey: ringKeyLoader(ringPath),
   })
