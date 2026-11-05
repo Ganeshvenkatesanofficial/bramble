@@ -50,3 +50,8 @@ baseline test failures (ETH-86), compared against `hackathon` at `3bec957`.
 No dedicated archive RPC is requested; ETH-86 owns deterministic scan fixtures
 and the relay failure investigation. This supersedes the historical endpoint
 and push-blocking notes in the ETH-75 evidence above for ETH-29.
+
+## Mumbai build: paths written by agents
+
+- **`hedera-audit/`** — W10 option A, the HCS audit trail module, its tests and its README. Written by the Hedera-Claude agent (Claude), ticket ETH-46.
+- **`docs/16_HCS_AUDIT_RECORD_FORMAT.md`** and **`docs/adr/0011-w10-hedera-service-options.md`** — the record-format reference and the draft ADR with three options, for a human to decide. Written by the Hedera-Claude agent (Claude), ticket ETH-46.
