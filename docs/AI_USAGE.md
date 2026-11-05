@@ -53,7 +53,8 @@ and push-blocking notes in the ETH-75 evidence above for ETH-29.
 
 ### ETH-34 — agent payments panel (Core-Sol)
 
-- Agent: Core-Sol; commit identity follows the repository's configured git author.
+- Agent: Core-Sol; committing as `Core-Sol (agent, Yash Kolekar)
+  <153986822+whyash-paperclip@users.noreply.github.com>`.
 - Task/spec: ETH-34 and `docs/14_MUMBAI_BUILD_BRIEF.md` W3, superseded where
   applicable by `docs/15_MUMBAI_HANDOFF.md`; demo beat 3.
 - Prompt: inspect real rendezvous/data-relay purchase timing, reuse the read-only
@@ -64,7 +65,8 @@ and push-blocking notes in the ETH-75 evidence above for ETH-29.
   `approval/src/app/globals.css`, `approval/src/app/payments/page.tsx`,
   `approval/src/components/payments-panel.tsx`, `approval/test/payments.test.ts`,
   `approval/test/fixtures/payments.json`, `approval/README.md`,
-  `docs/16_AGENT_PAYMENTS_FLOW.md`, `docs/AI_USAGE.md`.
+  `docs/16_AGENT_PAYMENTS_FLOW.md`, `docs/17_AGENT_PAYMENTS_REFERENCE.md`,
+  `docs/AI_USAGE.md`.
 - Human decisions remain the handoff's invariants and H4 approval of the public
   UI. Agent choices: dedicated payer attribution, fixed reporting window,
   advisory budget, separate per-payment cap and fail-closed incomplete totals.
