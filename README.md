@@ -4,6 +4,45 @@ Bramble gives devices and automated workers private network access without makin
 
 The hackathon demo is one concrete access lifecycle: a thin health-check worker reaches an internal HTTP task API through a Bramble forward, an ungranted request is denied, a human-approved on-chain ACL expansion makes the identical request succeed without a restart, and revoking the worker removes it from the gateway's WireGuard peer table.
 
+## Pre-existing vs new
+
+The Mumbai continuity entry separates work that existed before the hackathon from work built during it.
+
+- **Baseline:** commit `28e2a8f`, tagged `pre-mumbai`. Everything in this repository at that commit is pre-existing.
+- **New work:** every commit after `28e2a8f`. List it with `git log pre-mumbai..HEAD`.
+- **Not new work:** polish, bug fixes and documentation of pre-existing behavior.
+
+### Pre-existing at `pre-mumbai`
+
+The sections below this one, from "Why the integrations matter" to "Open source and AI usage", describe the pre-existing system, except where they link to a row in the next table. The pre-existing system includes `brambled/`, `sidecar/`, `relay/`, `relay-sidecar/`, `admincli/` and `dashboard/`.
+
+### New since `pre-mumbai`
+
+This table is the index of new work. Each agent adds or updates its row in the same pull request as the work. A status other than `planned` needs a link to the pull request or commit that backs it.
+
+| Workstream | New work                                                                                                   | Status  |
+| ---------- | ---------------------------------------------------------------------------------------------------------- | ------- |
+| W1         | Approval service and web UI: request queue, approve, deny, revoke                                          | planned |
+| W2         | Agent protagonist: MCP server that lets a coding agent request private access and call the private service | planned |
+| W3         | Agent payments in the flow: spend, cap and HashScan link per agent                                         | planned |
+| W4         | Live activity feed in the approval UI                                                                      | planned |
+| W5         | Single-command launcher, reset script and public deployment                                                | planned |
+| W8         | STUN endpoint discovery, hole punching and automatic relay fallback                                        | planned |
+| W9         | Control plane over Tor: sidecar ENS reads and payment requests                                             | planned |
+| W10        | One new Hedera service on testnet, with a HashScan link in the console                                     | planned |
+| W11        | Demo infrastructure: cloud nodes, logging RPC proxy, public console, preflight                             | planned |
+
+W6 (this documentation) is a deliverable and not a feature. W7 (Ledger approval signing) is out of scope.
+
+## CROPS
+
+Bramble targets the Ethereum Foundation's CROPS properties: censorship resistance, open source, privacy and security. To be completed by W9. The lines below are placeholders and make no claim yet.
+
+- **C (censorship resistance):** to be completed by W9.
+- **O (open source):** to be completed by W9. Bramble is MIT-licensed today.
+- **P (privacy):** to be completed by W9. State what the RPC provider, relays and STUN servers each learn.
+- **S (security):** to be completed by W9. State how node, payer and enrollment keys are held.
+
 ## Why the integrations matter
 
 - **ENSv2** is the authorization source. Permissioned registries, per-name resolvers, and Enhanced Access Control separate enrollment, rotation, revocation, ACL, and relay-registration rights.
