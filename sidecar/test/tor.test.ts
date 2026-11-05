@@ -12,6 +12,8 @@ import {
 
 // A fake Tor transport: no WASM, no network. ready() settles when the test
 // says so, and fetch() replays scripted outcomes while recording every call.
+// Like tor-js 0.4.4, whose constructor starts bootstrap and caches that
+// promise, a client whose bootstrap failed rejects every later ready().
 type Outcome = Response | Error
 class FakeTor implements TorTransport {
   calls: { url: string; init: TorFetchInit }[] = []
@@ -19,9 +21,11 @@ class FakeTor implements TorTransport {
   closed = false
   readyCalls = 0
   private settle: { resolve: () => void; reject: (e: Error) => void } | null = null
+  private bootstrapError: Error | null = null
 
   ready(): Promise<void> {
     this.readyCalls++
+    if (this.bootstrapError !== null) return Promise.reject(this.bootstrapError)
     return new Promise((resolve, reject) => {
       this.settle = { resolve, reject }
     })
@@ -30,7 +34,8 @@ class FakeTor implements TorTransport {
     this.settle?.resolve()
   }
   failReady(message: string) {
-    this.settle?.reject(new Error(message))
+    this.bootstrapError = new Error(message)
+    this.settle?.reject(this.bootstrapError)
   }
   async fetch(url: string, init: TorFetchInit = {}): Promise<Response> {
     this.calls.push({ url, init })
@@ -92,12 +97,17 @@ describe('startTor and getTorStatus', () => {
     expect(fake.readyCalls).toBe(1)
   })
 
-  it('reports failed with lastError, then recovers on the next attempt with the same client', async () => {
-    const fake = new FakeTor()
-    const started = startTor({ transport: () => fake, retryDelayMs: 0 })
+  it('reports failed with lastError, then recovers on the next attempt with a new client', async () => {
+    const fakes: FakeTor[] = []
+    const factory = () => {
+      const fake = new FakeTor()
+      fakes.push(fake)
+      return fake
+    }
+    const started = startTor({ transport: factory, retryDelayMs: 0 })
     await Promise.resolve()
     await Promise.resolve()
-    fake.failReady('guard unreachable')
+    fakes[0]!.failReady('guard unreachable')
     await expect(started).rejects.toThrow('guard unreachable')
     expect(getTorStatus()).toEqual({ state: 'failed', lastError: 'guard unreachable' })
 
@@ -105,32 +115,98 @@ describe('startTor and getTorStatus', () => {
     // A new attempt reports starting and keeps the previous error visible.
     expect(getTorStatus()).toEqual({ state: 'starting', lastError: 'guard unreachable' })
     await Promise.resolve()
-    fake.becomeReady()
+    await Promise.resolve()
+    fakes[1]!.becomeReady()
     await again
     expect(getTorStatus().state).toBe('ready')
-    expect(fake.readyCalls).toBe(2)
+    expect(fakes).toHaveLength(2)
   })
 
-  it('fails the attempt when bootstrap exceeds readyTimeoutMs', async () => {
+  // Regression (ETH-83 review): tor-js caches a failed bootstrap, so a retry
+  // on the same client failed forever and the sidecar stayed at 503.
+  it('closes a client whose bootstrap failed and bootstraps a new one, never two at once', async () => {
+    const fakes: FakeTor[] = []
+    const factory = () => {
+      // The previous client is closed before the next one exists.
+      expect(fakes.every((f) => f.closed)).toBe(true)
+      const fake = new FakeTor()
+      fakes.push(fake)
+      return fake
+    }
+    const first = startTor({ transport: factory, retryDelayMs: 0 })
+    await Promise.resolve()
+    await Promise.resolve()
+    fakes[0]!.failReady('transient initial bootstrap failure')
+    await expect(first).rejects.toThrow('transient initial bootstrap failure')
+    expect(fakes[0]!.closed).toBe(true)
+
+    const second = startTor()
+    await Promise.resolve()
+    await Promise.resolve()
+    fakes[1]!.becomeReady()
+    await second
+    expect(getTorStatus().state).toBe('ready')
+    expect(fakes).toHaveLength(2)
+    expect(fakes[1]!.closed).toBe(false)
+    const fetched = await torFetch('ens')('https://example.test/')
+    expect(await fetched.text()).toBe('ok')
+    expect(fakes[0]!.calls).toHaveLength(0)
+    expect(fakes[1]!.calls).toHaveLength(1)
+  })
+
+  it('fails the attempt when bootstrap exceeds readyTimeoutMs, and closes that client', async () => {
     const fake = new FakeTor()
     await expect(startTor({ transport: () => fake, readyTimeoutMs: 10, retryDelayMs: 0 })).rejects.toThrow(
       'Tor not ready after'
     )
     expect(getTorStatus().state).toBe('failed')
+    expect(fake.closed).toBe(true)
   })
 
-  it('retries bootstrap in the background after retryDelayMs', async () => {
-    const fake = new FakeTor()
-    const started = startTor({ transport: () => fake, retryDelayMs: 5 })
+  it('retries bootstrap in the background after retryDelayMs, with a new client', async () => {
+    const fakes: FakeTor[] = []
+    const factory = () => {
+      const fake = new FakeTor()
+      fakes.push(fake)
+      return fake
+    }
+    const started = startTor({ transport: factory, retryDelayMs: 5 })
     await Promise.resolve()
     await Promise.resolve()
-    fake.failReady('no consensus')
+    fakes[0]!.failReady('no consensus')
     await expect(started).rejects.toThrow()
     await new Promise((r) => setTimeout(r, 20))
-    expect(fake.readyCalls).toBe(2)
-    fake.becomeReady()
+    expect(fakes).toHaveLength(2)
+    fakes[1]!.becomeReady()
     await new Promise((r) => setTimeout(r, 0))
     expect(getTorStatus().state).toBe('ready')
+  })
+
+  it('keeps the options of the first startTor call after a failed attempt', async () => {
+    const fakes: FakeTor[] = []
+    const factory = () => {
+      const fake = new FakeTor()
+      fakes.push(fake)
+      return fake
+    }
+    const first = startTor({ transport: factory, retryDelayMs: 0 })
+    await Promise.resolve()
+    await Promise.resolve()
+    fakes[0]!.failReady('guard unreachable')
+    await expect(first).rejects.toThrow()
+
+    let ignored = 0
+    const second = startTor({
+      transport: () => {
+        ignored++
+        return new FakeTor()
+      },
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+    fakes[1]!.becomeReady()
+    await second
+    expect(ignored).toBe(0)
   })
 
   it('closes the client on stopTor and resets to starting', async () => {

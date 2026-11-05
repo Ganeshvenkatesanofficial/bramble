@@ -66,6 +66,7 @@ let status: TorStatus = { state: 'starting' }
 let inFlight: Promise<void> | null = null
 let retryTimer: ReturnType<typeof setTimeout> | null = null
 let options: StartTorOptions = {}
+let configured = false
 // Bumped by stopTor() so an attempt that settles after a stop cannot
 // overwrite the reset state.
 let generation = 0
@@ -134,6 +135,16 @@ async function attempt(): Promise<void> {
     status = { state: 'ready', readyAt: now() }
   } catch (err) {
     if (gen !== generation) return
+    // A failed attempt discards its client, so the next attempt bootstraps a
+    // new one. tor-js 0.4.4 starts bootstrap in the TorClient constructor and
+    // caches that promise: once it rejects, every later ready() on the same
+    // client rejects with the same error, so reusing it could never recover.
+    // A timeout discards the client too. At 180 s, over three times the
+    // slowest measured bootstrap, a still-pending bootstrap is most likely
+    // stuck, and tor-js has no way to restart one in place. Closing first
+    // means two clients never run at once.
+    transport?.close()
+    transport = null
     status = { state: 'failed', lastError: messageOf(err) }
     scheduleRetry()
     throw err
@@ -153,12 +164,15 @@ function scheduleRetry(): void {
 /**
  * Bootstraps the sidecar's single Tor client. Resolves when it is ready and
  * rejects if this attempt fails; a failed attempt schedules another after
- * `retryDelayMs`. Calling it again while starting returns the same promise;
+ * `retryDelayMs` with a new client. Calling it again while starting returns the same promise;
  * calling it when ready resolves at once. Options apply from the first call
  * until stopTor().
  */
 export function startTor(opts?: StartTorOptions): Promise<void> {
-  if (opts !== undefined && transport === null && inFlight === null) options = opts
+  if (!configured) {
+    options = opts ?? {}
+    configured = true
+  }
   if (status.state === 'ready') return Promise.resolve()
   if (inFlight !== null) return inFlight
   if (retryTimer !== null) {
@@ -212,5 +226,6 @@ export function stopTor(): void {
   transport = null
   status = { state: 'starting' }
   options = {}
+  configured = false
   isolationKeys.clear()
 }
