@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http'
-import type { AddressInfo } from 'node:net'
+import { connect, type AddressInfo } from 'node:net'
 import { readdirSync, readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { loadConfig, type Config } from '../src/config.ts'
@@ -12,17 +12,25 @@ interface Upstream {
   server: Server
   url: string
   received: { path: string; headers: Record<string, unknown>; body: string }[]
+  override?: { status: number; contentType: string; body: (url: string) => string }
 }
 
 function startUpstream(): Promise<Upstream> {
   return new Promise((resolve) => {
     const received: Upstream['received'] = []
+    const holder: { upstream?: Upstream } = {}
     const server = createServer((req, res) => {
       const chunks: Buffer[] = []
       req.on('data', (c: Buffer) => chunks.push(c))
       req.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf-8')
         received.push({ path: req.url ?? '', headers: req.headers, body })
+        const override = holder.upstream?.override
+        if (override) {
+          res.writeHead(override.status, { 'content-type': override.contentType })
+          res.end(override.body(holder.upstream!.url))
+          return
+        }
         const parsed = JSON.parse(body)
         const answer = (c: { id: unknown; method: string }) => ({ jsonrpc: '2.0', id: c.id, result: `ok:${c.method}` })
         res.writeHead(200, { 'content-type': 'application/json' })
@@ -31,7 +39,8 @@ function startUpstream(): Promise<Upstream> {
     })
     server.listen(0, '127.0.0.1', () => {
       const { port } = server.address() as AddressInfo
-      resolve({ server, url: `http://127.0.0.1:${port}${SECRET_PATH}`, received })
+      holder.upstream = { server, url: `http://127.0.0.1:${port}${SECRET_PATH}`, received }
+      resolve(holder.upstream)
     })
   })
 }
@@ -168,6 +177,50 @@ describe('rpc-proxy', () => {
     const logText = await (await fetch(base + '/log')).text()
     expect(logText).not.toContain('SECRET')
     expect(JSON.stringify(proxy.log.view())).not.toContain(upstream.url)
+  })
+
+  it('redacts the upstream URL from JSON error bodies, including JSON-RPC errors returned with HTTP 200', async () => {
+    await boot()
+    for (const status of [200, 500]) {
+      upstream.override = {
+        status,
+        contentType: 'application/json',
+        body: (url) =>
+          JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code: -32000, message: `failed calling ${url}` } }),
+      }
+      const res = await post(base, { jsonrpc: '2.0', id: 1, method: 'eth_chainId' })
+      const text = await res.text()
+      expect(res.status).toBe(status)
+      expect(text).not.toContain('SECRET')
+      expect(text).not.toContain('127.0.0.1')
+      expect(JSON.parse(text).error.code).toBe(-32000)
+    }
+  })
+
+  it('does not relay non-JSON upstream bodies, which can echo the request URL', async () => {
+    await boot()
+    upstream.override = { status: 500, contentType: 'text/html', body: (url) => `<html>error at ${url}</html>` }
+    const res = await post(base, { jsonrpc: '2.0', id: 1, method: 'eth_chainId' })
+    expect(res.status).toBe(502)
+    const text = await res.text()
+    expect(text).not.toContain('SECRET')
+    expect(text).not.toContain('127.0.0.1')
+  })
+
+  it('answers 400 to a malformed request target and keeps serving', async () => {
+    await boot()
+    const port = Number(new URL(base).port)
+    const reply = await new Promise<string>((resolve, reject) => {
+      const socket = connect(port, '127.0.0.1', () =>
+        socket.write('GET //[ HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n')
+      )
+      let data = ''
+      socket.on('data', (c) => (data += c.toString()))
+      socket.on('close', () => resolve(data))
+      socket.on('error', reject)
+    })
+    expect(reply).toMatch(/^HTTP\/1\.1 400/)
+    expect((await fetch(base + '/healthz')).status).toBe(200)
   })
 
   it('serves only the log view, read-only, with CORS for the console', async () => {

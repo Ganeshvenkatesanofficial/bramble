@@ -29,6 +29,14 @@ Goal: run `rpc-proxy` on a public HTTPS URL so the demo nodes can point at it an
 5. Point nodes at `https://<your-name>/` as their Sepolia RPC URL.
 6. Point the console split screen at `https://<your-name>/log`. Poll it with `?since=<lastSeq>`.
 
+## Run the tests
+
+Requires Node 24 or later. The tests start a fake upstream on a local port and never contact a real RPC provider.
+
+```sh
+pnpm --filter @bramble/rpc-proxy test
+```
+
 ## Check it locally
 
 Use a fake upstream so no real endpoint is needed.
@@ -44,4 +52,4 @@ Restart the service: `systemctl restart rpc-proxy`. The log lives only in memory
 
 ## What is public
 
-Anyone who can reach `/log` sees the source IP, method and parameters of every call, including other people's calls to the public proxy. This is the point of beat 6. Do not send anything sensitive through the proxy.
+Anyone who can reach `/log` sees the source IP, method and parameters of each accepted call (not rate-limited or oversized requests; see `rpc-proxy/README.md`), including other people's calls to the public proxy. This is the point of beat 6. Do not send anything sensitive through the proxy.

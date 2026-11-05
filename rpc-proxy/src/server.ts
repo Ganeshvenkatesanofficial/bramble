@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { Config } from './config.ts'
 import { MemoryLog, truncate } from './log.ts'
 import { RateLimiter } from './rate-limit.ts'
+import { redact, secretsFromUrl } from './redact.ts'
 
 const ALLOWED_METHOD_PREFIXES = ['eth_', 'net_', 'web3_']
 
@@ -75,6 +76,7 @@ export interface ProxyServer {
 export function createProxyServer(config: Config): ProxyServer {
   const log = new MemoryLog(config.logCapacity)
   const limiter = new RateLimiter(config.rateLimitPerMinute)
+  const secrets = secretsFromUrl(config.upstreamUrl)
 
   function record(ip: string, call: unknown): string {
     const time = new Date().toISOString()
@@ -136,11 +138,15 @@ export function createProxyServer(config: Config): ProxyServer {
         body: raw,
         signal: AbortSignal.timeout(config.upstreamTimeoutMs),
       })
-      const body = Buffer.from(await upstream.arrayBuffer())
-      res.writeHead(upstream.status, {
-        'content-type': upstream.headers.get('content-type') ?? 'application/json',
-        'content-length': body.length,
-      })
+      const contentType = upstream.headers.get('content-type') ?? ''
+      const text = await upstream.text()
+      // Only JSON is relayed (with the upstream URL redacted): provider error pages can echo the request URL.
+      if (!contentType.toLowerCase().includes('json')) {
+        sendJson(res, 502, rpcError(null, -32603, 'upstream returned a non-JSON response'))
+        return
+      }
+      const body = Buffer.from(redact(text, secrets), 'utf-8')
+      res.writeHead(upstream.status, { 'content-type': 'application/json', 'content-length': body.length })
       res.end(body)
     } catch {
       // Never echo the error: fetch failures can include the upstream URL.
@@ -159,7 +165,13 @@ export function createProxyServer(config: Config): ProxyServer {
   }
 
   const server = createServer((req, res) => {
-    const url = new URL(req.url ?? '/', 'http://localhost')
+    let url: URL
+    try {
+      url = new URL(req.url ?? '/', 'http://localhost')
+    } catch {
+      sendJson(res, 400, { error: 'bad request target' })
+      return
+    }
     const path = url.pathname
 
     if ((path === '/' || path === '/rpc') && req.method === 'POST') {
