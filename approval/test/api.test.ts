@@ -243,3 +243,20 @@ test('unconfigured signing fails closed, missing requests return 404, and a fres
   const fresh = createApprovalApi({ token: () => token })
   expect((await (await fresh.handle(request())).json()).requests).toEqual([])
 })
+
+test('an externally revoked grant cannot leave a stale timer that revokes a later approval', async () => {
+  const chain = new MemoryChain()
+  const clock = new ManualClock()
+  const api = createApprovalApi({ token: () => token, signer: chain, resolver: chain, clock })
+  const old = await (await api.handle(request('/requests', 'POST', { ...input, requestedDuration: 2 }))).json()
+  await api.handle(request(`/requests/${old.id}/approve`, 'POST'))
+  chain.grants.delete('agent-1') // Independent admin tooling revokes the first grant.
+  const current = await (await api.handle(request('/requests', 'POST', input))).json()
+  expect((await api.handle(request(`/requests/${current.id}/approve`, 'POST'))).status).toBe(200)
+  await clock.advance(2000)
+  expect(chain.grants.has('agent-1')).toBe(true)
+  expect(chain.writes).toEqual(['grant:agent-1', 'grant:agent-1'])
+  const retired = await (await api.handle(request(`/requests/${old.id}`))).json()
+  expect(retired.status).toBe('revoked')
+  expect(retired.revokeReason).toBe('external')
+})

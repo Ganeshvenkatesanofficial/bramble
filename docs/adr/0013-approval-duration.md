@@ -29,8 +29,9 @@ Reaching zero means the server should attempt revoke; it does not mean chain
 access has ended. If the write fails, keep the request approved, show `failed`,
 and retry every five seconds while this process runs. Never report revoked
 until the signer confirms, or a fresh ACL read proves no grant remains. A manual
-revoke cancels the timer. A stale callback cannot revoke a later grant for the
-same agent.
+revoke cancels the timer. A stale callback cannot revoke a later grant created through this API for the
+same agent. A fresh empty ACL read at approval also retires older local grant
+records and cancels their timers (`revokeReason: external`).
 
 The per-agent write lock also serializes expiry against a manual action. A timer
 that meets an in-progress write retries; the API never sends a duplicate
@@ -47,6 +48,10 @@ Stopping, restarting or suspending the approval process can prevent automatic
 revoke. Requests and timers are not restored after restart. The operator must
 reconcile outstanding grants through admin tooling before restarting a demo.
 Do not claim bounded grant lifetime when the approval service is unavailable.
+External revoke/regrant operations that bypass the API are not versioned by the
+boolean ACL-presence interface. An outstanding timer can revoke such a replacement.
+Route grant changes through this API while timers are active; stop timers only
+after reconciling and revoking their grants before using independent admin tools.
 The gateway continues to enforce the current ENS ACL independently throughout.
 
 ## Alternatives

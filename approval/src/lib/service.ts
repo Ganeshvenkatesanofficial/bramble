@@ -67,6 +67,10 @@ export class ApprovalService {
       if (await resolver.hasGrant(record.agentLabel)) {
         throw new ApiError(409, 'already_granted', 'Agent already has a grant; revoke it before approving another.')
       }
+      // A fresh empty ACL also retires a grant removed by independent admin tooling.
+      for (const prior of this.requests.values()) {
+        if (prior.agentLabel === record.agentLabel && prior.status === 'approved') this.markRevoked(prior, 'external')
+      }
       const identities = await Promise.all([
         resolver.resolveIdentity(record.agentLabel),
         resolver.resolveIdentity(record.gatewayLabel),
@@ -130,7 +134,7 @@ export class ApprovalService {
     )
   }
 
-  private markRevoked(record: AccessRequest, reason: 'manual' | 'duration') {
+  private markRevoked(record: AccessRequest, reason: 'manual' | 'duration' | 'external') {
     this.timers.get(record.id)?.()
     this.timers.delete(record.id)
     record.status = 'revoked'
@@ -197,9 +201,7 @@ export class ApprovalService {
   }
 
   get(id: string) {
-    const record = this.requests.get(id)
-    if (!record) throw new ApiError(404, 'request_not_found', 'Request not found.')
-    return this.view(record)
+    return this.view(this.record(id))
   }
 
   private view(record: AccessRequest) {

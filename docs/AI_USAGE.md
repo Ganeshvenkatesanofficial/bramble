@@ -21,7 +21,8 @@ Per-track attribution and involvement narrative for the submission dashboard is 
 
 ## Mumbai approval API (ETH-29)
 
-Core-Sol (OpenAI Codex), committing as the repository-configured git author,
+Core-Sol (OpenAI Codex), committing as Core-Sol (agent, Yash Kolekar) through
+the `whyash-paperclip` commit account,
 implemented `approval/` and its API tests from ETH-29. AI assistance also covered
 `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `.prettierignore`, `eslint.config.js`,
 this file, and the draft approval ADRs `docs/adr/0011-approval-service-placement.md`,

@@ -46,7 +46,7 @@ export interface AccessRequest extends RequestInput {
   revokeTransaction?: TransactionReceipt
   expiresAt?: string
   revokedAt?: string
-  revokeReason?: 'manual' | 'duration'
+  revokeReason?: 'manual' | 'duration' | 'external'
   expiryStatus: 'none' | 'scheduled' | 'revoking' | 'failed' | 'revoked'
 }
 
