@@ -26,10 +26,10 @@ Use `grill-me` and `grill-with-docs` to resolve ambiguity before building, `to-s
 
 ## Git authentication
 
-Your `GH_TOKEN` environment variable holds a fine-grained PAT. Do not print it. Push with a one-shot credential helper:
+Your `GH_TOKEN` environment variable holds a fine-grained PAT. Codex agents see it as `GH_PAT` instead, because Codex hides variables whose names contain TOKEN, KEY or SECRET. Use whichever is set (`${GH_TOKEN:-$GH_PAT}`). Do not print it. Push with a one-shot credential helper:
 
 ```sh
-git -c credential.helper='!f() { echo username=x-access-token; echo password=$GH_TOKEN; }; f' push origin <branch>
+git -c credential.helper='!f() { echo username=x-access-token; echo password=${GH_TOKEN:-$GH_PAT}; }; f' push origin <branch>
 ```
 
-Your git author name and email are already set in the environment. Check access with `curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/WhyAsh5114/bramble` (expect 200). Never echo the token or write it to a file.
+Your git author name and email are already set in the environment. Check access with `curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${GH_TOKEN:-$GH_PAT}" https://api.github.com/repos/WhyAsh5114/bramble` (expect 200). Never echo the token or write it to a file.
