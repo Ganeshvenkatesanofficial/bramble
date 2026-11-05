@@ -23,3 +23,13 @@ Read, in order: `docs/14_MUMBAI_BUILD_BRIEF.md`, `docs/15_MUMBAI_HANDOFF.md`, `S
 ## Skills
 
 Use `grill-me` and `grill-with-docs` to resolve ambiguity before building, `to-spec` and `to-tickets` to plan, `tdd` and `implement` to build, `diagnosing-bugs` for failures, `code-review` for reviews, and `improve-codebase-architecture` only when asked. Use `handoff` when you stop mid-task.
+
+## Git authentication
+
+Your `GH_TOKEN` environment variable holds a fine-grained PAT. Do not print it. Push with a one-shot credential helper:
+
+```sh
+git -c credential.helper='!f() { echo username=x-access-token; echo password=$GH_TOKEN; }; f' push origin <branch>
+```
+
+Your git author name and email are already set in the environment. Check access with `curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/repos/WhyAsh5114/bramble` (expect 200). Never echo the token or write it to a file.
