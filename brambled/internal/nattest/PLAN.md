@@ -8,11 +8,11 @@ The public seam is `net.PacketConn`. Tests send opaque datagrams through real
 loopback UDP sockets and observe their source addresses and replies. The
 `nattest` build tag excludes the importable fixture from production builds.
 
-| NAT type | Mapping | Inbound filtering |
-| --- | --- | --- |
-| Full cone | One public socket per private socket | Any source |
-| Restricted cone | One public socket per private socket | Previously contacted source IP, any port |
-| Symmetric | One public socket per private socket and destination IP:port | That destination IP:port only |
+| NAT type        | Mapping                                                      | Inbound filtering                        |
+| --------------- | ------------------------------------------------------------ | ---------------------------------------- |
+| Full cone       | One public socket per private socket                         | Any source                               |
+| Restricted cone | One public socket per private socket                         | Previously contacted source IP, any port |
+| Symmetric       | One public socket per private socket and destination IP:port | That destination IP:port only            |
 
 Each simulated NAT uses a distinct loopback IP. Private sockets have synthetic
 LAN addresses. Peer-IP blocking drops traffic in both directions while leaving
