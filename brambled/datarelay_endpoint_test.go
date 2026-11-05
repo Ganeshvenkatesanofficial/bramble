@@ -85,6 +85,23 @@ func startTestRendezvousRelay(t *testing.T, requiredTokenPrefix string) (addr st
 				self := &fakePeer{enc: json.NewEncoder(conn)}
 				dec := json.NewDecoder(conn)
 				var pubkey string
+				// Deregister on disconnect, as relay/main.go's handle does.
+				// Without this, an offer to a peer whose Exchange call has
+				// already ended is "forwarded" to the dead connection and
+				// acked, so the sender stops retrying and the peer never
+				// sees it. The real relay replies "not registered" instead,
+				// and the sender retries until the peer's next Exchange
+				// registers (found 6 November 2026, ETH-86).
+				defer func() {
+					if pubkey == "" {
+						return
+					}
+					mu.Lock()
+					if peers[pubkey] == self {
+						delete(peers, pubkey)
+					}
+					mu.Unlock()
+				}()
 				for {
 					var m msg
 					if err := dec.Decode(&m); err != nil {
