@@ -5,8 +5,12 @@
 //
 // Covered: net.Socket#connect (TCP/TLS clients built on it), dgram send/bind/
 // connect, dns lookup/resolve/reverse (callback, promises, and both Resolver
-// classes), WebSocket, Bun.connect/udpSocket/dns.lookup/fetch, worker_threads
-// Worker, and child_process spawn/exec/fork.
+// classes), WebSocket, Bun.connect/udpSocket/dns.lookup/fetch. On Node also
+// worker_threads Worker and child_process spawn/exec/fork, including named
+// imports. On Bun these two are covered only through the default export
+// object: Bun's syncBuiltinESMExports does nothing, so named imports
+// (static or dynamic) of Worker or execFile reach the original (Verified,
+// ETH-81, Bun 1.4.0).
 // Not covered: native addons, WASI or other host-provided I/O, anything that
 // captured a reference to an original function before the guard installed,
 // and listeners (net.Server#listen, dgram bind through a pre-bound socket).

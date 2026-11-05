@@ -42,12 +42,15 @@ The guard replaces these JS entry points. Each blocked call is recorded and thro
 - `net.Socket#connect`, which the TCP and TLS clients built on `net.Socket` (`http`, `http2`, gRPC) end in.
 - `dgram` send, bind and connect.
 - `dns` lookup, resolve and reverse functions: callback, `dns.promises`, `dns.Resolver` and `dns.promises.Resolver`.
-- `WebSocket`, `worker_threads.Worker` and the `child_process` spawn, exec and fork functions.
+- `WebSocket`.
+- `worker_threads.Worker` and the `child_process` spawn, exec and fork functions. On Node these are blocked however they are imported. On Bun they are blocked only through the default export object (`import cp from 'node:child_process'`).
 - `Bun.connect`, `Bun.udpSocket`, `Bun.dns.lookup` and `Bun.fetch`.
 
 The global `fetch` becomes a stub that records the request. The test fails if the guard records anything.
 
 A reviewer (ETH-81) showed that an earlier version of the guard missed `dns.promises.Resolver`, `worker_threads.Worker` and `child_process`: each could send loopback traffic with no guard record. Those three are now patched and each has a self-check. That finding was a guard bypass, not a leak observed in the signer.
+
+**Verified (ETH-81, Bun 1.4.0):** on Bun, `const { Worker } = await import('node:worker_threads')` and `const { execFile } = await import('node:child_process')` (and static named imports) reach the original functions after the guard installs, because Bun's `syncBuiltinESMExports` does not update the named exports. Each sent a few TCP bytes to a loopback listener with no guard record. Node blocks both, and a Node-only self-check covers them. No interception was found for Bun, so those two routes are uncovered there. The signer and payment code under test import neither module.
 
 What the guard cannot see: native addons and other host-provided I/O, and any code that captured a reference to an original function before the guard installed. A clean run shows that none of the covered paths was used. It does not prove that no packet was sent.
 
@@ -58,12 +61,13 @@ What the guard cannot see: native addons and other host-provided I/O, and any co
 | `payForDataRelaySession reaches the network only through fetch` | Same, for the data-relay session purchase. |
 | Guard self-check: TCP, DNS, UDP | The guard records `net.connect`, `dns.lookup` and `dgram` `send`. |
 | Guard self-check: promise Resolver | The guard records `new dns.promises.Resolver().resolve4`. |
-| Guard self-check: worker and child process | The guard records `worker_threads.Worker` and `child_process.execFile`. |
+| Guard self-check: worker and child process | The guard records `worker_threads.Worker` and `child_process.execFile` through the default export objects, on Node and Bun. |
+| Guard self-check: named imports (Node only) | The guard records `Worker` and `execFile` imported by name. Skipped on Bun, where these routes are uncovered. |
 | Guard self-check: Hedera SDK | The guard records the SDK's gRPC connect when a real `AccountBalanceQuery` runs. A guard that never fires would also pass the signer tests, so this test shows the guard can see SDK traffic. |
 
 The tests use a generated throwaway ECDSA key and fixed fake account IDs and read no credential. The signer tests send nothing through any guarded path. The one self-check that lets the real Hedera SDK run a query is blocked by the guard before it connects.
 
-Run on 6 November 2026 from `sidecar/`, all 7 tests passing under each runtime:
+Run on 6 November 2026 from `sidecar/`: 8 tests on Node (all passing) and 7 on Bun (all passing; the named-import self-check is skipped there):
 
 ```sh
 npx vitest run test/hedera-signer-network.test.ts            # Node 24.15.0, vitest 5.0.0
@@ -103,7 +107,8 @@ go build -o "$BIN" . && strings "$BIN" | grep -c -E 'eth_|jsonrpc|infura|alchemy
 | `wgnode/node.go` (`conn.NewDefaultBind`) | WireGuard UDP to peers and data relays | Direct UDP | No |
 | `main.go` `net.Dial` (non-netstack mode), `wgnode` `DialTCP`/`ListenTCP`, `gateway/forward.go` | Mesh IPs, inside the WireGuard tunnel | Inside the tunnel | n/a |
 | `gateway/server.go` | `127.0.0.1:<service port>` | Loopback only | n/a |
-| `statusapi/server.go`, `wgnode.Ping` (`wgnode/node.go:340-363`) | ICMP echo to a peer's mesh IP through `DialPingAddr` | Inside the tunnel | n/a |
+| `statusapi/server.go` `runPing` (`:245-263`) | Runs the OS `ping` executable against the peer's allowed-IP (a mesh address) on a real TUN node | Inside the tunnel (the address comes from the peer's allowed-IP; the `ping` process is separate from `DialPingAddr`) | n/a |
+| `wgnode.Ping` (`wgnode/node.go:340-363`) | ICMP echo to a peer's mesh IP through `DialPingAddr` | Inside the tunnel | n/a |
 
 `cmd/demo-agent` and `cmd/demo-service` are demo tools, not part of the node. `live_demo.go` reuses the audited relay-selection and purchase code (`buyDataRelaySession`, so `quoteDataRelay` and the sidecar payment routes). It also creates WireGuard nodes (`wgnode.New`) and sends tunnel ICMP with `wgnode.Ping`, which uses `DialPingAddr` (`wgnode/node.go:340-363`). Those paths run inside the tunnel or over the WireGuard UDP socket already listed above, and none of them is an RPC call.
 
@@ -130,7 +135,7 @@ These go to Atlas as comments on ETH-40. None changes a handoff invariant.
    - **Moving the connection to Tor is not a full fix.** `Exchange` sends the paid token and then `myCandidate` on the same connection (`rendezvous/client.go:58-63`), and W8 supplies a public, STUN-discovered candidate. Tor would hide the connection's source address. The payload would still tell the relay the node's public endpoint, and the relay already sees the token. Hiding the source address and hiding the endpoint in the payload are separate problems.
    - **A complete fix** needs both a transport that hides the source address and either a token the relay cannot link to the payment or an exchange that does not reveal the endpoint to the relay. None of this is built or tested.
 2. **Payer-to-session linkage at the data relay (inference from source, untested).** This is independent of finding 1. The paid `POST /data-relay-session` allocates a session and returns its UDP port (`relay-sidecar/src/routes/datarelay.ts:30-49`, `relay/datarelay.go:58,194-197`). That port records each participant's source address (`relay/datarelay.go:106-115,134-145`). The operator can therefore associate the payer's payment with the IP addresses that use that session's port, even if the rendezvous transport or token changes. The port alone does not say which participant paid.
-3. **Optional follow-up.** Route `quoteDataRelay` through the sidecar (for example a loopback route that calls `torFetch('pay')`). It removes one direct call and is small. It does not remove findings 1 or 2. Priority: after the W9 core work.
+3. **Optional follow-up.** Route `quoteDataRelay` through the sidecar (for example a loopback route that calls `torFetch('pay')`). It would remove one direct call. It does not remove findings 1 or 2. Priority: after the W9 core work.
 4. **No RPC follow-up needed.** `brambled` has no direct RPC, so the handoff's "route any found through the sidecar" has nothing to route.
 
 ## Exact wording for the README CROPS "P" line

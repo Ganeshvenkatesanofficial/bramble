@@ -1,7 +1,8 @@
 // ETH-40 / W9a: does @x402/hedera's client signer reach the network outside
 // the fetch it is wrapped by? The guard blocks and records the TCP, DNS, UDP,
 // WebSocket, worker and child-process entry points listed in
-// helpers/network-guard.ts; only the stubbed global fetch may run. A pass means
+// helpers/network-guard.ts (on Bun, worker and child-process named imports are
+// not covered); only the stubbed global fetch may run. A pass means
 // none of those paths was used, not that no packet could have been sent.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import net from 'node:net'
@@ -89,6 +90,13 @@ describe('guard self-check (a guard that cannot fail proves nothing)', () => {
     expect(() => new workerThreads.Worker('process.exit(0)', { eval: true })).toThrow('network-guard')
     expect(() => childProcess.execFile(process.execPath, ['-e', '0'], () => {})).toThrow('network-guard')
     expect(guard.attempts.map((a) => a.kind)).toEqual(['worker_threads.Worker', 'child_process.execFile'])
+  })
+
+  it.skipIf('Bun' in globalThis)('records worker and child-process named imports (Node only)', async () => {
+    const { Worker } = await import('node:worker_threads')
+    const { execFile } = await import('node:child_process')
+    expect(() => new Worker('process.exit(0)', { eval: true })).toThrow('network-guard')
+    expect(() => execFile(process.execPath, ['-e', '0'], () => {})).toThrow('network-guard')
   })
 
   it('records the Hedera SDK when it really queries a consensus node', async () => {
