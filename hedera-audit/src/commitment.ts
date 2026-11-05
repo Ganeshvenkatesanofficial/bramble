@@ -15,18 +15,35 @@ const HEX_64 = /^[0-9a-f]{64}$/
 
 export type RandomBytes = (size: number) => Uint8Array
 
-function assertEvent(event: AuditEvent): Record<string, string> {
-  const required = REQUIRED_FIELDS[event.kind]
-  if (!required) throw new Error(`unknown audit kind: ${String(event.kind)}`)
-  const fields = event as unknown as Record<string, unknown>
-  for (const name of Object.keys(fields)) {
-    if (name !== 'kind' && !required.includes(name)) throw new Error(`unexpected field ${name} on ${event.kind} event`)
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/
+
+/**
+ * Copies the schema fields of an event into a fresh frozen object. Only own enumerable string
+ * properties count, so inherited or non-enumerable fields cannot pass validation yet be left out
+ * of the commitment, and later mutation of the caller's object cannot change the opening.
+ */
+export function snapshotEvent(event: AuditEvent): AuditEvent {
+  if (typeof event !== 'object' || event === null) throw new Error('audit event must be an object')
+  const source = event as unknown as Record<string, unknown>
+  const own = (name: string): unknown => {
+    const descriptor = Object.getOwnPropertyDescriptor(source, name)
+    return descriptor && descriptor.enumerable ? descriptor.value : undefined
   }
+  const kind = own('kind')
+  if (typeof kind !== 'string' || !KINDS.includes(kind as AuditKind))
+    throw new Error(`unknown audit kind: ${String(kind)}`)
+  const required = REQUIRED_FIELDS[kind as AuditKind]
+  for (const name of Object.keys(source)) {
+    if (name !== 'kind' && !required.includes(name)) throw new Error(`unexpected field ${name} on ${kind} event`)
+  }
+  const copy: Record<string, string> = { kind }
   for (const name of required) {
-    const value = fields[name]
-    if (typeof value !== 'string' || value === '') throw new Error(`${event.kind} event needs a non-empty ${name}`)
+    const value = own(name)
+    if (typeof value !== 'string' || value === '') throw new Error(`${kind} event needs a non-empty ${name}`)
+    if (LONE_SURROGATE.test(value)) throw new Error(`${kind} event field ${name} is not well-formed UTF-16`)
+    copy[name] = value
   }
-  return fields as Record<string, string>
+  return Object.freeze(copy) as unknown as AuditEvent
 }
 
 function lengthPrefixed(text: string): Buffer {
@@ -36,14 +53,18 @@ function lengthPrefixed(text: string): Buffer {
   return Buffer.concat([prefix, body])
 }
 
-/** Unambiguous encoding: domain tag, then every (name, value) pair sorted by name, each length-prefixed. */
-export function encodeEvent(event: AuditEvent): Buffer {
-  const fields = assertEvent(event)
+function encodeSnapshot(snapshot: AuditEvent): Buffer {
+  const fields = snapshot as unknown as Record<string, string>
   const parts = [lengthPrefixed(DOMAIN)]
   for (const name of Object.keys(fields).sort()) {
     parts.push(lengthPrefixed(name), lengthPrefixed(fields[name]))
   }
   return Buffer.concat(parts)
+}
+
+/** Unambiguous encoding: domain tag, then every (name, value) pair sorted by name, each length-prefixed. */
+export function encodeEvent(event: AuditEvent): Buffer {
+  return encodeSnapshot(snapshotEvent(event))
 }
 
 export function newSalt(randomBytes: RandomBytes = nodeRandomBytes): string {
@@ -52,19 +73,24 @@ export function newSalt(randomBytes: RandomBytes = nodeRandomBytes): string {
   return Buffer.from(salt).toString('hex')
 }
 
+function commitSnapshot(snapshot: AuditEvent, saltHex: string): string {
+  if (!HEX_64.test(saltHex)) throw new Error('salt must be 64 lowercase hex characters')
+  return createHmac('sha256', Buffer.from(saltHex, 'hex')).update(encodeSnapshot(snapshot)).digest('hex')
+}
+
 export function commit(event: AuditEvent, saltHex: string): string {
-  if (!/^[0-9a-f]{64}$/.test(saltHex)) throw new Error('salt must be 64 lowercase hex characters')
-  return createHmac('sha256', Buffer.from(saltHex, 'hex')).update(encodeEvent(event)).digest('hex')
+  return commitSnapshot(snapshotEvent(event), saltHex)
 }
 
 export function buildAudit(
   event: AuditEvent,
   randomBytes?: RandomBytes
 ): { message: AuditMessage; opening: AuditOpening } {
+  const snapshot = snapshotEvent(event)
   const salt = newSalt(randomBytes)
   return {
-    message: { v: AUDIT_VERSION, kind: event.kind, c: commit(event, salt) },
-    opening: { v: AUDIT_VERSION, event, salt },
+    message: { v: AUDIT_VERSION, kind: snapshot.kind, c: commitSnapshot(snapshot, salt) },
+    opening: { v: AUDIT_VERSION, event: snapshot, salt },
   }
 }
 

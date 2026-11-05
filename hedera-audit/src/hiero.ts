@@ -30,10 +30,10 @@ export function createHieroTopicClient(config: HieroConfig): TopicClient {
     async submitMessage({ topicId, message }) {
       const response = await new TopicMessageSubmitTransaction().setTopicId(topicId).setMessage(message).execute(client)
       const receipt = await response.getReceipt(client)
-      return {
-        transactionId: response.transactionId.toString(),
-        sequenceNumber: receipt.topicSequenceNumber?.toString() ?? '',
-      }
+      const transactionId = response.transactionId.toString()
+      if (!receipt.topicSequenceNumber)
+        throw new Error(`submit receipt for ${transactionId} has no topic sequence number`)
+      return { transactionId, sequenceNumber: receipt.topicSequenceNumber.toString() }
     },
   }
 }

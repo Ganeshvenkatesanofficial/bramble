@@ -14,12 +14,12 @@ Evidence labels: Verified (ran it), Read from source (code or docs, not run), Op
 
 ### A. HCS audit trail (implemented)
 
-Each grant, revoke and payment posts a salted hash commitment to a Hedera Consensus Service topic. The console reads the topic through the mirror node and verifies entries against openings that the approval service keeps.
+Each grant, revoke and payment posts a salted hash commitment to a Hedera Consensus Service topic. This PR ships the standalone module, a mirror node reader and a live check. Planned, not built: the console reads the topic through the reader and verifies entries against openings that the approval service keeps.
 
 - **Demo moment:** beat 3 shows the topic entry with a HashScan link.
 - **Privacy:** the topic shows event kinds, counts and timing. It hides subjects, services and amounts (`docs/16_HCS_AUDIT_RECORD_FORMAT.md`). This answers "Isn't a public Hedera log a privacy leak?" with "Only salted hashes are posted."
 - **Invariants:** no topology on-chain (commitments only), no local-state writes (the module lives outside `sidecar/src`), no enforcement role (peers do not read the topic).
-- **Cost and risk:** one HCS transaction per event, testnet only. Needs the payer secrets for a live run. The approval service must keep openings in memory for verification; a restart loses them.
+- **Cost and risk:** one HCS transaction per event, testnet only. Needs the payer secrets for a live run. Planned: the approval service must keep openings for verification; if it holds them only in memory, a restart loses them.
 - **Status:** module and unit tests with a fake client: Verified. Live testnet run: Open.
 - **Weakness:** an audit log is not a service in the sense of a new capability. The judge may read it as a thin addition. The submit-key holder can omit events.
 

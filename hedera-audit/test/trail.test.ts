@@ -125,7 +125,7 @@ describe('MirrorTopicReader and verifyEntries', () => {
     expect(url.pathname).toBe('/api/v1/topics/0.0.9000/messages')
     expect(url.searchParams.get('order')).toBe('asc')
     expect(url.searchParams.get('limit')).toBe('10')
-    expect(url.searchParams.get('sequencenumber')).toBe('gt:0')
+    expect(url.searchParams.has('sequencenumber')).toBe(false)
 
     const verified = verifyEntries(
       entries,
@@ -135,6 +135,18 @@ describe('MirrorTopicReader and verifyEntries', () => {
     expect(verified.map((e) => e.message?.kind)).toEqual(['grant', 'revoke', 'payment'])
     expect(verified[0].hashscanUrl).toBe(hashscanMessageUrl('1700000000.000000001'))
     expect(verified[0].opening).toEqual(records[0].opening)
+  })
+
+  it('sends a sequencenumber filter only for a positive cursor and rejects invalid cursors', async () => {
+    const client = new FakeTopicClient()
+    const fetch = fakeFetch(client.mirrorBody('0.0.9000'))
+    const reader = new MirrorTopicReader({ mirrorBaseUrl: 'https://mirror.test', fetch })
+    await reader.listEntries('0.0.9000', { afterSequence: 1 })
+    expect(new URL(fetch.urls[0]).searchParams.get('sequencenumber')).toBe('gt:1')
+    for (const afterSequence of [-1, 1.5, Number.NaN]) {
+      await expect(reader.listEntries('0.0.9000', { afterSequence })).rejects.toThrow('afterSequence')
+    }
+    await expect(reader.listEntries('0.0.9000', { limit: 0 })).rejects.toThrow('limit')
   })
 
   it('marks an entry unopened when no opening matches, and malformed when it is not an audit message', async () => {

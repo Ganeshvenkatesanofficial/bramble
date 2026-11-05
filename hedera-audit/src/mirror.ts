@@ -58,8 +58,13 @@ export class MirrorTopicReader {
   async listEntries(topicId: string, opts: { afterSequence?: number; limit?: number } = {}): Promise<TopicEntry[]> {
     const url = new URL(`${this.#baseUrl}/api/v1/topics/${topicId}/messages`)
     url.searchParams.set('order', 'asc')
-    url.searchParams.set('limit', String(opts.limit ?? 100))
-    if (opts.afterSequence !== undefined) url.searchParams.set('sequencenumber', `gt:${opts.afterSequence}`)
+    const limit = opts.limit ?? 100
+    if (!Number.isSafeInteger(limit) || limit < 1) throw new Error('limit must be a positive integer')
+    url.searchParams.set('limit', String(limit))
+    const after = opts.afterSequence ?? 0
+    if (!Number.isSafeInteger(after) || after < 0) throw new Error('afterSequence must be a non-negative integer')
+    // The mirror node rejects sequencenumber=gt:0 with HTTP 400, so the first page omits the filter.
+    if (after > 0) url.searchParams.set('sequencenumber', `gt:${after}`)
     const res = await this.#fetch(url.toString(), { signal: AbortSignal.timeout(8_000) })
     if (!res.ok) throw new Error(`mirror node returned ${res.status} for topic ${topicId}`)
     const body = (await res.json()) as { messages?: MirrorTopicMessage[] }

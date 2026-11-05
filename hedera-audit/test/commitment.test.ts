@@ -157,4 +157,48 @@ describe('verifyOpening', () => {
     const { message } = buildAudit(grant, () => Buffer.from(SALT, 'hex'))
     expect(verifyOpening(message, { v: 1, event: revoke, salt: SALT })).toBe(false)
   })
+
+  describe('event snapshot', () => {
+    it('rejects fields that are inherited or not enumerable instead of omitting them from the commitment', () => {
+      const inherited = Object.create({ ...grant }) as AuditEvent
+      expect(() => commit(inherited, SALT)).toThrow()
+      expect(() => buildAudit(inherited)).toThrow()
+
+      const hidden = { ...grant } as Record<string, unknown>
+      Object.defineProperty(hidden, 'txRef', { value: grant.txRef, enumerable: false })
+      expect(() => commit(hidden as unknown as AuditEvent, SALT)).toThrow('txRef')
+
+      const proto = Object.create({ kind: 'grant' }) as Record<string, unknown>
+      Object.assign(proto, { subject: grant.subject, serviceDigest: grant.serviceDigest, expiresAt: '1', txRef: 'x' })
+      expect(() => commit(proto as unknown as AuditEvent, SALT)).toThrow('unknown audit kind')
+    })
+
+    it('binds the kind into the commitment', () => {
+      const asRevoke = { ...revoke, kind: 'grant' } as unknown as AuditEvent
+      expect(() => commit(asRevoke, SALT)).toThrow('non-empty expiresAt')
+      const fields = { subject: grant.subject, serviceDigest: grant.serviceDigest, txRef: grant.txRef }
+      expect(commit({ kind: 'revoke', ...fields }, SALT)).not.toBe(
+        createHmac('sha256', Buffer.from(SALT, 'hex')).update(Buffer.from('bramble-audit-v1')).digest('hex')
+      )
+      expect(encodeEvent({ kind: 'revoke', ...fields }).includes(Buffer.from('revoke'))).toBe(true)
+    })
+
+    it('rejects ill-formed UTF-16 so distinct strings cannot share one commitment', () => {
+      const lone = { ...grant, subject: 'agent-\ud800.acme.eth' }
+      const replacement = { ...grant, subject: 'agent-\ufffd.acme.eth' }
+      expect(() => commit(lone, SALT)).toThrow('UTF-16')
+      expect(() => buildAudit(lone)).toThrow('UTF-16')
+      expect(() => commit(replacement, SALT)).not.toThrow()
+      expect(commit({ ...grant, subject: 'agent-\ud83d\ude00.acme.eth' }, SALT)).toMatch(/^[0-9a-f]{64}$/)
+    })
+
+    it('does not let later mutation of the caller object change the returned opening', () => {
+      const event = { ...grant }
+      const { message, opening } = buildAudit(event)
+      event.subject = 'changed.acme.eth'
+      expect(opening.event.kind === 'grant' && opening.event.subject).toBe(grant.subject)
+      expect(verifyOpening(message, opening)).toBe(true)
+      expect(Object.isFrozen(opening.event)).toBe(true)
+    })
+  })
 })

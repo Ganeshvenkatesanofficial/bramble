@@ -60,7 +60,7 @@ The operator that posts a commitment keeps the **opening**: the event and the sa
 { "v": 1, "event": { "kind": "revoke", "subject": "…", "serviceDigest": "0x…", "txRef": "0x…" }, "salt": "64 hex characters" }
 ```
 
-To verify, a reader recomputes `c` from the opening and compares it with the posted `c` in constant time. A matching opening proves the posted entry commits to exactly that event. A reader without the opening learns nothing about the event.
+To verify, a reader recomputes `c` from the opening and compares it with the posted `c` in constant time. A matching opening proves that the posted entry commits to exactly that event and salt. It does not prove that the asserted grant or payment really happened: the operator chose the event, so check the referenced `txRef` on its own chain. Without the opening, the encoded fields (subject, service digest, amounts, references) stay computationally hidden, because the salt is a fresh secret random value. The metadata in the next section stays public.
 
 ## What the topic reveals
 
@@ -70,9 +70,10 @@ To verify, a reader recomputes `c` from the opening and compares it with the pos
 | How many events of each kind, and their cadence | Service digests, ENS names, amounts    |
 | Which account paid to post the message          | Transaction references                 |
 
-- A fresh random salt per record means two equal events produce unrelated commitments. A dictionary attack over plausible ENS names or service digests does not work against a 256-bit salt.
+- A fresh random salt per record means two equal events produce unrelated commitments. A dictionary attack over plausible ENS names or service digests does not work against a secret 256-bit salt. This hiding holds only while the salt stays secret.
 - Event timing and counts are public. Beat 5 (revoke) therefore shows up on the topic as a `revoke` entry at a known time.
-- Unlike the on-chain ACL digests of ADR 0005, the commitments cannot be linked across records without the salts.
+- The commitments themselves cannot be matched to each other or to the on-chain ACL digests of ADR 0005 without the salts. Metadata still allows correlation: kind, topic, payer account, timing and cadence are public, so a `revoke` entry that lands just after a known Sepolia revoke transaction is easy to associate with it.
+- Event fields are encoded as UTF-8 after rejecting ill-formed UTF-16 (lone surrogates), and the opening stores a frozen snapshot of the validated fields, so one commitment has one event.
 
 ## What the audit trail does not do
 
@@ -84,18 +85,20 @@ To verify, a reader recomputes `c` from the opening and compares it with the pos
 ## Topic
 
 - Memo: `bramble audit trail v1`.
-- The topic has a **submit key**, set to the public key of the payer account, so only the payer can post. It has **no admin key**, so nobody can change or delete it after creation.
+- The topic has a **submit key**, set to the public key of the payer account, so only the payer can post. It has **no admin key**, so nobody can delete it or update its keys or memo. Its expiration can still be extended (Hedera allows that without an admin key).
 - Network: testnet or previewnet. The code refuses any other value; it never writes to mainnet.
 
 ## Reading the topic
 
-The console reads entries from the Hedera mirror node REST API:
+The reader in this module (`MirrorTopicReader`) reads entries from the Hedera mirror node REST API. The console is planned to use it; no console integration exists yet.
+
+The first page omits the `sequencenumber` filter, because the mirror node rejects `gt:0` with HTTP 400:
 
 ```
 GET {mirror}/api/v1/topics/{topicId}/messages?order=asc&limit=100&sequencenumber=gt:{n}
 ```
 
-The `message` field of each result is base64. The console links each entry to HashScan as `https://hashscan.io/testnet/transaction/{consensus_timestamp}` and the topic as `https://hashscan.io/testnet/topic/{topicId}`. Read from source: the mirror node route and the HashScan URL shapes come from the existing `dashboard/src/app/api/hedera/payments/route.ts` pattern and Hedera documentation, and are tested here only against a fake. Open: confirm both against the live testnet.
+The `message` field of each result is base64. `hashscanMessageUrl` and `hashscanTopicUrl` build `https://hashscan.io/testnet/transaction/{consensus_timestamp}` and `https://hashscan.io/testnet/topic/{topicId}`. Verified (reviewer, public read-only testnet requests): the messages route, `order`, `limit`, `sequencenumber=gt:{n}` for n > 0, and base64 decoding. Read from source: the HashScan URL shapes. Open: browser check of entries this module submits.
 
 ## Live run
 
