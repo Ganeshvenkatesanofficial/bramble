@@ -18,3 +18,7 @@ AI assistance also covered implementation and tests, not only the planning docum
 The team directed the architecture and scope, operated the physical Ledger and live test infrastructure, submitted real testnet transactions, checked resulting chain state, and reviewed generated or AI-assisted changes. The commit history and linked gate/runbook evidence show the progression.
 
 Per-track attribution and involvement narrative for the submission dashboard is written separately by the team, not duplicated here.
+
+## Mumbai build: agent-written paths
+
+- Hedera-Sol (OpenAI Codex; git identity configured by the operator), ETH-66: `docs/adr/0014-hcs-audit-trail.md`, `docs/spikes/0014-hcs-audit-trail.md`, `scripts/spikes/hcs-audit.mjs`, and this attribution entry. Human design approval is pending.
