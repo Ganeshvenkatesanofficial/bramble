@@ -19,6 +19,43 @@ The team directed the architecture and scope, operated the physical Ledger and l
 
 Per-track attribution and involvement narrative for the submission dashboard is written separately by the team, not duplicated here.
 
-## Mumbai build: agent-written paths
+## Mumbai W8a: STUN endpoint discovery
 
-- `sidecar/src/tor/`, `sidecar/src/routes/tor.ts`, `sidecar/scripts/tor-smoke.ts`, `sidecar/test/tor*.test.ts`, the Tor wiring in `sidecar/src/index.ts`, `brambled/sidecar/manager.go` (`waitTorReady`) and its tests, `docs/adr/0013-tor-transport.md`, the Tor section of `sidecar/README.md`, the tor-js dependency in `sidecar/package.json` and `pnpm-lock.yaml`, `sidecar/tsconfig.json`: written by the Keystone agent (Claude Opus 5.5, ETH-59), committing as the account in the commit author field.
+Net-Astra (OpenAI Codex) implemented and tested `brambled/stun/message.go`,
+`brambled/stun/bind.go`, `brambled/stun/bind_test.go`, `brambled/wgnode/node.go`,
+`brambled/wgnode/stun.go`, `brambled/main.go`, `brambled/statusapi/server.go`, and
+`brambled/statusapi/stun_test.go`. Documentation changes cover `README.md`,
+`brambled/README.md`, `docs/AI_USAGE.md`, and `docs/eth-36-stun-spec.md`.
+Commits use `Net-Astra (agent, Jay Kerkar)` with
+`133675904+jaykerkar0405@users.noreply.github.com` and the Paperclip co-author.
+The human-authored W8 task and Mumbai handoff set the scope and invariants.
+
+Net-Claude (Anthropic Claude) took over W8a after Net-Astra reached a provider limit. It reviewed and committed the opt-in bind wrapper in `brambled/stun/bind.go`, `brambled/stun/bind_test.go`, `brambled/wgnode/node.go`, `brambled/wgnode/stun.go`, `brambled/main.go`, `brambled/statusapi/stun_test.go`, `brambled/README.md` and `docs/eth-36-stun-spec.md`, and ran the checks. After review (ETH-89) it replaced the shared-endpoint `ClearSrc` call with a fresh endpoint per send and wrote `docs/adr/0017-stun-bind-wrapper-source-selection.md`.
+Net-Claude commits as `Net-Claude (agent, Chaitanya Kelkar)` with `chaitanyakelkar07@gmail.com` and the Paperclip co-author.
+
+## Mumbai agent-written paths
+
+Baseline: commit `28e2a8f`, tag `pre-mumbai`. Agents wrote the paths below after that commit. Each agent adds a row in the same pull request as the work. List paths, not prose. Humans approve every ADR and merge to `main`.
+
+### Accounts
+
+Each agent commits under the git identity shown here. Confirm yours with `git config user.name` before your first commit.
+
+| Agent | Lane | Commit author name | Status |
+| --- | --- | --- | --- |
+| Core-Claude | Core and console | `Core-Claude (agent, Jay Kerkar)` | Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026 |
+| Core-Sol | Core and console (cross-family reviewer) | to be added by Core-Sol | Open |
+| Net-Claude | Network (W8a STUN) | `Net-Claude (agent, Chaitanya Kelkar)` | Verified from commit authorship on `net-claude/eth-36-stun-binding` |
+| Keystone | Tor (principal, W9-2 Tor client core) | `Keystone (agent, Yash Kolekar)` | Verified from commit authorship on `keystone/eth-59-tor-client` |
+| Other lane agents | Network, Tor, Hedera, Demo and infra | to be added by each agent | Open |
+
+### Paths
+
+| Path | Ticket | Agent | Kind |
+| --- | --- | --- | --- |
+| `README.md` ("Pre-existing vs new", "CROPS" skeleton) | ETH-27 | Core-Claude | Documentation |
+| `docs/AI_USAGE.md` (this section) | ETH-27 | Core-Claude | Documentation |
+| `brambled/stun/`, `brambled/wgnode/stun.go`, `brambled/statusapi/stun_test.go`, `docs/eth-36-stun-spec.md`, `docs/adr/0017-stun-bind-wrapper-source-selection.md` | ETH-36 | Net-Astra, Net-Claude | Code, tests, documentation |
+| `sidecar/src/tor/`, `sidecar/src/routes/tor.ts`, `sidecar/scripts/tor-smoke.ts`, `sidecar/test/tor*.test.ts`, Tor wiring in `sidecar/src/index.ts`, `sidecar/tsconfig.json`, tor-js in `sidecar/package.json` and `pnpm-lock.yaml` | ETH-59 | Keystone | Code, tests |
+| `brambled/sidecar/manager.go` (`waitTorReady`), `brambled/sidecar/manager_test.go` | ETH-59 | Keystone | Code, tests |
+| `docs/adr/0013-tor-transport.md`, Tor section of `sidecar/README.md` | ETH-59 | Keystone | Documentation |
