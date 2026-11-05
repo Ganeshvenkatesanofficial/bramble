@@ -39,9 +39,7 @@ exchange through the same bind after discovery. Real NAT traversal remains Open.
 
 Protocol reference: [RFC 5389](https://www.rfc-editor.org/rfc/rfc5389.html).
 
-On Linux, wireguard-go's route-change listener requires a concrete default bind.
-The STUN wrapper therefore clears the endpoint's cached local source/interface
-before each send and lets the kernel choose the current route. This prevents
-stale interface reuse without copying the dependency's route listener. STUN
-mode does not retain WireGuard's source-address stickiness on multihomed hosts;
-real multihomed/NAT route changes remain Open.
+With STUN enabled, each send forwards a fresh destination-only endpoint so the
+kernel chooses the current source and interface; the shared endpoint is not
+mutated. The rationale, trade-off, and rejected alternatives are in
+`docs/adr/0017-stun-bind-wrapper-source-selection.md`.
