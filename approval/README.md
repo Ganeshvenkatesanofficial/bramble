@@ -33,3 +33,9 @@ contract, limits, error handling and timer limitations. Errors have the shape
 
 `pnpm --filter @bramble/approval test` exercises the API using an in-memory
 signer/resolver. These tests perform no network writes.
+
+The agent payments UI is available at `/payments`. `GET /api/payments` is a
+read-only testnet mirror feed attributed through `APPROVAL_PAYMENT_AGENTS`.
+The panel refreshes every two seconds; the node's sidecar remains the payer.
+See [`docs/16_AGENT_PAYMENTS_FLOW.md`](../docs/16_AGENT_PAYMENTS_FLOW.md) for
+configuration, the automatic relay payment trigger, and verification limits.

@@ -50,3 +50,21 @@ baseline test failures (ETH-86), compared against `hackathon` at `3bec957`.
 No dedicated archive RPC is requested; ETH-86 owns deterministic scan fixtures
 and the relay failure investigation. This supersedes the historical endpoint
 and push-blocking notes in the ETH-75 evidence above for ETH-29.
+
+### ETH-34 — agent payments panel (Core-Sol)
+
+- Agent: Core-Sol; commit identity follows the repository's configured git author.
+- Task/spec: ETH-34 and `docs/14_MUMBAI_BUILD_BRIEF.md` W3, superseded where
+  applicable by `docs/15_MUMBAI_HANDOFF.md`; demo beat 3.
+- Prompt: inspect real rendezvous/data-relay purchase timing, reuse the read-only
+  mirror feed server-side in approval, show payer/caps/spend/remaining/HashScan,
+  verify fixtures and record live verification gaps. Preserve dashboard's boundary.
+- Agent-written paths: `approval/src/lib/payments.ts`,
+  `approval/src/app/api/payments/route.ts`, `approval/src/app/layout.tsx`,
+  `approval/src/app/globals.css`, `approval/src/app/payments/page.tsx`,
+  `approval/src/components/payments-panel.tsx`, `approval/test/payments.test.ts`,
+  `approval/test/fixtures/payments.json`, `approval/README.md`,
+  `docs/16_AGENT_PAYMENTS_FLOW.md`, `docs/AI_USAGE.md`.
+- Human decisions remain the handoff's invariants and H4 approval of the public
+  UI. Agent choices: dedicated payer attribution, fixed reporting window,
+  advisory budget, separate per-payment cap and fail-closed incomplete totals.

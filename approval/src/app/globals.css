@@ -1,0 +1,77 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: light;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #252525;
+  background: #fff;
+}
+body {
+  margin: 0;
+}
+header {
+  border-bottom: 1px solid #e5e5e5;
+  padding: 1.25rem max(1.25rem, calc((100vw - 64rem) / 2));
+}
+main {
+  max-width: 64rem;
+  margin: auto;
+  padding: 2rem 1.25rem;
+}
+a {
+  color: #23754a;
+  text-underline-offset: 3px;
+}
+h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+p {
+  margin: 0.75rem 0;
+  color: #666;
+  overflow-wrap: anywhere;
+}
+article {
+  margin-top: 1.5rem;
+  border: 1px solid #ddd;
+  border-radius: 0.625rem;
+  padding: 1.25rem;
+}
+dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 1rem;
+}
+dt {
+  color: #666;
+  font-size: 0.85rem;
+  margin-bottom: 0.35rem;
+}
+dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+code {
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+ul {
+  list-style: none;
+  padding: 0;
+}
+li {
+  padding: 0.75rem 0;
+  border-top: 1px solid #eee;
+}
+[role='alert'] {
+  color: #9b2525;
+  border-left: 3px solid;
+  padding-left: 0.75rem;
+}
