@@ -90,7 +90,8 @@ func (n *NAT) Close() error {
 }
 
 type mapping struct {
-	socket *net.UDPConn
+	socket  *net.UDPConn
+	allowed map[string]bool
 }
 
 type packet struct {
@@ -126,21 +127,34 @@ func (c *packetConn) WriteTo(b []byte, addr net.Addr) (int, error) {
 	if c.nat.blocked[to.IP.String()] {
 		return len(b), nil
 	}
-	m := c.mappings[""]
+	key := ""
+	if c.nat.kind == Symmetric {
+		key = to.String()
+	}
+	m := c.mappings[key]
 	if m == nil {
 		socket, err := net.ListenUDP("udp4", &net.UDPAddr{IP: c.nat.ip})
 		if err != nil {
 			return 0, err
 		}
-		m = &mapping{socket: socket}
-		c.mappings[""] = m
+		m = &mapping{socket: socket, allowed: make(map[string]bool)}
+		c.mappings[key] = m
 		c.nat.wg.Add(1)
 		go c.receive(m)
 	}
 	if err := m.socket.SetWriteDeadline(c.writeDeadline); err != nil {
 		return 0, err
 	}
+	// Authorize before the send; a loopback reply can arrive immediately.
+	m.allowed[c.filterKey(to)] = true
 	return m.socket.WriteToUDP(b, to)
+}
+
+func (c *packetConn) filterKey(addr *net.UDPAddr) string {
+	if c.nat.kind == Symmetric {
+		return addr.String()
+	}
+	return addr.IP.String()
 }
 
 func (c *packetConn) receive(m *mapping) {
@@ -152,7 +166,8 @@ func (c *packetConn) receive(m *mapping) {
 			return
 		}
 		c.nat.mu.Lock()
-		allowed := !c.closed && !c.nat.blocked[from.IP.String()]
+		allowed := !c.closed && !c.nat.blocked[from.IP.String()] &&
+			(c.nat.kind == FullCone || m.allowed[c.filterKey(from)])
 		if allowed {
 			// UDP can drop on overflow. Never hold shutdown hostage to a reader.
 			select {
