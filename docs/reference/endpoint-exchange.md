@@ -5,7 +5,7 @@ Reference for how two Bramble nodes swap their UDP endpoints through the paid re
 ## Rules
 
 1. Endpoints travel only through the rendezvous relay (`relay/`, metered by [ADR 0007](../adr/0007-rendezvous-relay-metering.md)). They are never written on-chain (invariant 2).
-2. A learned endpoint is a dial hint. It never grants admission (invariant 1). The `EndpointResolver` path learns and uses an endpoint only for a peer whose public key ENS currently admits (`Exchanger.Learn`). The data-relay adopt watcher in `brambled/main.go` (`watchDataRelayAdopt`) predates this format and does not check admission; gating it is a follow-up (Open).
+2. A learned endpoint is a dial hint. It never grants admission (invariant 1). `admission.Loop` calls `EndpointResolver` only for peers ENS currently admits. `Exchanger.Learn` adds a second check, but `brambled serve` does not use `Exchanger` yet (Open, W8a and W8d). The data-relay adopt watcher in `brambled/main.go` (`watchDataRelayAdopt`) predates this format and does not check admission; gating it is a follow-up (Open).
 3. The relay stays opaque. It forwards the `candidate` string unchanged and does not parse it.
 
 ## Carrier
@@ -86,5 +86,6 @@ A candidate with no `ep1:` prefix is a bare `ip:port`. The receiver decodes it a
 | Format, parser, and admission gate behave as described above              | Verified by `go test ./rendezvous/` on 6 Nov 2026 |
 | Two in-process nodes learn each other's endpoint over the relay protocol and handshake | Verified (`TestEndpointsLearnedOverRendezvousReachAdmittedPeersOnly`, loopback, netstack) |
 | `brambled serve` publishes `ep1:` announcements with a STUN endpoint      | Open. W8a and W8d wire publishing; `serve` today still publishes `-my-candidate` as a bare `ip:port` |
+| `brambled serve` uses `Exchanger` (and its admission gate) | Open. `serve` relies on `admission.Loop` alone until W8a and W8d |
 | `brambled serve` accepts both formats from a peer                         | Verified for the parser (`TestPeerEndpointFromCandidate`); not run against a live relay |
 | Works across two real NATs                                                | Open                                       |

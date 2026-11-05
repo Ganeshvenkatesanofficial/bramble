@@ -39,8 +39,8 @@ type ensStub map[string]*sidecar.DeviceRecord
 
 func (e ensStub) ResolveDevice(label string) (*sidecar.DeviceRecord, error) { return e[label], nil }
 
-// admits reports whether ENS currently admits pubkey, by the same rule
-// admission.Loop applies: a pubkey record that is not revoked.
+// admits reports whether ENS currently admits pubkey: a pubkey record that
+// is not revoked. admission.Loop also checks expiry; this stub does not.
 func (e ensStub) admits(pubkey string) bool {
 	for _, rec := range e {
 		if rec != nil && rec.Pubkey != nil && *rec.Pubkey == pubkey && !rec.Revoked {
