@@ -14,6 +14,7 @@ AI assistance also covered implementation and tests, not only the planning docum
 - **`sidecar/src/` and `relay-sidecar/src/`** — ENSv2 resolution/discovery, x402 Hedera client and resource-server flows, and their TypeScript tests (for example `sidecar/src/ens/client.ts`, `sidecar/src/payments/datarelay.ts`, `relay-sidecar/src/routes/datarelay.ts`).
 - **`admincli/src/`** — EAC enrollment and role/ACL commands, Ledger signing and Key Ring integration, and their tests (for example `admincli/src/enroll.ts`, `admincli/src/ledger-eth-sign.ts`, `admincli/src/set-acl.ts`).
 - **`dashboard/`** — the read-only application UI and API routes.
+- **`rpc-proxy/` and `deploy/rpc-proxy/`** — the W11 memory-only logging JSON-RPC proxy, its tests, and its deployment recipe (`rpc-proxy/src/`, `rpc-proxy/test/server.test.ts`, `deploy/rpc-proxy/README.md`).
 
 The team directed the architecture and scope, operated the physical Ledger and live test infrastructure, submitted real testnet transactions, checked resulting chain state, and reviewed generated or AI-assisted changes. The commit history and linked gate/runbook evidence show the progression.
 

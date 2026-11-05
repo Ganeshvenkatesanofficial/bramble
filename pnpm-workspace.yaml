@@ -3,6 +3,7 @@ packages:
   - relay-sidecar
   - brambled
   - relay
+  - rpc-proxy
   - scripts/provision-dev-tailnet
   - admincli
   - dashboard
