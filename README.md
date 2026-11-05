@@ -36,7 +36,7 @@ W6 (this documentation) is a deliverable and not a feature. W7 (Ledger approval 
 
 ## CROPS
 
-Bramble targets the Ethereum Foundation's CROPS properties: censorship resistance, open source, privacy and security. To be completed by W9. The lines below are placeholders and make no claim yet.
+Bramble targets the Ethereum Foundation's CROPS properties: censorship resistance, open source, privacy and security. To be completed by W9. The lines below are placeholders and make no claim yet, except the licence.
 
 - **C (censorship resistance):** to be completed by W9.
 - **O (open source):** to be completed by W9. Bramble is MIT-licensed today.
