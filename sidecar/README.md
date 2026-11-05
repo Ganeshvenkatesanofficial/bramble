@@ -81,8 +81,10 @@ in-memory storage) and bootstraps it at startup. Design and measurements:
   `"starting Tor"` while starting and `"Tor failed to start: <lastError>"`
   after a failed attempt; `tor` is the same status object `/tor/status`
   returns, without `message`.
-- A failed bootstrap attempt closes its client and starts a new one after
-  30 s. `brambled` waits up to 7 minutes for `ready` at startup.
+- Each bootstrap attempt has 180 s; after a failed one the next starts 30 s
+  later. A bootstrap error replaces the client, once the old one's relay
+  sockets are closed. A timeout keeps it, and the next attempt waits on the
+  same bootstrap. `brambled` waits up to 7 minutes for `ready` at startup.
 - `torFetch('ens')` and `torFetch('pay')` return a `fetch` that sends requests
   through Tor, each purpose on its own circuit. A circuit failure is retried
   once under a fresh isolation key.
