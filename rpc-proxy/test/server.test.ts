@@ -12,7 +12,7 @@ interface Upstream {
   server: Server
   url: string
   received: { path: string; headers: Record<string, unknown>; body: string }[]
-  override?: { status: number; contentType: string; body: (url: string) => string }
+  override?: { status: number; contentType: string; body: (url: string) => string; headers?: Record<string, string> }
 }
 
 function startUpstream(): Promise<Upstream> {
@@ -27,7 +27,7 @@ function startUpstream(): Promise<Upstream> {
         received.push({ path: req.url ?? '', headers: req.headers, body })
         const override = holder.upstream?.override
         if (override) {
-          res.writeHead(override.status, { 'content-type': override.contentType })
+          res.writeHead(override.status, { 'content-type': override.contentType, ...override.headers })
           res.end(override.body(holder.upstream!.url))
           return
         }
@@ -179,32 +179,123 @@ describe('rpc-proxy', () => {
     expect(JSON.stringify(proxy.log.view())).not.toContain(upstream.url)
   })
 
-  it('redacts the upstream URL from JSON error bodies, including JSON-RPC errors returned with HTTP 200', async () => {
+  const callBody = { jsonrpc: '2.0', id: 1, method: 'eth_chainId' }
+
+  async function relayed(body: (url: string) => string, status = 200, contentType = 'application/json') {
+    upstream.override = { status, contentType, body }
+    const res = await post(base, callBody)
+    return { status: res.status, text: await res.text() }
+  }
+
+  function expectNoLeak(text: string) {
+    expect(text).not.toContain('SECRET')
+    expect(text).not.toContain('127.0.0.1')
+  }
+
+  it('replaces upstream error messages, keeps the code and status, and drops unknown fields', async () => {
     await boot()
     for (const status of [200, 500]) {
-      upstream.override = {
-        status,
-        contentType: 'application/json',
-        body: (url) =>
-          JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code: -32000, message: `failed calling ${url}` } }),
-      }
-      const res = await post(base, { jsonrpc: '2.0', id: 1, method: 'eth_chainId' })
-      const text = await res.text()
-      expect(res.status).toBe(status)
-      expect(text).not.toContain('SECRET')
-      expect(text).not.toContain('127.0.0.1')
-      expect(JSON.parse(text).error.code).toBe(-32000)
+      const { status: got, text } = await relayed(
+        (url) =>
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            error: { code: -32000, message: `failed calling ${url}`, data: '0xdeadbeef' },
+            debug: url,
+          }),
+        status
+      )
+      expect(got).toBe(status)
+      expectNoLeak(text)
+      expect(JSON.parse(text)).toEqual({
+        jsonrpc: '2.0',
+        id: 1,
+        error: { code: -32000, message: 'upstream error', data: '0xdeadbeef' },
+      })
     }
+  })
+
+  it('withholds results containing the upstream URL or path in any JSON or URL encoding', async () => {
+    await boot()
+    const forms: ((url: string) => string)[] = [
+      (url) => JSON.stringify({ jsonrpc: '2.0', id: 1, result: url }),
+      (url) => `{"jsonrpc":"2.0","id":1,"result":"${url.replace(/\//g, '\\/')}"}`,
+      (url) => `{"jsonrpc":"2.0","id":1,"result":"${url.replace(/S/g, '\\u0053')}"}`,
+      (url) => JSON.stringify({ jsonrpc: '2.0', id: 1, result: encodeURIComponent(url) }),
+      (url) => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { [new URL(url).pathname]: 1 } }),
+    ]
+    for (const form of forms) {
+      const { status, text } = await relayed(form)
+      expect(status).toBe(502)
+      expectNoLeak(text)
+    }
+  })
+
+  it('withholds results carrying a credential path component on its own or split across fields', async () => {
+    await boot()
+    const { status, text } = await relayed(() =>
+      JSON.stringify({ jsonrpc: '2.0', id: 1, result: { path: '/v3/', apiKey: 'SECRET-API-KEY-123' } })
+    )
+    expect(status).toBe(502)
+    expectNoLeak(text)
+  })
+
+  it('does not follow upstream redirects, which can carry a credential in the target URL', async () => {
+    await boot()
+    upstream.override = {
+      status: 307,
+      contentType: 'application/json',
+      body: () => '{}',
+      headers: { location: `${upstream.url.replace(SECRET_PATH, '')}/redirect/SECRET-API-KEY-123` },
+    }
+    const res = await post(base, callBody)
+    expect(res.status).toBe(502)
+    expectNoLeak(await res.text())
+  })
+
+  it('rejects bodies that are not valid JSON-RPC even when labelled JSON', async () => {
+    await boot()
+    for (const body of [
+      'not JSON',
+      '[]',
+      '{"hello":"world"}',
+      `{"jsonrpc":"2.0","id":{"a":"${SECRET_PATH}"},"result":1}`,
+    ]) {
+      const { status, text } = await relayed(() => body, 500)
+      expect(status).toBe(502)
+      expectNoLeak(text)
+    }
+  })
+
+  it('does not corrupt results when the upstream URL has ordinary query parameters', async () => {
+    await boot({ upstreamUrl: `${upstream.url}?apiKey=QUERY-94&network=1` })
+    upstream.override = {
+      status: 200,
+      contentType: 'application/json; charset=utf-8',
+      body: () => '{"jsonrpc":"2.0","id":1,"result":"0x1"}',
+    }
+    const res = await post(base, callBody)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ jsonrpc: '2.0', id: 1, result: '0x1' })
+  })
+
+  it('relays batch responses', async () => {
+    await boot()
+    const { status, text } = await relayed(() =>
+      JSON.stringify([
+        { jsonrpc: '2.0', id: 1, result: '0x1' },
+        { jsonrpc: '2.0', id: 2, error: { code: -32601, message: 'nope' } },
+      ])
+    )
+    expect(status).toBe(200)
+    expect(JSON.parse(text)[1].error.message).toBe('upstream error')
   })
 
   it('does not relay non-JSON upstream bodies, which can echo the request URL', async () => {
     await boot()
-    upstream.override = { status: 500, contentType: 'text/html', body: (url) => `<html>error at ${url}</html>` }
-    const res = await post(base, { jsonrpc: '2.0', id: 1, method: 'eth_chainId' })
-    expect(res.status).toBe(502)
-    const text = await res.text()
-    expect(text).not.toContain('SECRET')
-    expect(text).not.toContain('127.0.0.1')
+    const { status, text } = await relayed((url) => `<html>error at ${url}</html>`, 500, 'text/html')
+    expect(status).toBe(502)
+    expectNoLeak(text)
   })
 
   it('answers 400 to a malformed request target and keeps serving', async () => {

@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { Config } from './config.ts'
 import { MemoryLog, truncate } from './log.ts'
 import { RateLimiter } from './rate-limit.ts'
-import { redact, secretsFromUrl } from './redact.ts'
+import { isJsonMediaType, sanitizeUpstreamBody, secretsFromUrl } from './sanitize.ts'
 
 const ALLOWED_METHOD_PREFIXES = ['eth_', 'net_', 'web3_']
 
@@ -136,16 +136,19 @@ export function createProxyServer(config: Config): ProxyServer {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: raw,
+        redirect: 'error',
         signal: AbortSignal.timeout(config.upstreamTimeoutMs),
       })
-      const contentType = upstream.headers.get('content-type') ?? ''
       const text = await upstream.text()
-      // Only JSON is relayed (with the upstream URL redacted): provider error pages can echo the request URL.
-      if (!contentType.toLowerCase().includes('json')) {
-        sendJson(res, 502, rpcError(null, -32603, 'upstream returned a non-JSON response'))
+      // The response is rebuilt from allowed JSON-RPC fields: provider errors can echo the request URL in many forms.
+      const safe = isJsonMediaType(upstream.headers.get('content-type') ?? '')
+        ? sanitizeUpstreamBody(text, secrets)
+        : undefined
+      if (safe === undefined) {
+        sendJson(res, 502, rpcError(null, -32603, 'upstream returned an invalid or unsafe response'))
         return
       }
-      const body = Buffer.from(redact(text, secrets), 'utf-8')
+      const body = Buffer.from(safe, 'utf-8')
       res.writeHead(upstream.status, { 'content-type': 'application/json', 'content-length': body.length })
       res.end(body)
     } catch {

@@ -4,7 +4,7 @@ Reference for the logging JSON-RPC proxy (handoff section 5.3, W11; demo beat 6)
 
 ## Properties
 
-- **Holds no secrets.** The upstream URL comes from `UPSTREAM_RPC_URL` at start. The proxy never logs it or puts it in an error message. It relays only JSON upstream bodies and replaces the URL, its path, query values and credentials in them with `[redacted]` (best effort: it matches those exact strings). A non-JSON upstream body becomes HTTP 502. The proxy forwards no client headers.
+- **Holds no secrets.** The upstream URL comes from `UPSTREAM_RPC_URL` at start. The proxy never logs it or puts it in an error message. It does not relay the upstream body as received. It parses it and rebuilds each response from `jsonrpc`, `id` and `result`, or from `error.code`, a fixed `error.message` of `upstream error`, and `error.data` only if it is a hex string. Any other upstream field is dropped. The proxy answers HTTP 502 when the body is not JSON-typed, is not valid JSON-RPC, or is a `result` or `id` string that contains the upstream URL, its path, or a path segment, query value or credential of 8 or more characters (after JSON and percent decoding). It does not follow redirects. This is a check on those exact strings, not proof that a provider cannot leak a credential in another form. A short credential (under 8 characters) in a `result` is not detected. The proxy forwards no client headers.
 - **Logs to memory only.** The log is a fixed-size ring. It is lost on restart. The source imports no filesystem module (a test checks this).
 - **Forwards `eth_*`, `net_*` and `web3_*` methods only.** The proxy logs any other method and rejects it with HTTP 403.
 
