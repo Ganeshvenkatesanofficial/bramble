@@ -28,7 +28,8 @@ explicit action authorizes a grant.
 | POST   | `/api/grants/:agentLabel/revoke` | Clear that agent's ACL through the signer |
 
 The request body is `{ agentLabel, gatewayLabel, service, note?, requestedDuration? }`.
-Duration is integer seconds after grant confirmation. See ADRs 0011, 0012 and 0016 for the
+Duration is integer seconds, counted from grant confirmation, or from the first answer
+when the confirmation was still unresolved (see the runbook). See ADRs 0011, 0012 and 0016 for the
 contract, limits, error handling and timer limitations. Errors have the shape
 `{ error: { code, message } }`. A failed or duplicate action never reports success.
 
@@ -53,13 +54,21 @@ the write and one that shows a revert fails it. ACL text records are never used 
 proof, because a lagging node can serve an older block. If the receipt stays
 unknown, the API answers `202` with `status: approving` (or `revoking`) and
 `unresolvedWrite.transactionHash`; the service keeps checking that hash every five
-seconds, never resubmits, and refuses a second approve or a revoke for that agent
-with `409 write_unresolved` until it settles. A grant that later confirms gets its
-revoke timer then (the duration counts from the first answer, not the
-confirmation); one found reverted returns to `pending`. While a submission is
-unresolved, open the hash on Sepolia to check it. A restart of this process drops
-the in-memory queue and timers (ADR 0016), so after a restart read the agent's
-`acl` record on Sepolia and revoke by hand if it is unexpectedly set.
+seconds, never resubmits, and refuses a different approve for that agent, and any
+revoke, with `409 write_unresolved` until it settles. Approving the same request
+again returns `409 request_not_pending`; no second write happens. A grant that later
+confirms gets its revoke timer then (the duration counts from the first answer, not
+the confirmation); one found reverted returns to `pending`. While a submission is
+unresolved, open the hash on Sepolia to check it.
+
+A restart of this process drops the in-memory queue and timers (ADR 0016). An
+empty `acl` record after a restart does not prove there is no grant, because a
+pending transaction can still mine and its expiry timer is gone. Before a restart,
+write down the transaction hash of every `approving` or `revoking` request. After
+it, open each hash on Sepolia and wait for a definitive outcome (success, revert,
+or replaced/cancelled by another transaction with the same nonce). Recovery is
+complete only when every recorded hash is settled and any grant that succeeded has
+been revoked by hand.
 
 Where it runs: only on the human-controlled admin machine. The granter's X25519
 key is decrypted per grant from a `wallet-cli` Key Ring file on that machine and
