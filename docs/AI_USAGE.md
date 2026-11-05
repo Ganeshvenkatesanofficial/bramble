@@ -21,4 +21,4 @@ Per-track attribution and involvement narrative for the submission dashboard is 
 
 ## Mumbai build: agent-written paths
 
-- `sidecar/src/tor/`, `sidecar/src/routes/tor.ts`, `sidecar/scripts/tor-smoke.ts`, `sidecar/test/tor*.test.ts`, the Tor wiring in `sidecar/src/index.ts`, `brambled/sidecar/manager.go` (`waitTorReady`) and its tests, `docs/adr/0013-tor-transport.md`: written by the Keystone agent (Claude Opus 5.5, ETH-59), committing as the account in the commit author field.
+- `sidecar/src/tor/`, `sidecar/src/routes/tor.ts`, `sidecar/scripts/tor-smoke.ts`, `sidecar/test/tor*.test.ts`, the Tor wiring in `sidecar/src/index.ts`, `brambled/sidecar/manager.go` (`waitTorReady`) and its tests, `docs/adr/0013-tor-transport.md`, the Tor section of `sidecar/README.md`, the tor-js dependency in `sidecar/package.json` and `pnpm-lock.yaml`, `sidecar/tsconfig.json`: written by the Keystone agent (Claude Opus 5.5, ETH-59), committing as the account in the commit author field.
