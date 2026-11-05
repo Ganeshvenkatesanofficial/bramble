@@ -1,21 +1,29 @@
 import { timingSafeEqual } from 'node:crypto'
 import { ApiError, type GrantSigner, type IdentityResolver, type Clock } from './contracts'
-import { ApprovalService } from './service'
-import { readInput, label } from './validation'
+import { ApprovalService, systemClock } from './service'
+import { AuditRecorder, type AuditTrail } from './audit'
+import { readInput, readPayment, label } from './validation'
 
 interface ApiOptions {
   signer?: GrantSigner
   resolver?: IdentityResolver
   clock?: Clock
+  /** Posts salted commitments to HCS. Without it, audit feed rows report `audit_not_configured`. */
+  auditTrail?: AuditTrail
+  /** Parent ENS name of agent labels, for example `acme.eth`. */
+  ensParent?: string
   token: () => string | undefined
 }
 
 export function createApprovalApi(options: ApiOptions) {
-  const service = new ApprovalService(options.signer, options.resolver, options.clock)
+  const clock = options.clock ?? systemClock
+  const audit = new AuditRecorder(options.auditTrail, clock)
+  const service = new ApprovalService(options.signer, options.resolver, clock, audit, options.ensParent)
   const json = (value: unknown, status = 200) =>
     Response.json(value, { status, headers: { 'cache-control': 'no-store' } })
 
   return {
+    audit,
     async handle(request: Request): Promise<Response> {
       try {
         if (request.method === 'POST') {
@@ -32,6 +40,10 @@ export function createApprovalApi(options: ApiOptions) {
           return json(service.create(await readInput(request)), 201)
         }
         if (path === '/api/requests' && request.method === 'GET') return json({ requests: service.list() })
+        if (path === '/api/audit' && request.method === 'GET') return json({ entries: service.auditFeed() })
+        if (path === '/api/payments' && request.method === 'POST') {
+          return json(service.recordPayment(await readPayment(request)), 202)
+        }
         const decision = /^\/api\/requests\/([^/]+)\/(approve|deny)$/.exec(path)
         if (decision && request.method === 'POST') {
           return json(decision[2] === 'approve' ? await service.approve(decision[1]) : service.deny(decision[1]))

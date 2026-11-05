@@ -1,4 +1,4 @@
-import { ApiError, type RequestInput } from './contracts'
+import { ApiError, type PaymentInput, type RequestInput } from './contracts'
 
 export function label(value: unknown, name: string): string {
   if (typeof value !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value)) {
@@ -7,7 +7,7 @@ export function label(value: unknown, name: string): string {
   return value
 }
 
-export async function readInput(request: Request): Promise<RequestInput> {
+async function readObject(request: Request): Promise<Record<string, unknown>> {
   if (request.headers.get('content-type')?.split(';')[0].trim() !== 'application/json') {
     throw new ApiError(415, 'unsupported_media_type', 'Use application/json.')
   }
@@ -35,7 +35,11 @@ export async function readInput(request: Request): Promise<RequestInput> {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new ApiError(400, 'invalid_request', 'Request body must be an object.')
   }
-  const value = body as Record<string, unknown>
+  return body as Record<string, unknown>
+}
+
+export async function readInput(request: Request): Promise<RequestInput> {
+  const value = await readObject(request)
   if (
     Object.keys(value).some(
       (key) => !['agentLabel', 'gatewayLabel', 'service', 'note', 'requestedDuration'].includes(key)
@@ -66,5 +70,28 @@ export async function readInput(request: Request): Promise<RequestInput> {
     service: value.service,
     ...(value.note === undefined ? {} : { note: value.note as string }),
     ...(value.requestedDuration === undefined ? {} : { requestedDuration: value.requestedDuration as number }),
+  }
+}
+
+const HEDERA_ID = /^\d{1,10}\.\d{1,10}\.\d{1,10}$/
+const HEDERA_TX_ID = /^\d{1,10}\.\d{1,10}\.\d{1,10}@\d{1,12}\.\d{9}$/
+
+export async function readPayment(request: Request): Promise<PaymentInput> {
+  const value = await readObject(request)
+  const fields = ['payer', 'payee', 'asset', 'amountAtomic', 'txRef']
+  if (Object.keys(value).some((key) => !fields.includes(key))) {
+    throw new ApiError(400, 'invalid_request', 'Request body contains unknown fields.')
+  }
+  const text = (name: string, pattern: RegExp, hint: string) => {
+    const field = value[name]
+    if (typeof field !== 'string' || !pattern.test(field)) throw new ApiError(400, 'invalid_request', `${name} must be ${hint}.`)
+    return field
+  }
+  return {
+    payer: text('payer', HEDERA_ID, 'a Hedera account ID such as 0.0.1234'),
+    payee: text('payee', HEDERA_ID, 'a Hedera account ID such as 0.0.1234'),
+    asset: text('asset', HEDERA_ID, 'a Hedera token ID such as 0.0.1234'),
+    amountAtomic: text('amountAtomic', /^(?:0|[1-9]\d{0,38})$/, 'a decimal string of atomic units'),
+    txRef: text('txRef', HEDERA_TX_ID, 'a Hedera transaction ID such as 0.0.1234@1700000000.123456789'),
   }
 }

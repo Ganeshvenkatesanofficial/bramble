@@ -25,11 +25,29 @@ export interface TransactionReceipt {
   transactionHash: string
 }
 
+export interface GrantReceipt extends TransactionReceipt {
+  /** 0x-prefixed ADR 0005 ACL digest the grant wrote. The audit trail posts it; the API view omits it. */
+  serviceDigest?: string
+}
+
 /** Implementations return only after confirmation and reconcile ambiguous write failures. */
 export interface GrantSigner {
-  grant(input: Pick<RequestInput, 'agentLabel' | 'gatewayLabel' | 'service'>): Promise<TransactionReceipt>
+  grant(input: Pick<RequestInput, 'agentLabel' | 'gatewayLabel' | 'service'>): Promise<GrantReceipt>
   /** Clear this agent's ACL grants. Device enrollment remains unchanged. */
   revoke(agentLabel: string): Promise<TransactionReceipt>
+}
+
+/** A settled Hedera payment, as reported by the component that settled it. */
+export interface PaymentInput {
+  /** Hedera account ID, for example `0.0.1234`. */
+  payer: string
+  payee: string
+  /** Hedera token ID. */
+  asset: string
+  /** Decimal string of atomic units. */
+  amountAtomic: string
+  /** Hedera transaction ID, for example `0.0.1234@1700000000.123456789`. */
+  txRef: string
 }
 
 export interface Clock {
@@ -48,6 +66,9 @@ export interface AccessRequest extends RequestInput {
   revokedAt?: string
   revokeReason?: 'manual' | 'duration' | 'external'
   expiryStatus: 'none' | 'scheduled' | 'revoking' | 'failed' | 'revoked'
+  /** Feed row ids of the commitments posted for this request's grant and revoke. */
+  grantAuditId?: string
+  revokeAuditId?: string
 }
 
 export class ApiError extends Error {

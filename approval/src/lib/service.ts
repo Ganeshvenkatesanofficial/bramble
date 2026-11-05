@@ -6,7 +6,9 @@ import {
   type RequestInput,
   type GrantSigner,
   type IdentityResolver,
+  type PaymentInput,
 } from './contracts'
+import type { AuditRecorder } from './audit'
 
 export const systemClock: Clock = {
   now: () => Date.now(),
@@ -27,8 +29,14 @@ export class ApprovalService {
   constructor(
     private readonly signer?: GrantSigner,
     private readonly resolver?: IdentityResolver,
-    private readonly clock: Clock = systemClock
+    private readonly clock: Clock = systemClock,
+    private readonly audit?: AuditRecorder,
+    /** Parent ENS name of agent labels, for example `acme.eth`. Without it the label is the subject. */
+    private readonly ensParent?: string
   ) {}
+
+  /** ADR 0005 digests from the signer. Kept off the record so the HTTP view never carries them. */
+  private readonly digests = new Map<string, string>()
 
   private record(id: string) {
     const record = this.requests.get(id)
@@ -92,12 +100,15 @@ export class ApprovalService {
         )
       }
       record.status = 'approving'
+      let serviceDigest: string | undefined
       try {
-        record.grantTransaction = await signer.grant({
+        const { serviceDigest: digest, ...transaction } = await signer.grant({
           agentLabel: record.agentLabel,
           gatewayLabel: record.gatewayLabel,
           service: record.service,
         })
+        record.grantTransaction = transaction
+        serviceDigest = digest
       } catch {
         record.status = 'pending'
         throw new ApiError(502, 'grant_failed', 'The signer did not confirm the grant.')
@@ -109,8 +120,39 @@ export class ApprovalService {
         record.expiryStatus = 'scheduled'
         this.scheduleExpiry(record, record.requestedDuration * 1000)
       }
+      if (serviceDigest) this.digests.set(record.id, serviceDigest)
+      const grantTransaction = record.grantTransaction
+      record.grantAuditId = this.audit?.submit(
+        `grant:${record.id}`,
+        'grant',
+        () =>
+          serviceDigest && grantTransaction
+            ? {
+                kind: 'grant',
+                subject: this.subject(record.agentLabel),
+                serviceDigest,
+                expiresAt: record.expiresAt ? String(Math.floor(Date.parse(record.expiresAt) / 1000)) : '0',
+                txRef: grantTransaction.transactionHash,
+              }
+            : null,
+        record.id
+      ).id
       return this.view(record)
     })
+  }
+
+  private subject(agentLabel: string) {
+    return this.ensParent ? `${agentLabel}.${this.ensParent}` : agentLabel
+  }
+
+  /** Posts one commitment for a settled payment. Reporting the same `txRef` again posts nothing. */
+  recordPayment(payment: PaymentInput) {
+    if (!this.audit) throw new ApiError(503, 'audit_not_configured', 'The audit trail is not configured.')
+    return this.audit.submit(`payment:${payment.txRef}`, 'payment', () => ({ kind: 'payment', ...payment }))
+  }
+
+  auditFeed() {
+    return this.audit?.list() ?? []
   }
 
   private scheduleExpiry(record: AccessRequest, delayMs: number) {
@@ -177,8 +219,19 @@ export class ApprovalService {
         if (record) record.status = 'approved'
         throw new ApiError(502, 'revoke_failed', 'The signer did not confirm the revoke.')
       }
+      const digest = record ? this.digests.get(record.id) : undefined
+      const entry = this.audit?.submit(
+        `revoke:${record?.id ?? transaction.transactionHash}`,
+        'revoke',
+        () =>
+          digest
+            ? { kind: 'revoke', subject: this.subject(agentLabel), serviceDigest: digest, txRef: transaction.transactionHash }
+            : null,
+        record?.id
+      )
       if (!record) return { agentLabel, status: 'revoked', revokeTransaction: transaction }
       record.revokeTransaction = transaction
+      if (entry) record.revokeAuditId = entry.id
       this.markRevoked(record, reason)
       return this.view(record)
     })
