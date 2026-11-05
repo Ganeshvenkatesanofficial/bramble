@@ -234,7 +234,7 @@ describe('rpc-proxy', () => {
   it('withholds results carrying a credential path component on its own or split across fields', async () => {
     await boot()
     const { status, text } = await relayed(() =>
-      JSON.stringify({ jsonrpc: '2.0', id: 1, result: { path: '/v3/', apiKey: 'SECRET-API-KEY-123' } })
+      JSON.stringify({ jsonrpc: '2.0', id: 1, result: { path: '/v3/', tail: SECRET_PATH.slice('/v3/'.length) } })
     )
     expect(status).toBe(502)
     expectNoLeak(text)
