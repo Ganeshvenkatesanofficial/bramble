@@ -1,0 +1,13 @@
+# Drop-in that moves a node unit into the NAT-box namespace.
+# Install as /etc/systemd/system/bramble-gateway.service.d/nat-box.conf
+# (and bramble-demo-service.service.d/, or bramble-worker.service.d/), then
+# `systemctl daemon-reload` and restart the unit.
+[Unit]
+Requires=bramble-nat-box.service
+After=bramble-nat-box.service
+
+[Service]
+NetworkNamespacePath=/run/netns/bramble-node
+# The host's resolv.conf points at a stub resolver on the host's loopback, which the
+# namespace cannot reach. nat-box.sh writes a namespace-specific file.
+BindReadOnlyPaths=/etc/netns/bramble-node/resolv.conf:/etc/resolv.conf

@@ -1,0 +1,28 @@
+[Unit]
+Description=Bramble node, worker role (agent forward to the gateway service)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=bramble
+EnvironmentFile=/etc/bramble/worker.env
+WorkingDirectory=/opt/bramble/brambled
+ExecStart=/opt/bramble/brambled/bin/brambled serve \
+  -label ${BRAMBLE_NODE_LABEL} \
+  -forward ${BRAMBLE_FORWARD_PORT}=${BRAMBLE_GATEWAY_LABEL}:${BRAMBLE_SERVICE_NAME} \
+  -listen-port ${BRAMBLE_LISTEN_PORT} \
+  -ttl ${BRAMBLE_TTL} \
+  $BRAMBLE_EXTRA_ARGS
+Restart=on-failure
+RestartSec=3
+# Open: not yet run under these restrictions; see deploy/README.md.
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
+DeviceAllow=/dev/net/tun rw
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
