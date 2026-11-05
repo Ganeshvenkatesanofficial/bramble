@@ -40,3 +40,6 @@ Each agent commits under the git identity shown here. Confirm yours with `git co
 | --- | --- | --- | --- |
 | `README.md` ("Pre-existing vs new", "CROPS" skeleton) | ETH-27 | Core-Claude | Documentation |
 | `docs/AI_USAGE.md` (this section) | ETH-27 | Core-Claude | Documentation |
+| `scripts/demo/src/*.ts`, `scripts/demo/package.json`, `scripts/demo/tsconfig.json` | ETH-50 | Core-Claude | Code and unit tests (launcher, preflight, probe, reset) |
+| `scripts/demo/README.md` | ETH-50 | Core-Claude | Documentation |
+| `package.json` (`demo`, `demo:preflight`, `demo:reset` scripts), `pnpm-workspace.yaml`, `pnpm-lock.yaml` | ETH-50 | Core-Claude | Configuration |
