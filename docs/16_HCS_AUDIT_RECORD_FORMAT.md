@@ -75,6 +75,22 @@ To verify, a reader recomputes `c` from the opening and compares it with the pos
 - The commitments themselves cannot be matched to each other or to the on-chain ACL digests of ADR 0005 without the salts. Metadata still allows correlation: kind, topic, payer account, timing and cadence are public, so a `revoke` entry that lands just after a known Sepolia revoke transaction is easy to associate with it.
 - Event fields are encoded as UTF-8 after rejecting ill-formed UTF-16 (lone surrogates), and the opening stores a frozen snapshot of the validated fields, so one commitment has one event.
 
+## Approval service mapping
+
+`approval/` posts these events (ticket ETH-48). Each row names the event field and its source.
+
+| Event field                  | Source in the approval service                                                                              |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `grant.subject`, `revoke.subject` | The agent label, or `<label>.<APPROVAL_ENS_PARENT>` when that variable is set                          |
+| `serviceDigest`              | `serviceDigest` on the signer's grant receipt (ADR 0005). The request's plaintext `service` is never posted |
+| `grant.expiresAt`            | Unix seconds of the request's `expiresAt`; `0` when the request has no duration                              |
+| `grant.txRef`, `revoke.txRef` | `transactionHash` of the signer's confirmed receipt                                                        |
+| `payment.*`                  | The body of `POST /api/payments`                                                                             |
+
+One event key gets one commitment: `grant` and `revoke` per request, `payment` per `txRef`. The service posts
+nothing when the signer fails, and it posts nothing for a grant retired by an external revoke, because no
+transaction of its own exists. A post failure leaves the access decision unchanged and appears in `GET /api/audit`.
+
 ## What the audit trail does not do
 
 - **It does not enforce anything.** Peers never read the topic to admit or refuse traffic (handoff invariant 1). The topic is a record, not an access check.

@@ -55,3 +55,27 @@ and push-blocking notes in the ETH-75 evidence above for ETH-29.
 
 - **`hedera-audit/`** — W10 option A, the HCS audit trail module, its tests and its README. Written by the Hedera-Claude agent (Claude), ticket ETH-46.
 - **`docs/16_HCS_AUDIT_RECORD_FORMAT.md`** and **`docs/adr/0011-w10-hedera-service-options.md`** — the record-format reference and the draft ADR with three options, for a human to decide. Written by the Hedera-Claude agent (Claude), ticket ETH-46.
+
+## Mumbai agent-written paths
+
+Baseline: commit `28e2a8f`, tag `pre-mumbai`. Agents wrote the paths below after that commit. Each agent adds a row in the same pull request as the work. List paths, not prose. Humans approve every ADR and merge to `main`.
+
+### Accounts
+
+Each agent commits under the git identity shown here. Confirm yours with `git config user.name` before your first commit.
+
+| Agent | Lane | Commit author name | Status |
+| --- | --- | --- | --- |
+| Core-Claude | Core and console | `Core-Claude (agent, Jay Kerkar)` | Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026 |
+| Core-Sol | Core and console (cross-family reviewer) | to be added by Core-Sol | Open |
+| Other lane agents | Network, Tor, Hedera, Demo and infra | to be added by each agent | Open |
+
+### Paths
+
+| Path | Ticket | Agent | Kind |
+| --- | --- | --- | --- |
+| `README.md` ("Pre-existing vs new", "CROPS" skeleton) | ETH-27 | Core-Claude | Documentation |
+| `docs/AI_USAGE.md` (this section) | ETH-27 | Core-Claude | Documentation |
+| `approval/src/lib/audit.ts`, `approval/src/lib/audit-runtime.ts`, `approval/src/lib/service.ts`, `approval/src/lib/api.ts`, `approval/src/lib/contracts.ts`, `approval/src/lib/validation.ts`, `approval/src/app/api/[...path]/route.ts`, `approval/next.config.ts`, `approval/tsconfig.json`, `approval/package.json` (HCS commitments) | ETH-48 | Hedera-Claude | Code |
+| `approval/test/audit.test.ts` | ETH-48 | Hedera-Claude | Test |
+| `approval/README.md` (audit feed, payment report, env), `docs/16_HCS_AUDIT_RECORD_FORMAT.md` (approval integration), `README.md` (W10 row) | ETH-48 | Hedera-Claude | Documentation |
