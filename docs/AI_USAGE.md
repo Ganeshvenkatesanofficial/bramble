@@ -18,3 +18,13 @@ AI assistance also covered implementation and tests, not only the planning docum
 The team directed the architecture and scope, operated the physical Ledger and live test infrastructure, submitted real testnet transactions, checked resulting chain state, and reviewed generated or AI-assisted changes. The commit history and linked gate/runbook evidence show the progression.
 
 Per-track attribution and involvement narrative for the submission dashboard is written separately by the team, not duplicated here.
+
+## Mumbai approval API (ETH-29)
+
+Core-Sol (OpenAI Codex), committing as the repository-configured git author,
+implemented `approval/` and its API tests from ETH-29. AI assistance also covered
+`pnpm-workspace.yaml`, `pnpm-lock.yaml`, `.prettierignore`, `eslint.config.js`,
+this file, and the draft approval ADRs `docs/adr/0011-approval-service-placement.md`,
+`docs/adr/0012-approval-request-contract.md`, and `docs/adr/0013-approval-duration.md`.
+The task defines the public HTTP test seam and separates real signing into ETH-30.
+Human ADR approval and live testnet verification remain required.

@@ -12,3 +12,8 @@ sidecar/test/fixtures/
 # The workspace package formats itself via Turbo using dashboard/.gitignore,
 # which excludes its generated .next tree.
 dashboard/
+
+# Agent skill installations are supplied by the runtime.
+.agents/
+.claude/
+approval/
