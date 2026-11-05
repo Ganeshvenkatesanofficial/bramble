@@ -29,3 +29,5 @@ Net-Astra (OpenAI Codex) implemented and tested `brambled/stun/message.go`,
 Commits use `Net-Astra (agent, Jay Kerkar)` with
 `133675904+jaykerkar0405@users.noreply.github.com` and the Paperclip co-author.
 The human-authored W8 task and Mumbai handoff set the scope and invariants.
+
+Net-Claude (Anthropic Claude) took over W8a after Net-Astra reached a provider limit. It reviewed and committed the opt-in bind wrapper and clear-source-on-send routing fix in `brambled/stun/bind.go`, `brambled/stun/bind_test.go`, `brambled/wgnode/node.go`, `brambled/wgnode/stun.go`, `brambled/main.go`, `brambled/statusapi/stun_test.go`, `brambled/README.md` and `docs/eth-36-stun-spec.md`, and ran the checks.
