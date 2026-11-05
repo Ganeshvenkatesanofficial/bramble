@@ -41,14 +41,14 @@ Inbound packets reach the node only through a mapping the node created first, so
 
 ## Check the NAT type
 
-`deploy/scripts/stun-probe.py` binds one UDP socket and sends a STUN Binding request to each server from that socket. Differing mapped ports then mean the NAT maps per destination (symmetric-like). Two separate clients are not enough: each would use a different source port, and even a cone NAT then shows different mapped ports.
+`deploy/scripts/stun-probe.py` binds one UDP socket and sends a STUN Binding request to each server from that socket. A different mapped address and port (IP:port) per server then means the NAT maps per destination (symmetric-like). Two separate clients are not enough: each would use a different source port, and even a cone NAT then shows different mapped endpoints.
 
 ```sh
 sudo ip netns exec bramble-node python3 deploy/scripts/stun-probe.py \
   <relays-machine-public-name>:3478 <second-stun-server>:3478
 ```
 
-Exit code 0 means the mapped port was the same for every server, 1 means it differed, 2 means a server did not answer. On the cloud NAT box the second destination comes from item 14 in `../README.md` (a second STUN server, or a second public address of the relays machine); both destinations must be reached through the same NAT boundary. Open.
+Exit code 0 means the mapped IP:port endpoint was the same for every server, 1 means at least one endpoint differed (in IP or port), 2 means a server did not answer. On the cloud NAT box the second destination comes from item 14 in `../README.md` (a second STUN server, or a second public address of the relays machine); both destinations must be reached through the same NAT boundary. Open.
 
 Evidence: `python3 deploy/scripts/stun-probe.py --selftest` ran on the development machine on 6 Nov 2026 against local fake servers and classified a same-mapping case, a different-port case and a different-address, same-port case correctly. That checks the request encoding, the response parsing and the comparison. It does not test a real NAT or `coturn`, so the probe against real servers is Open.
 

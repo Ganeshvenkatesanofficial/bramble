@@ -2,9 +2,10 @@
 """Classify the NAT mapping seen by one UDP socket (RFC 5389 Binding requests).
 
 Sends a Binding request to each given STUN server from ONE bound socket and
-compares the mapped addresses. Same mapped port for every server means
-endpoint-independent mapping (hole punching can work). Different ports mean
-endpoint-dependent mapping (symmetric; expect the relay fallback).
+compares the mapped endpoints (IP and port). The same endpoint for every server
+means endpoint-independent mapping (hole punching can work). A different IP or
+port for any server means endpoint-dependent mapping (symmetric; expect the
+relay fallback).
 
 Usage: stun-probe.py [--bind-port N] host:port host:port [...]
        stun-probe.py --selftest
