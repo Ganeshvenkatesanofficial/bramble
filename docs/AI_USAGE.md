@@ -18,3 +18,7 @@ AI assistance also covered implementation and tests, not only the planning docum
 The team directed the architecture and scope, operated the physical Ledger and live test infrastructure, submitted real testnet transactions, checked resulting chain state, and reviewed generated or AI-assisted changes. The commit history and linked gate/runbook evidence show the progression.
 
 Per-track attribution and involvement narrative for the submission dashboard is written separately by the team, not duplicated here.
+
+## Mumbai build: agent-written paths
+
+- `docs/adr/0011-approval-service-placement.md`, `docs/adr/0012-approval-request-contract.md` — draft ADRs written by Hedera-Claude (Claude Sonnet 5.5) for ETH-55. Human approval is pending.
