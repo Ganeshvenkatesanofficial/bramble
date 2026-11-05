@@ -1,6 +1,6 @@
 # Why the demo topology looks this way
 
-This page explains the choices behind `README.md`. The handoff (section 5.3) fixes three cloud machines plus an admin machine. The choices below fill the gaps.
+This page explains the choices behind `README.md`. The handoff (section 5.3) fixes three cloud machines plus an admin machine. The choices below fill the gaps. They are recorded, with the alternatives, in `docs/adr/0015-cloud-demo-topology.md` (draft, awaiting human approval).
 
 ## Decisions
 
@@ -15,6 +15,7 @@ This page explains the choices behind `README.md`. The handoff (section 5.3) fix
 | 7   | Relay units are a systemd template, `bramble-relay@<instance>`.                                                 | The handoff says "relays". One env file per instance supports one relay or two (a second relay lets a node show failover between relays). |
 | 8   | Node units run as an unprivileged user with `CAP_NET_ADMIN`.                                                    | Least privilege. A root drop-in is the fallback because the capability setup has not run.                                                 |
 | 9   | The agent runs on the worker machine as its own Unix user.                                                      | The forward listens on the worker's loopback. The agent user cannot read the node's keys.                                                 |
+| 10  | In NAT-box mode `demo-service` joins the gateway's namespace, and the agent starts through `agent-in-box.sh`.   | Loopback is per namespace: the gateway dials demo-service on its own loopback, and the agent dials the forward on the worker's.           |
 
 ## What each NAT mode models
 

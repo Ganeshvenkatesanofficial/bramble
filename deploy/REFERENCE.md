@@ -42,6 +42,8 @@ Source of each port: `brambled/main.go` flags (`-listen-port` 51820, `-gateway-p
 | `scripts/gen-node-key.sh`                | Create the node key in the env file; print the public key only |
 | `scripts/smoke.sh`                       | Local liveness checks per role                                 |
 | `scripts/nat-box.sh`                     | NAT in a network namespace on a cloud machine                  |
+| `scripts/agent-in-box.sh`                | Run the agent as `agent` inside the NAT-box namespace          |
+| `scripts/stun-probe.py`                  | Classify NAT mapping from one UDP socket (needs `python3`)     |
 | `nat-lab/netns-lab.sh`                   | Full two-NAT lab on one machine                                |
 | `nat-lab/README.md`                      | Two-NAT test runbook                                           |
 
@@ -58,7 +60,7 @@ The logging proxy's own files (`deploy/rpc-proxy/`) arrive with ETH-44 (PR #2).
 
 ## Environment variable names
 
-Secret means: never in the repository, a ticket or a log.
+Secret means: never in the repository, a ticket or a log. The env templates list names only. Optional names carry their default in the unit (`Environment=` lines); a line in the env file overrides it, and an empty line would override it with nothing (`check-env.sh` flags that). Defaults are in the Meaning column.
 
 | Name                                    | Files        | Secret | Meaning                                                                |
 | --------------------------------------- | ------------ | ------ | ---------------------------------------------------------------------- |
@@ -79,18 +81,18 @@ Secret means: never in the repository, a ticket or a log.
 | `BRAMBLE_EXTRA_ARGS`                    | node         | no     | Extra `brambled serve` flags                                           |
 | `BRAMBLE_STUN_SERVERS`                  | node         | no     | `host:port` list; read by the W8 branch (ETH-36), unmerged             |
 | `BRAMBLE_SERVICE_NAME`                  | node         | no     | Service name offered (gateway) or requested (worker)                   |
-| `DEMO_SERVICE_PORT`                     | gateway      | no     | Loopback port of `demo-service`                                        |
+| `DEMO_SERVICE_PORT`                     | gateway      | no     | Loopback port of `demo-service` (9100)                                 |
 | `BRAMBLE_FORWARD_PORT`                  | worker       | no     | Local forward port (8080)                                              |
 | `BRAMBLE_GATEWAY_LABEL`                 | worker       | no     | Gateway's ENS label                                                    |
 | `HEDERA_CLIENT_ACCOUNT_ID`              | node         | no     | Testnet payer account ID                                               |
 | `HEDERA_CLIENT_PRIVATE_KEY`             | node         | yes    | Testnet payer key                                                      |
-| `HEDERA_MAX_PAYMENT_ATOMIC`             | node         | no     | Per-payment ceiling, atomic USDC                                       |
-| `RELAY_ADDR`                            | relay        | no     | Rendezvous listen address                                              |
+| `HEDERA_MAX_PAYMENT_ATOMIC`             | node         | no     | Per-payment ceiling, atomic USDC (100000)                              |
+| `RELAY_ADDR`                            | relay        | no     | Rendezvous listen address (`:9420`; second instance `:9430`)           |
 | `RELAY_PAYEE_ACCOUNT_ID`                | relay        | no     | Hedera payee account ID (public)                                       |
-| `RELAY_SIDECAR_PORT`                    | relay        | no     | Payment sidecar port                                                   |
-| `RELAY_INTERNAL_PORT`                   | relay        | no     | Loopback data-relay API port                                           |
-| `RELAY_PRICE_PER_BYTE`                  | relay        | no     | Atomic USDC per byte                                                   |
-| `RELAY_DATA_HOST`                       | relay        | no     | Interface for data-relay sockets                                       |
+| `RELAY_SIDECAR_PORT`                    | relay        | no     | Payment sidecar port (7891; second instance 7901)                      |
+| `RELAY_INTERNAL_PORT`                   | relay        | no     | Loopback data-relay API port (7895; second instance 7905)              |
+| `RELAY_PRICE_PER_BYTE`                  | relay        | no     | Atomic USDC per byte (1)                                               |
+| `RELAY_DATA_HOST`                       | relay        | no     | Interface for data-relay sockets (`0.0.0.0`)                           |
 | `APPROVAL_DEMO_TOKEN`                   | admin        | yes    | Shared token for the approval service's write routes                   |
 
 The names of the approval service's other variables and of `agent-mcp/` are Open: those packages are not on `hackathon` yet.

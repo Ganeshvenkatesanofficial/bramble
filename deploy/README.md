@@ -33,6 +33,7 @@ Agents never look for credentials. Each item below blocks the steps that name it
 | 11  | Claude Code authentication for the agent on the worker machine                                                                          | F4        |
 | 12  | Read access to the repository for the machines (public clone, or a deploy key)                                                          | A4        |
 | 13  | Which tailnet and relay registry to use (names and addresses; public values)                                                            | D1        |
+| 14  | Optional: a second STUN server (host and port) or a second public address on the relays machine, for the NAT type check                 | N         |
 
 ## Part A: prepare every machine
 
@@ -50,6 +51,7 @@ On each machine, install what its role needs:
 
 - All roles: `git`, `curl`, `iproute2`, Node.js 24 or later, `pnpm` 10 (the repository pins it in `package.json`).
 - gateway, worker, relays: Go 1.27 or later (`go.mod` requires it) and Bun 1.3.14. The Tor spike used Bun 1.3.14 (handoff section 9), so pin that version: `curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.14"`, then link `bun` into `/usr/local/bin`.
+- gateway, worker: `nftables` and `python3` (`apt install nftables python3`). The NAT box and the STUN probe need them. `install.sh` checks for both.
 - relays: `caddy` (from the Caddy apt repository) and `coturn` (`apt install coturn`).
 - admin: Bun, and `ssh`.
 
@@ -218,11 +220,19 @@ Evidence as for E3. Every node on the tailnet must use the same `-gateway-port` 
 
 ### F3. Deny check. Open
 
-Before any grant, from the worker: `curl -sS http://127.0.0.1:8080/task`. The call must fail (connection reset). The gateway log must show `denied for service`. This is demo beat 1. The September run showed this on two other machines (`brambled/README.md`, Gate 5.1).
+Before any grant, from the worker: `curl -sS http://127.0.0.1:8080/task`. In NAT-box mode (Part N) the forward lives inside the node's namespace, so run the call there: `sudo deploy/scripts/agent-in-box.sh curl -sS http://127.0.0.1:8080/task`. The call must fail (connection reset). The gateway log must show `denied for service`. This is demo beat 1. The September run showed this on two other machines (`brambled/README.md`, Gate 5.1).
 
 ### F4. Prepare the agent user. Open
 
 Create a Unix user `agent` with no `sudo` and no read access to `/etc/bramble`. The agent calls only the forward on `127.0.0.1:8080`. The node's WireGuard key and Hedera payer key stay in `/etc/bramble/worker.env` (mode `0600`, owner `bramble`), so the agent never holds a backend credential. Install Claude Code for that user and authenticate it with item 11. The MCP server package (`agent-mcp/`, ETH-57) does not exist yet; its environment variable names are Open.
+
+**Launching the agent.** Without the NAT box, the agent runs as `agent` on the host and reaches the forward on the host's `127.0.0.1:8080`. With the NAT box, the node (and so the forward) sits in the `bramble-node` namespace, and a process on the host cannot reach it. Start the agent through the launcher, which enters the namespace as root and then drops to the `agent` user with no capabilities and `no_new_privs`:
+
+```sh
+sudo deploy/scripts/agent-in-box.sh claude
+```
+
+The launcher also gives the agent the namespace's resolver and NAT route, so Claude Code reaches its API through the same NAT. Open: the script passes `bash -n` and its `setpriv` flags parse (Verified, development machine, 6 Nov 2026); it has not run as root or in a namespace.
 
 ## Part G: the access gate
 
@@ -236,7 +246,12 @@ Run these in order after parts B to F. They are the gate "agent denied, then suc
 
 ## Part N: two NATs
 
-See `nat-lab/README.md`. Short form: on the gateway and worker machines, run `deploy/scripts/nat-box.sh up cone`, install the `nat-box.conf.example` drop-in on the node units, and restart them. Open.
+See `nat-lab/README.md`. Short form, on the gateway and worker machines:
+
+1. `sudo deploy/scripts/nat-box.sh up cone`. Open.
+2. Install the `nat-box.conf.example` drop-in on **every unit that talks to the node over loopback**. On the gateway that is both `bramble-demo-service` and `bramble-gateway`: the gateway dials `127.0.0.1:<DEMO_SERVICE_PORT>` inside its own namespace (`brambled/gateway/server.go`), so `demo-service` must run there too. On the worker it is `bramble-worker`. Restart the units. Open.
+3. Run the smoke script with `NETNS=bramble-node` so its loopback checks run inside the namespace. Open.
+4. Start the agent with `deploy/scripts/agent-in-box.sh` (step F4). Open.
 
 ## Reset between runs
 
