@@ -1,6 +1,7 @@
 package rendezvous
 
 import (
+	"errors"
 	"net"
 	"net/netip"
 	"strconv"
@@ -15,16 +16,22 @@ import (
 
 var loopback = netip.MustParseAddr("127.0.0.1")
 
-// freeUDPPort returns a UDP port that was free a moment ago. Fixed ports
-// collide when several agents run the suite on one host.
-func freeUDPPort(t *testing.T) uint16 {
+// freeUDPPorts returns n distinct UDP ports that were free a moment ago.
+// All probe sockets stay open until every port is chosen, so two calls
+// cannot return the same port. Fixed ports collide when several agents run
+// the suite on one host.
+func freeUDPPorts(t *testing.T, n int) []uint16 {
 	t.Helper()
-	c, err := net.ListenPacket("udp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("finding a free UDP port: %v", err)
+	ports := make([]uint16, 0, n)
+	for range n {
+		c, err := net.ListenPacket("udp4", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("finding a free UDP port: %v", err)
+		}
+		defer c.Close()
+		ports = append(ports, uint16(c.LocalAddr().(*net.UDPAddr).Port))
 	}
-	defer c.Close()
-	return uint16(c.LocalAddr().(*net.UDPAddr).Port)
+	return ports
 }
 
 // ensStub is the test's stand-in for ENS: the only source of admission.
@@ -33,7 +40,7 @@ type ensStub map[string]*sidecar.DeviceRecord
 func (e ensStub) ResolveDevice(label string) (*sidecar.DeviceRecord, error) { return e[label], nil }
 
 // admits reports whether ENS currently admits pubkey, by the same rule
-// admission.Loop applies: a pubkey record, unexpired, not revoked.
+// admission.Loop applies: a pubkey record that is not revoked.
 func (e ensStub) admits(pubkey string) bool {
 	for _, rec := range e {
 		if rec != nil && rec.Pubkey != nil && *rec.Pubkey == pubkey && !rec.Revoked {
@@ -73,7 +80,8 @@ func TestEndpointsLearnedOverRendezvousReachAdmittedPeersOnly(t *testing.T) {
 	_, malloryPub, _ := wgnode.GenerateKeyPair()
 
 	aliceAddr, bobAddr, malloryAddr := netip.MustParseAddr("10.97.0.1"), netip.MustParseAddr("10.97.0.2"), netip.MustParseAddr("10.97.0.3")
-	alicePort, bobPort := freeUDPPort(t), freeUDPPort(t)
+	ports := freeUDPPorts(t, 2)
+	alicePort, bobPort := ports[0], ports[1]
 
 	alice, err := wgnode.New(wgnode.Config{PrivateKeyHex: alicePriv, ListenPort: alicePort, LocalAddress: aliceAddr, Netstack: true})
 	if err != nil {
@@ -170,6 +178,16 @@ func TestEndpointsLearnedOverRendezvousReachAdmittedPeersOnly(t *testing.T) {
 	callsMu.Lock()
 	if n := rendezvousCalls[malloryPub]; n != 0 {
 		t.Errorf("alice contacted the rendezvous %d time(s) for a non-admitted peer", n)
+	}
+	callsMu.Unlock()
+	// The Exchanger's own gate, apart from the Loop's: asked directly about
+	// mallory it refuses without contacting the rendezvous.
+	if _, err := aliceLoop.EndpointResolver(admission.Peer{Label: "mallory"}, malloryPub); !errors.Is(err, ErrNotAdmitted) {
+		t.Errorf("EndpointResolver for a non-admitted peer returned %v, want ErrNotAdmitted", err)
+	}
+	callsMu.Lock()
+	if n := rendezvousCalls[malloryPub]; n != 0 {
+		t.Errorf("direct Learn contacted the rendezvous %d time(s) for a non-admitted peer", n)
 	}
 	callsMu.Unlock()
 	peers, err := alice.Peers()

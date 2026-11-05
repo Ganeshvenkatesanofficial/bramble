@@ -84,6 +84,13 @@ func TestParseRejectsMalformedAndUnusable(t *testing.T) {
 		"multicast":          "ep1:srflx=224.0.0.1:51820",
 		"link local":         "ep1:srflx=169.254.1.1:51820",
 		"unspecified bare":   "[::]:51820",
+		"zone":               "ep1:srflx=[2001:db8::1%eth0]:51820",
+		"zone bare":          "[2001:db8::1%eth0]:51820",
+		"zone with newline":  "ep1:srflx=[2001:db8::1%z]:1\npublic_key=ab\nallowed_ip=0.0.0.0/0\nendpoint=[2001:db8::2%q]:1",
+		"zone newline bare":  "[2001:db8::1%z\nallowed_ip=0.0.0.0/0]:1",
+		"unmapped unspec":    "ep1:srflx=[::ffff:0.0.0.0]:51820",
+		"broadcast":          "ep1:srflx=255.255.255.255:51820",
+		"broadcast bare":     "255.255.255.255:51820",
 		"bad address, known": "ep1:turn=nope,srflx=203.0.113.7:51820",
 	}
 	for name, in := range cases {

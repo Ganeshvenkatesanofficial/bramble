@@ -879,8 +879,9 @@ func watchDataRelayAdopt(ctx context.Context, node *wgnode.Node, m *sidecar.Mana
 
 // peerEndpointFromCandidate picks the endpoint to use from a peer's
 // published candidate: an "ep1:" announcement (docs/reference/endpoint-exchange.md)
-// or a legacy bare ip:port. The caller has already limited this to a peer
-// ENS admits; the endpoint is a dial hint, never an admission signal.
+// or a legacy bare ip:port. The endpoint is a dial hint, never an admission
+// signal. Admission is not checked here: the EndpointResolver call site is
+// gated by Exchanger.Learn, but the data-relay adopt watcher is not.
 func peerEndpointFromCandidate(candidate string) (netip.AddrPort, error) {
 	announcement, err := rendezvous.ParseAnnouncement(candidate)
 	if err != nil {

@@ -5,7 +5,7 @@ Reference for how two Bramble nodes swap their UDP endpoints through the paid re
 ## Rules
 
 1. Endpoints travel only through the rendezvous relay (`relay/`, metered by [ADR 0007](../adr/0007-rendezvous-relay-metering.md)). They are never written on-chain (invariant 2).
-2. A learned endpoint is a dial hint. It never grants admission (invariant 1). A node learns and uses an endpoint only for a peer whose public key ENS currently admits.
+2. A learned endpoint is a dial hint. It never grants admission (invariant 1). The `EndpointResolver` path learns and uses an endpoint only for a peer whose public key ENS currently admits (`Exchanger.Learn`). The data-relay adopt watcher in `brambled/main.go` (`watchDataRelayAdopt`) predates this format and does not check admission; gating it is a follow-up (Open).
 3. The relay stays opaque. It forwards the `candidate` string unchanged and does not parse it.
 
 ## Carrier
@@ -54,7 +54,8 @@ A candidate with no `ep1:` prefix is a bare `ip:port`. The receiver decodes it a
 | ---------------------------------------------------------------------------- | -------------------------------------------- |
 | Entry with an unknown `kind` and a valid address                             | Skipped, so new kinds can be added later     |
 | Entry that is not `kind=ip:port`, or has a bad address                       | The whole announcement is rejected           |
-| Port 0, unspecified (`0.0.0.0`, `::`), multicast, or link-local address      | The whole announcement is rejected           |
+| Port 0, unspecified (`0.0.0.0`, `::`), multicast, link-local, or broadcast (`255.255.255.255`) address, including the IPv4-mapped forms | The whole announcement is rejected |
+| Address with an IPv6 zone (`%...`)                                           | The whole announcement is rejected. The relay is untrusted and a zone can carry a newline into the WireGuard UAPI line. |
 | Duplicate address                                                            | First occurrence kept                        |
 | Loopback address                                                             | Dropped by `Exchanger.Learn` unless `AllowLoopback` is set (tests only) |
 | More than 8 entries, or over 512 bytes                                       | The whole announcement is rejected           |

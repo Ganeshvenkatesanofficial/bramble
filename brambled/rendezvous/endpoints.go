@@ -153,18 +153,25 @@ func ParseAnnouncement(candidate string) (Announcement, error) {
 
 // checkAddr rejects addresses that are never a valid probe target.
 // Loopback is checked separately by the learner because tests need it.
+// A zone is rejected because it is free text from the relay: it can carry
+// a newline, and the endpoint is later written into a WireGuard UAPI line.
 func checkAddr(a netip.AddrPort) error {
+	ip := a.Addr().Unmap()
 	switch {
 	case !a.IsValid():
 		return errors.New("invalid address")
+	case a.Addr().Zone() != "":
+		return errors.New("address has an IPv6 zone")
 	case a.Port() == 0:
 		return errors.New("port 0")
-	case a.Addr().IsUnspecified():
+	case ip.IsUnspecified():
 		return errors.New("unspecified address")
-	case a.Addr().IsMulticast():
+	case ip.IsMulticast():
 		return errors.New("multicast address")
-	case a.Addr().IsLinkLocalUnicast():
+	case ip.IsLinkLocalUnicast():
 		return errors.New("link-local address")
+	case ip == netip.AddrFrom4([4]byte{255, 255, 255, 255}):
+		return errors.New("broadcast address")
 	}
 	return nil
 }
