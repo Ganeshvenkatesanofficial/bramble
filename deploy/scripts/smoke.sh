@@ -14,6 +14,8 @@ check() { # check <label> <command...>
 }
 http_ok() { curl -fsS --max-time 5 "$1" >/dev/null; }
 node_http_ok() { in_ns curl -fsS --max-time 5 "$1" >/dev/null; }
+# ss exits 0 even when nothing matches, so require at least one listener row.
+node_listening() { [ -n "$(in_ns ss -H -ltn "sport = :$1" 2>/dev/null)" ]; }
 
 sidecar_port="${BRAMBLE_SIDECAR_PORT:-7890}"
 case "$role" in
@@ -26,7 +28,7 @@ case "$role" in
   worker)
     check "sidecar /health on :$sidecar_port" node_http_ok "http://127.0.0.1:$sidecar_port/health"
     check "status API /peers on :7899" node_http_ok "http://127.0.0.1:7899/peers"
-    check "forward listening on :${BRAMBLE_FORWARD_PORT:-8080}" in_ns ss -ltn "sport = :${BRAMBLE_FORWARD_PORT:-8080}"
+    check "forward listening on :${BRAMBLE_FORWARD_PORT:-8080}" node_listening "${BRAMBLE_FORWARD_PORT:-8080}"
     check "systemd: bramble-worker active" systemctl is-active --quiet bramble-worker
     ;;
   relays)
