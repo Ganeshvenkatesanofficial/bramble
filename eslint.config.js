@@ -16,8 +16,6 @@ export default tseslint.config(
       // Root ESLint 10 cannot load that package's ESLint 9 React rules.
       'dashboard/**',
       'approval/**',
-      '.agents/**',
-      '.claude/**',
       '.tmp/**',
     ],
   },
