@@ -36,7 +36,10 @@ class FakeTopic implements TopicClient {
     await this.gate
     if (this.fail) throw new Error('sensitive Hedera diagnostic must never reach the feed')
     this.submitted.push(message)
-    return { transactionId: `0.0.1001@1700000000.${this.submitted.length}`, sequenceNumber: String(this.submitted.length) }
+    return {
+      transactionId: `0.0.1001@1700000000.${this.submitted.length}`,
+      sequenceNumber: String(this.submitted.length),
+    }
   }
 }
 

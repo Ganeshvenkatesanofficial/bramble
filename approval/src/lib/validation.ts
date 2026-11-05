@@ -84,7 +84,8 @@ export async function readPayment(request: Request): Promise<PaymentInput> {
   }
   const text = (name: string, pattern: RegExp, hint: string) => {
     const field = value[name]
-    if (typeof field !== 'string' || !pattern.test(field)) throw new ApiError(400, 'invalid_request', `${name} must be ${hint}.`)
+    if (typeof field !== 'string' || !pattern.test(field))
+      throw new ApiError(400, 'invalid_request', `${name} must be ${hint}.`)
     return field
   }
   return {

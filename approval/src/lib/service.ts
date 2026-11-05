@@ -225,7 +225,12 @@ export class ApprovalService {
         'revoke',
         () =>
           digest
-            ? { kind: 'revoke', subject: this.subject(agentLabel), serviceDigest: digest, txRef: transaction.transactionHash }
+            ? {
+                kind: 'revoke',
+                subject: this.subject(agentLabel),
+                serviceDigest: digest,
+                txRef: transaction.transactionHash,
+              }
             : null,
         record?.id
       )
