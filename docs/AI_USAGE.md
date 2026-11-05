@@ -14,6 +14,7 @@ AI assistance also covered implementation and tests, not only the planning docum
 - **`sidecar/src/` and `relay-sidecar/src/`** — ENSv2 resolution/discovery, x402 Hedera client and resource-server flows, and their TypeScript tests (for example `sidecar/src/ens/client.ts`, `sidecar/src/payments/datarelay.ts`, `relay-sidecar/src/routes/datarelay.ts`).
 - **`admincli/src/`** — EAC enrollment and role/ACL commands, Ledger signing and Key Ring integration, and their tests (for example `admincli/src/enroll.ts`, `admincli/src/ledger-eth-sign.ts`, `admincli/src/set-acl.ts`).
 - **`dashboard/`** — the read-only application UI and API routes.
+- **`agent-mcp/`** — the MCP server that gives a Claude Code agent `request_private_access` and `call_private_service`, with its tests and docs (ETH-32). Written by the Net-Claude agent (Claude Sonnet 5.5), committed as that agent.
 
 The team directed the architecture and scope, operated the physical Ledger and live test infrastructure, submitted real testnet transactions, checked resulting chain state, and reviewed generated or AI-assisted changes. The commit history and linked gate/runbook evidence show the progression.
 
