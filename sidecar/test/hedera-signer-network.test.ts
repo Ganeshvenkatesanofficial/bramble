@@ -1,10 +1,14 @@
 // ETH-40 / W9a: does @x402/hedera's client signer reach the network outside
-// the fetch it is wrapped by? The guard blocks and records every socket, DNS,
-// UDP and WebSocket primitive; only the stubbed global fetch may run.
+// the fetch it is wrapped by? The guard blocks and records the TCP, DNS, UDP,
+// WebSocket, worker and child-process entry points listed in
+// helpers/network-guard.ts; only the stubbed global fetch may run. A pass means
+// none of those paths was used, not that no packet could have been sent.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import net from 'node:net'
 import dns from 'node:dns'
 import dgram from 'node:dgram'
+import childProcess from 'node:child_process'
+import workerThreads from 'node:worker_threads'
 import { decodePaymentSignatureHeader, encodePaymentRequiredHeader } from '@x402/core/http'
 import type { PaymentRequired } from '@x402/core/types'
 import { AccountBalanceQuery, AccountId, Client, PrivateKey, Transaction, TransferTransaction } from '@x402/hedera'
@@ -73,6 +77,18 @@ describe('guard self-check (a guard that cannot fail proves nothing)', () => {
     expect(() => dns.lookup('example.invalid', () => {})).toThrow('network-guard')
     expect(() => dgram.createSocket('udp4').send('x', 9, '127.0.0.1')).toThrow('network-guard')
     expect(guard.attempts.map((a) => a.kind)).toEqual(['net.Socket.connect', 'dns.lookup', 'dgram.Socket.send'])
+  })
+
+  it('records the promise-based DNS Resolver', () => {
+    const resolver = new dns.promises.Resolver({ timeout: 200, tries: 1 })
+    expect(() => resolver.resolve4('guard-probe.invalid')).toThrow('network-guard')
+    expect(guard.attempts.map((a) => a.kind)).toEqual(['dns.promises.Resolver.resolve4'])
+  })
+
+  it('records a worker thread and a child process', async () => {
+    expect(() => new workerThreads.Worker('process.exit(0)', { eval: true })).toThrow('network-guard')
+    expect(() => childProcess.execFile(process.execPath, ['-e', '0'], () => {})).toThrow('network-guard')
+    expect(guard.attempts.map((a) => a.kind)).toEqual(['worker_threads.Worker', 'child_process.execFile'])
   })
 
   it('records the Hedera SDK when it really queries a consensus node', async () => {
