@@ -6,10 +6,11 @@ It runs in one long-lived Node.js process on the admin machine. Run
 address is loopback, port 3001. The production commands are `build` and `start`
 in the same package. Expose it only through the approved tunnel topology.
 
-This package contains the API only. ETH-30 supplies the real signer and ENS
-resolver; ETH-31 supplies the UI. The default runtime accepts requests and deny
-decisions, and rejects grant/revoke operations with `503 signer_not_configured`.
-Test-only in-memory adapters never enter the runtime path.
+This package contains the API only; ETH-31 supplies the UI. The runtime accepts
+requests and deny decisions. Grant and revoke operations answer
+`503 signer_not_configured` until the real signer is configured on the admin
+machine (see "Real signer runbook"). Test-only in-memory adapters never enter the
+runtime path.
 
 All POST requests require `Authorization: Bearer` with the shared token configured
 in `APPROVAL_DEMO_TOKEN`. The API never returns the token. Reads are public and use
@@ -33,3 +34,44 @@ contract, limits, error handling and timer limitations. Errors have the shape
 
 `pnpm --filter @bramble/approval test` exercises the API using an in-memory
 signer/resolver. These tests perform no network writes.
+
+## Real signer runbook (needs human verification)
+
+Status: **Open.** The signer and ENS identity reads are covered by unit tests with
+in-memory adapters only. Nothing here has been run against Sepolia or a Ledger
+Key Ring by an agent. A human must complete the checklist below before beat 2 or 5
+relies on it.
+
+How it is wired: `src/lib/chain.ts` adapts the admincli functions (`grantAcl`,
+`clearAcl`) and the sidecar's `resolveDevice` to the service's `GrantSigner` and
+`IdentityResolver`. `src/lib/chain-env.ts` builds the real viem adapters from
+environment variables. Approve writes the ECDH digest of the service to the agent's
+`acl` record, never the service name. Revoke empties that record. A confirmation
+error after a transaction was submitted is reconciled against chain state, so a
+timeout is not reported as a failure when the write landed.
+
+Where it runs: only on the human-controlled admin machine. The granter's X25519
+key is decrypted per grant from a `wallet-cli` Key Ring file on that machine and
+held in memory for that call. There is no plaintext key variable, so a copy of
+this service on another host can read but cannot grant. `SEPOLIA_PRIVATE_KEY`
+pays for the `setText` transaction and must hold the `acl` setter role on the
+agent's resolver (ADR 0004), as for `set-acl`. Both stay on the admin machine; do
+not put either in the public deployment or the repository.
+
+Configure it in `approval/.env.local` (untracked) using `.env.example` as the
+template, then run `pnpm --filter @bramble/approval build && pnpm --filter @bramble/approval start`:
+
+1. Run `provision-granter-key` once on the admin machine so the ring file exists.
+2. Set `APPROVAL_GRANTER_LABEL` to the identity label whose published `pubkey`
+   matches that key, plus the other variables in `.env.example`.
+3. Start the service. Startup logs `real signer disabled: <VARIABLE> is required`
+   and keeps answering 503 if configuration is incomplete.
+4. Create a request for an enrolled agent and gateway, approve it, and open the
+   returned transaction hash on Sepolia. Confirm the agent's `acl` record holds a
+   digest and no plaintext name, and that the agent's next call succeeds.
+5. Revoke it. Confirm the `acl` record is empty and the agent's next call fails.
+6. Check that a request for a revoked, expired or unpublished identity is refused
+   with `identity_not_active` and sends no transaction.
+
+Record the transaction hashes and the date on the ticket. Until then, do not state
+that the live path passed.

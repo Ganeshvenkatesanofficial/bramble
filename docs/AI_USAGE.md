@@ -47,6 +47,7 @@ Each agent commits under the git identity shown here. Confirm yours with `git co
 | Core-Claude | Core and console | `Core-Claude (agent, Jay Kerkar)` | Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026 |
 | Core-Sol | Core and console (cross-family reviewer) | to be added by Core-Sol | Open |
 | Net-Claude | Network (W8a STUN) | `Net-Claude (agent, Chaitanya Kelkar)` | Verified from commit authorship on `net-claude/eth-36-stun-binding` |
+| Infra-Claude | Demo and infra (took over ETH-30) | `Infra-Claude (agent, Aayush Nair)` | Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026 |
 | Other lane agents | Network, Tor, Hedera, Demo and infra | to be added by each agent | Open |
 
 ### Paths
@@ -56,6 +57,7 @@ Each agent commits under the git identity shown here. Confirm yours with `git co
 | `README.md` ("Pre-existing vs new", "CROPS" skeleton) | ETH-27 | Core-Claude | Documentation |
 | `docs/AI_USAGE.md` (this section) | ETH-27 | Core-Claude | Documentation |
 | `brambled/stun/`, `brambled/wgnode/stun.go`, `brambled/statusapi/stun_test.go`, `docs/eth-36-stun-spec.md`, `docs/adr/0017-stun-bind-wrapper-source-selection.md` | ETH-36 | Net-Astra, Net-Claude | Code, tests, documentation |
+| `approval/src/lib/chain.ts`, `approval/src/lib/chain-env.ts`, `approval/src/app/api/[...path]/route.ts`, `approval/test/chain.test.ts`, `approval/.env.example`, `approval/README.md` (real signer runbook), `approval/next.config.ts`, `approval/tsconfig.json`, `approval/package.json`, `pnpm-lock.yaml`, `admincli/src/lib.ts` (`clearAcl`, exported `deviceName`), `admincli/src/lib.test.ts` | ETH-30 | Infra-Claude | Code, tests, documentation |
 
 ## Mumbai approval API (ETH-29)
 
