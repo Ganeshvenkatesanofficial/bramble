@@ -23,7 +23,8 @@ Per-track attribution and involvement narrative for the submission dashboard is 
 
 QA-Sol (OpenAI Codex), committing as `QA-Sol (agent, Aayush Nair)`, writes
 `brambled/internal/nattest/nat.go`, `brambled/internal/nattest/nat_test.go`,
-`brambled/internal/nattest/PLAN.md`, and `brambled/internal/nattest/README.md`,
+`brambled/internal/nattest/PLAN.md`, `brambled/internal/nattest/README.md`,
+and `brambled/internal/nattest/VERIFICATION.md`,
 and updates `brambled/package.json` and this attribution file.
 The human-authored ETH-38 task and Mumbai handoff define the scope and invariants.
 The fixture supports W8 demo beat 4; it is not evidence of real NAT traversal.
