@@ -1,7 +1,8 @@
-# Drop-in that moves a node unit into the NAT-box namespace.
-# Install as /etc/systemd/system/bramble-gateway.service.d/nat-box.conf
-# (and bramble-demo-service.service.d/, or bramble-worker.service.d/), then
-# `systemctl daemon-reload` and restart the unit.
+# Drop-in that moves a unit into the NAT-box namespace.
+# Install as /etc/systemd/system/<unit>.service.d/nat-box.conf, then
+# `systemctl daemon-reload` and restart the unit. Gateway machine: install it on
+# BOTH bramble-gateway and bramble-demo-service (the gateway dials demo-service on
+# its own loopback). Worker machine: bramble-worker.
 [Unit]
 Requires=bramble-nat-box.service
 After=bramble-nat-box.service

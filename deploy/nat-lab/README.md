@@ -15,42 +15,51 @@ Both use Linux nftables source NAT. `cone` uses `masquerade`, which keeps the so
 
 ## Local lab
 
-Needs `iproute2` and `nftables`.
+Needs `iproute2`, `nftables` and `python3`. The lab has an uplink by default: the `inet` namespace connects to the host (`198.18.0.0/30`), the host source-NATs the lab to the internet, and `nodeA`, `nodeB` and `server` get a resolver file. Nodes therefore reach the Sepolia proxy by name, as on the cloud machines. `NETLAB_UPLINK=0` builds an isolated lab; the nodes then cannot read ENS and need test fixtures. Open (no step has run: the development machine has no root).
 
 1. Build the lab: `sudo deploy/nat-lab/netns-lab.sh up cone`. Open.
 2. Check it: `sudo deploy/nat-lab/netns-lab.sh status`. Open.
-3. Run the relay and STUN server in the `server` namespace (address `192.0.2.10`) and one `brambled` in each of `nodeA` and `nodeB`, with `ip netns exec <ns> ...`. Give each node its own state directory and key. Open.
-4. Repeat from step 1 with `symmetric` to see the relay fallback. Open.
-5. Remove everything: `sudo deploy/nat-lab/netns-lab.sh down`. Open.
+3. Run the relay and STUN server in the `server` namespace (address `192.0.2.10`) and one `brambled` in each of `nodeA` and `nodeB`, with `ip netns exec <ns> ...`. Give each node its own state directory and key, and set `SEPOLIA_RPC_URL` to the proxy URL. Open.
+4. Check the NAT type from `nodeA` with the probe in the "Check the NAT type" section, using `192.0.2.10:3478` and a public STUN server reachable through the uplink. Open.
+5. Repeat from step 1 with `symmetric` to see the relay fallback. Open.
+6. Remove everything: `sudo deploy/nat-lab/netns-lab.sh down`. Open.
 
 ## Cloud NAT box
 
 Run on both the gateway and the worker machine. The node then reaches the internet through source NAT on its own host.
 
 1. Create the box: `sudo deploy/scripts/nat-box.sh up cone`. Open.
-2. Move the node unit into it: copy `deploy/systemd/nat-box.conf.example` to `/etc/systemd/system/bramble-gateway.service.d/nat-box.conf` (or `bramble-worker.service.d`), then `sudo systemctl daemon-reload && sudo systemctl restart bramble-gateway`. Open.
+2. Move every loopback-coupled unit into it by copying `deploy/systemd/nat-box.conf.example` to `/etc/systemd/system/<unit>.service.d/nat-box.conf`, then `sudo systemctl daemon-reload` and restart. Open.
+   - Gateway machine: both `bramble-demo-service` and `bramble-gateway`. The gateway dials `127.0.0.1:<DEMO_SERVICE_PORT>` in its own namespace (`brambled/gateway/server.go`), so `demo-service` must share the namespace. Read from source.
+   - Worker machine: `bramble-worker`.
 3. Confirm that the node's traffic leaves with the host's address: `sudo ip netns exec bramble-node curl -sS https://ifconfig.me`. Open.
-4. Enable it at boot: `sudo systemctl enable --now bramble-nat-box`. Open.
+4. Check the node from inside: `sudo NETNS=bramble-node deploy/scripts/smoke.sh gateway` (or `worker`). The node's status API (`127.0.0.1:7899`), sidecar and forward are loopback ports inside the namespace, so a host-side `curl` cannot see them. Open.
+5. Start the agent on the worker with `sudo deploy/scripts/agent-in-box.sh claude`, which enters the namespace and then drops to the `agent` user. Open.
+6. Enable the box at boot: `sudo systemctl enable --now bramble-nat-box`. Open.
 
 Inbound packets reach the node only through a mapping the node created first, so the peer must use the address that STUN reports, not the host's address with port 51820. Read from source (nftables semantics).
 
 ## Check the NAT type
 
-Query two STUN servers from inside the box. Two different mapped ports mean the NAT is symmetric.
+`deploy/scripts/stun-probe.py` binds one UDP socket and sends a STUN Binding request to each server from that socket. Differing mapped ports then mean the NAT maps per destination (symmetric-like). Two separate clients are not enough: each would use a different source port, and even a cone NAT then shows different mapped ports.
 
 ```sh
-sudo ip netns exec bramble-node turnutils_stunclient -p 3478 <relays-machine-public-name>
-sudo ip netns exec bramble-node turnutils_stunclient -p 3478 <second-stun-server>
+sudo ip netns exec bramble-node python3 deploy/scripts/stun-probe.py \
+  <relays-machine-public-name>:3478 <second-stun-server>:3478
 ```
 
-`turnutils_stunclient` ships with the `coturn` package. A second STUN server must come from a human or from a second relays-machine address; pick one and record it. Open.
+Exit code 0 means the mapped port was the same for every server, 1 means it differed, 2 means a server did not answer. The second destination comes from item 14 in `../README.md` (a second STUN server, or a second public address of the relays machine). Open.
+
+Evidence: `python3 deploy/scripts/stun-probe.py --selftest` ran on the development machine on 6 Nov 2026 against two local fake servers and classified both a same-mapping and a different-mapping case correctly. That checks the request encoding, the response parsing and the comparison. It does not test a real NAT or `coturn`, so the probe against real servers is Open.
+
+The probe diagnoses the NAT with its own socket. The W8 discovery gate (handoff section 5.4) must query from the WireGuard socket itself; that belongs to ETH-36 and is Open.
 
 ## Force the relay fallback
 
 Beat 4 needs the direct path blocked on demand.
 
 1. Block direct UDP to the peer: `sudo deploy/scripts/nat-box.sh block-direct <peer-public-ip>`. This drops forwarded UDP to that address, so the relay (a different address) still works. Open.
-2. Watch the node's status API (`http://127.0.0.1:7899`) switch the path from direct to relay. The status field names are Read from the W8 branch (ETH-36), unmerged. Open.
+2. Watch the node's status API switch (inside the namespace: `sudo ip netns exec bramble-node curl -sS http://127.0.0.1:7899/peers`) the path from direct to relay. The status field names are Read from the W8 branch (ETH-36), unmerged. Open.
 3. Restore: `sudo deploy/scripts/nat-box.sh unblock-direct`. Open.
 
 The ruleset can be printed without root: `deploy/scripts/nat-box.sh print-rules symmetric <peer-ip>`. Verified on 6 Nov 2026 that it prints; `nft -c` could not fully check it here (netlink permission denied), so syntax is parse-checked only.
