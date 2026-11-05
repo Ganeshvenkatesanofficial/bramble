@@ -181,11 +181,15 @@ func (b *Bind) Discover(ctx context.Context, servers []string) (netip.AddrPort, 
 	return netip.AddrPort{}, "", errors.Join(failures...)
 }
 
-// Send asks the kernel to select the current source/interface on each write.
-// wireguard-go only installs its Linux route-change invalidation listener for
-// a concrete *conn.StdNetBind. A wrapper must not reuse the inner bind's sticky
-// source cache without that listener. WireGuard serializes endpoint access.
+// Send forwards to the inner bind with a fresh destination-only endpoint, so
+// the kernel selects the current source/interface on every write. wireguard-go
+// only installs its Linux route-change invalidation listener for a concrete
+// *conn.StdNetBind, so a wrapper must not reuse the sticky source cache. The
+// caller's endpoint is shared between goroutines and is never mutated.
 func (b *Bind) Send(bufs [][]byte, ep conn.Endpoint) error {
-	ep.ClearSrc()
-	return b.Bind.Send(bufs, ep)
+	fresh, err := b.ParseEndpoint(ep.DstToString())
+	if err != nil {
+		return err
+	}
+	return b.Bind.Send(bufs, fresh)
 }

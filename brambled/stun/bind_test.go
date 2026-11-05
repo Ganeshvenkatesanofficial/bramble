@@ -260,32 +260,54 @@ func TestMixedBatchPreservesWireGuardPackets(t *testing.T) {
 }
 
 type sourceEndpoint struct {
-	conn.Endpoint
-	cached bool
+	dst string
+	src []byte
 }
 
-func (e *sourceEndpoint) ClearSrc() { e.cached = false }
+func (e *sourceEndpoint) ClearSrc()           { e.src = e.src[:0] }
+func (e *sourceEndpoint) SrcToString() string { return string(e.src) }
+func (e *sourceEndpoint) DstToString() string { return e.dst }
+func (e *sourceEndpoint) DstIP() netip.Addr   { return netip.MustParseAddrPort(e.dst).Addr() }
+func (e *sourceEndpoint) SrcIP() netip.Addr   { return netip.Addr{} }
+func (e *sourceEndpoint) DstToBytes() []byte  { return []byte(e.dst) }
 
 type routeBind struct {
 	conn.Bind
 	t *testing.T
 }
 
+func (routeBind) ParseEndpoint(s string) (conn.Endpoint, error) {
+	return &sourceEndpoint{dst: s}, nil
+}
+
 func (b routeBind) Send(_ [][]byte, ep conn.Endpoint) error {
-	if ep.(*sourceEndpoint).cached {
+	e := ep.(*sourceEndpoint)
+	if len(e.src) != 0 {
 		b.t.Error("send reused stale local source/interface")
 	}
+	e.src = append(e.src[:0], "inner-write"...) // the inner bind may cache a source on its endpoint
 	return nil
 }
-func TestSendRecomputesSourceAfterRouteChange(t *testing.T) {
+
+func TestSendDoesNotMutateSharedEndpoint(t *testing.T) {
 	b := NewBind(routeBind{t: t})
-	ep := &sourceEndpoint{cached: true}
-	if err := b.Send([][]byte{{1}}, ep); err != nil {
-		t.Fatal(err)
+	shared := &sourceEndpoint{dst: "192.0.2.1:51820", src: []byte("198.51.100.7")}
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				if err := b.Send([][]byte{{1}}, shared); err != nil {
+					t.Error(err)
+					return
+				}
+				_ = shared.SrcToString() // WireGuard reads the shared endpoint concurrently
+			}
+		}()
 	}
-	// A subsequent received packet can populate the cache again.
-	ep.cached = true
-	if err := b.Send([][]byte{{2}}, ep); err != nil {
-		t.Fatal(err)
+	wg.Wait()
+	if string(shared.src) != "198.51.100.7" {
+		t.Fatalf("shared endpoint mutated: %q", shared.src)
 	}
 }
