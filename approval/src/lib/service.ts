@@ -20,6 +20,8 @@ export const systemClock: Clock = {
 export class ApprovalService {
   private readonly requests = new Map<string, AccessRequest>()
 
+  private readonly timers = new Map<string, () => void>()
+
   private readonly busyAgents = new Set<string>()
 
   constructor(
@@ -87,15 +89,54 @@ export class ApprovalService {
       }
       record.status = 'approving'
       try {
-        record.grantTransaction = await signer.grant(record)
+        record.grantTransaction = await signer.grant({
+          agentLabel: record.agentLabel,
+          gatewayLabel: record.gatewayLabel,
+          service: record.service,
+        })
       } catch {
         record.status = 'pending'
         throw new ApiError(502, 'grant_failed', 'The signer did not confirm the grant.')
       }
       record.status = 'approved'
       record.decidedAt = new Date(this.clock.now()).toISOString()
+      if (record.requestedDuration !== undefined) {
+        record.expiresAt = new Date(this.clock.now() + record.requestedDuration * 1000).toISOString()
+        record.expiryStatus = 'scheduled'
+        this.scheduleExpiry(record, record.requestedDuration * 1000)
+      }
       return this.view(record)
     })
+  }
+
+  private scheduleExpiry(record: AccessRequest, delayMs: number) {
+    this.timers.get(record.id)?.()
+    this.timers.set(
+      record.id,
+      this.clock.schedule(async () => {
+        this.timers.delete(record.id)
+        if (record.status === 'revoked') return
+        if (record.status === 'revoking') {
+          this.scheduleExpiry(record, 5000)
+          return
+        }
+        try {
+          await this.revoke(record.agentLabel, 'duration', record.id)
+        } catch {
+          record.expiryStatus = 'failed'
+          this.scheduleExpiry(record, 5000)
+        }
+      }, delayMs)
+    )
+  }
+
+  private markRevoked(record: AccessRequest, reason: 'manual' | 'duration') {
+    this.timers.get(record.id)?.()
+    this.timers.delete(record.id)
+    record.status = 'revoked'
+    record.revokedAt = new Date(this.clock.now()).toISOString()
+    record.revokeReason = reason
+    if (record.expiresAt) record.expiryStatus = 'revoked'
   }
 
   deny(id: string) {
@@ -107,15 +148,24 @@ export class ApprovalService {
     return this.view(record)
   }
 
-  async revoke(agentLabel: string) {
+  async revoke(agentLabel: string, reason: 'manual' | 'duration' = 'manual', expectedId?: string) {
     return this.exclusive(agentLabel, async () => {
       const { signer, resolver } = this.adapters()
-      if (!(await resolver.hasGrant(agentLabel)))
-        throw new ApiError(409, 'not_granted', 'Agent has no grant to revoke.')
       const record = [...this.requests.values()].find(
         (item) => item.agentLabel === agentLabel && item.status === 'approved'
       )
-      if (record) record.status = 'revoking'
+      if (expectedId && record?.id !== expectedId) return
+      if (!(await resolver.hasGrant(agentLabel))) {
+        if (reason === 'duration' && record) {
+          this.markRevoked(record, reason)
+          return this.view(record)
+        }
+        throw new ApiError(409, 'not_granted', 'Agent has no grant to revoke.')
+      }
+      if (record) {
+        record.status = 'revoking'
+        if (reason === 'duration') record.expiryStatus = 'revoking'
+      }
       let transaction
       try {
         transaction = await signer.revoke(agentLabel)
@@ -124,10 +174,8 @@ export class ApprovalService {
         throw new ApiError(502, 'revoke_failed', 'The signer did not confirm the revoke.')
       }
       if (!record) return { agentLabel, status: 'revoked', revokeTransaction: transaction }
-      record.status = 'revoked'
       record.revokeTransaction = transaction
-      record.revokedAt = new Date(this.clock.now()).toISOString()
-      record.revokeReason = 'manual'
+      this.markRevoked(record, reason)
       return this.view(record)
     })
   }
@@ -155,6 +203,16 @@ export class ApprovalService {
   }
 
   private view(record: AccessRequest) {
-    return { ...record, serverTime: new Date(this.clock.now()).toISOString(), remainingSeconds: null }
+    return {
+      ...record,
+      serverTime: new Date(this.clock.now()).toISOString(),
+      durationMode: record.requestedDuration === undefined ? null : 'server-timer',
+      remainingSeconds:
+        record.expiresAt === undefined
+          ? null
+          : record.status === 'revoked'
+            ? 0
+            : Math.max(0, Math.ceil((Date.parse(record.expiresAt) - this.clock.now()) / 1000)),
+    }
   }
 }

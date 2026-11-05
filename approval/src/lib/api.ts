@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto'
-import { ApiError, type RequestInput, type GrantSigner, type IdentityResolver, type Clock } from './contracts'
+import { ApiError, type GrantSigner, type IdentityResolver, type Clock } from './contracts'
 import { ApprovalService } from './service'
+import { readInput, label } from './validation'
 
 interface ApiOptions {
   signer?: GrantSigner
@@ -28,7 +29,7 @@ export function createApprovalApi(options: ApiOptions) {
         }
         const path = new URL(request.url).pathname.replace(/\/$/, '')
         if (path === '/api/requests' && request.method === 'POST') {
-          return json(service.create((await request.json()) as RequestInput), 201)
+          return json(service.create(await readInput(request)), 201)
         }
         if (path === '/api/requests' && request.method === 'GET') return json({ requests: service.list() })
         const decision = /^\/api\/requests\/([^/]+)\/(approve|deny)$/.exec(path)
@@ -36,7 +37,7 @@ export function createApprovalApi(options: ApiOptions) {
           return json(decision[2] === 'approve' ? await service.approve(decision[1]) : service.deny(decision[1]))
         }
         const revoke = /^\/api\/grants\/([^/]+)\/revoke$/.exec(path)
-        if (revoke && request.method === 'POST') return json(await service.revoke(revoke[1]))
+        if (revoke && request.method === 'POST') return json(await service.revoke(label(revoke[1], 'agentLabel')))
         const detail = /^\/api\/requests\/([^/]+)$/.exec(path)
         if (detail && request.method === 'GET') return json(service.get(detail[1]))
         throw new ApiError(404, 'route_not_found', 'Route not found.')

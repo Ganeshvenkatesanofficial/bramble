@@ -13,7 +13,7 @@ sidecar/test/fixtures/
 # which excludes its generated .next tree.
 dashboard/
 
-# Agent skill installations are supplied by the runtime.
+# Agent skill sources keep their upstream formatting.
 .agents/
 .claude/
 approval/
