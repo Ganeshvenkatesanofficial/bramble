@@ -18,3 +18,14 @@ AI assistance also covered implementation and tests, not only the planning docum
 The team directed the architecture and scope, operated the physical Ledger and live test infrastructure, submitted real testnet transactions, checked resulting chain state, and reviewed generated or AI-assisted changes. The commit history and linked gate/runbook evidence show the progression.
 
 Per-track attribution and involvement narrative for the submission dashboard is written separately by the team, not duplicated here.
+
+## Mumbai W8a: STUN endpoint discovery
+
+Net-Astra (OpenAI Codex) implemented and tested `brambled/stun/message.go`,
+`brambled/stun/bind.go`, `brambled/stun/bind_test.go`, `brambled/wgnode/node.go`,
+`brambled/wgnode/stun.go`, `brambled/main.go`, `brambled/statusapi/server.go`, and
+`brambled/statusapi/stun_test.go`. Documentation changes cover `README.md`,
+`brambled/README.md`, `docs/AI_USAGE.md`, and `docs/eth-36-stun-spec.md`.
+Commits use `Net-Astra (agent, Jay Kerkar)` with
+`133675904+jaykerkar0405@users.noreply.github.com` and the Paperclip co-author.
+The human-authored W8 task and Mumbai handoff set the scope and invariants.
