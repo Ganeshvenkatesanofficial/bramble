@@ -45,7 +45,7 @@ func TestSTUNEndpointRootless(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	node, err := wgnode.New(wgnode.Config{PrivateKeyHex: priv, Netstack: true, LocalAddress: netip.MustParseAddr("10.77.0.1")})
+	node, err := wgnode.New(wgnode.Config{PrivateKeyHex: priv, EnableSTUN: true, Netstack: true, LocalAddress: netip.MustParseAddr("10.77.0.1")})
 	if err != nil {
 		t.Fatal(err)
 	}

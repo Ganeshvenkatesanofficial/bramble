@@ -92,6 +92,8 @@ type Node struct {
 }
 
 type Config struct {
+	// EnableSTUN shares the WireGuard bind with endpoint discovery.
+	EnableSTUN bool
 	// PrivateKeyHex is the node's own WireGuard private key, hex-encoded.
 	PrivateKeyHex string
 	// ListenPort is the UDP port this node's outer transport binds to.
@@ -113,7 +115,12 @@ type Config struct {
 }
 
 func New(cfg Config) (*Node, error) {
-	bind := stun.NewBind(conn.NewDefaultBind())
+	bind := conn.NewDefaultBind()
+	var stunBind *stun.Bind
+	if cfg.EnableSTUN {
+		stunBind = stun.NewBind(bind)
+		bind = stunBind
+	}
 	var dev *device.Device
 	var tnet *netstack.Net
 	var interfaceName string
@@ -157,7 +164,7 @@ func New(cfg Config) (*Node, error) {
 		return nil, fmt.Errorf("bringing device up: %w", err)
 	}
 
-	return &Node{dev: dev, tnet: tnet, cfg: cfg, interfaceName: interfaceName, stunBind: bind}, nil
+	return &Node{dev: dev, tnet: tnet, cfg: cfg, interfaceName: interfaceName, stunBind: stunBind}, nil
 }
 
 func defaultInterfaceName() string {

@@ -211,3 +211,81 @@ func FuzzResponse(f *testing.F) {
 	f.Add(bindingReply(request(transactionID{}), netip.MustParseAddrPort("198.51.100.4:54321")))
 	f.Fuzz(func(t *testing.T, packet []byte) { _, _ = response(packet) })
 }
+
+// This literal XOR-MAPPED-ADDRESS uses the RFC 5769 section 2.2 test vector
+// (without its SOFTWARE, MESSAGE-INTEGRITY and FINGERPRINT attributes).
+func TestKnownWireResponse(t *testing.T) {
+	packet := []byte{
+		0x01, 0x01, 0x00, 0x0c, 0x21, 0x12, 0xa4, 0x42,
+		0xb7, 0xe7, 0xa7, 0x01, 0xbc, 0x34, 0xd6, 0x86, 0xfa, 0x87, 0xdf, 0xae,
+		0x00, 0x20, 0x00, 0x08, 0x00, 0x01, 0xa1, 0x47, 0xe1, 0x12, 0xa6, 0x43,
+	}
+	endpoint, err := response(packet)
+	if err != nil || endpoint.String() != "192.0.2.1:32853" {
+		t.Fatalf("known vector: %v %v", endpoint, err)
+	}
+}
+
+type batchBind struct {
+	conn.Bind
+	packets [][]byte
+}
+
+func (b batchBind) Open(uint16) ([]conn.ReceiveFunc, uint16, error) {
+	return []conn.ReceiveFunc{func(packets [][]byte, sizes []int, eps []conn.Endpoint) (int, error) {
+		for i, p := range b.packets {
+			sizes[i] = copy(packets[i], p)
+		}
+		return len(b.packets), nil
+	}}, 12345, nil
+}
+
+func TestMixedBatchPreservesWireGuardPackets(t *testing.T) {
+	wg := []byte{4, 0, 0, 0, 1, 2, 3, 4}
+	b := NewBind(batchBind{Bind: conn.NewDefaultBind(), packets: [][]byte{wg, request(transactionID{}), wg}})
+	fns, _, err := b.Open(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Close()
+	packets := [][]byte{make([]byte, 64), make([]byte, 64), make([]byte, 64)}
+	sizes := make([]int, 3)
+	n, err := fns[0](packets, sizes, make([]conn.Endpoint, 3))
+	if err != nil || n != 3 || sizes[0] != len(wg) || sizes[1] != 0 || sizes[2] != len(wg) {
+		t.Fatalf("batch: %d %v %v", n, sizes, err)
+	}
+	if string(packets[0][:sizes[0]]) != string(wg) || string(packets[2][:sizes[2]]) != string(wg) {
+		t.Fatal("WireGuard payload changed")
+	}
+}
+
+type sourceEndpoint struct {
+	conn.Endpoint
+	cached bool
+}
+
+func (e *sourceEndpoint) ClearSrc() { e.cached = false }
+
+type routeBind struct {
+	conn.Bind
+	t *testing.T
+}
+
+func (b routeBind) Send(_ [][]byte, ep conn.Endpoint) error {
+	if ep.(*sourceEndpoint).cached {
+		b.t.Error("send reused stale local source/interface")
+	}
+	return nil
+}
+func TestSendRecomputesSourceAfterRouteChange(t *testing.T) {
+	b := NewBind(routeBind{t: t})
+	ep := &sourceEndpoint{cached: true}
+	if err := b.Send([][]byte{{1}}, ep); err != nil {
+		t.Fatal(err)
+	}
+	// A subsequent received packet can populate the cache again.
+	ep.cached = true
+	if err := b.Send([][]byte{{2}}, ep); err != nil {
+		t.Fatal(err)
+	}
+}

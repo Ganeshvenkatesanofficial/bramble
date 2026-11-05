@@ -180,3 +180,12 @@ func (b *Bind) Discover(ctx context.Context, servers []string) (netip.AddrPort, 
 	}
 	return netip.AddrPort{}, "", errors.Join(failures...)
 }
+
+// Send asks the kernel to select the current source/interface on each write.
+// wireguard-go only installs its Linux route-change invalidation listener for
+// a concrete *conn.StdNetBind. A wrapper must not reuse the inner bind's sticky
+// source cache without that listener. WireGuard serializes endpoint access.
+func (b *Bind) Send(bufs [][]byte, ep conn.Endpoint) error {
+	ep.ClearSrc()
+	return b.Bind.Send(bufs, ep)
+}

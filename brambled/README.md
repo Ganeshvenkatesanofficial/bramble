@@ -567,3 +567,8 @@ The STUN server learns the node's public IP and UDP port. STUN cannot use Tor.
 An observed mapping does not prove reachability from a peer. This feature does
 not exchange candidates, change peer admission, publish to ENS, select relay
 fallback, or replace the existing `-my-candidate` option.
+
+With STUN enabled, outbound packets use the kernel's current route instead of
+WireGuard's cached local source/interface. This avoids stale source reuse because
+the wrapped bind cannot use wireguard-go's Linux route-change listener. Disabled
+nodes retain the default bind. Real multihomed route changes remain **Open**.

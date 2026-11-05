@@ -1044,7 +1044,14 @@ func runServe(args []string) error {
 		return fmt.Errorf("-relay-peer requires at least one data relay, from -data-relay or discovery")
 	}
 
+	var discoveryServers []string
+	for _, server := range strings.Split(*stunServers, ",") {
+		if server = strings.TrimSpace(server); server != "" {
+			discoveryServers = append(discoveryServers, server)
+		}
+	}
 	node, err := wgnode.New(wgnode.Config{
+		EnableSTUN:    len(discoveryServers) > 0,
 		PrivateKeyHex: *privateKeyHex,
 		ListenPort:    uint16(*listenPort),
 		LocalAddress:  prefix.Addr(),
@@ -1149,12 +1156,6 @@ func runServe(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	var discoveryServers []string
-	for _, server := range strings.Split(*stunServers, ",") {
-		if server = strings.TrimSpace(server); server != "" {
-			discoveryServers = append(discoveryServers, server)
-		}
-	}
 	if len(discoveryServers) > 0 {
 		go node.RunSTUN(ctx, discoveryServers)
 	}

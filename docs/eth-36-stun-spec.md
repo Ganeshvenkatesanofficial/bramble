@@ -5,7 +5,8 @@ binding discovery from the WireGuard UDP socket, a configurable server list,
 no local-state writes, fake-server unit tests, and rootless status API evidence.
 `docs/15_MUMBAI_HANDOFF.md` governs the implementation.
 
-The implementation wraps wireguard-go's default bind. WireGuard remains the
+When STUN is enabled (`wgnode.Config.EnableSTUN`), the implementation wraps
+wireguard-go's default bind. Disabled nodes retain the unwrapped default bind. WireGuard remains the
 socket reader. The wrapper consumes STUN packets and leaves other packet slots
 unchanged. Requests use the wrapped bind's `Send`; no second UDP socket is opened.
 Responses must match the random 96-bit transaction ID and server address.
@@ -37,3 +38,10 @@ The rootless status API test also completes a WireGuard handshake and ICMP
 exchange through the same bind after discovery. Real NAT traversal remains Open.
 
 Protocol reference: [RFC 5389](https://www.rfc-editor.org/rfc/rfc5389.html).
+
+On Linux, wireguard-go's route-change listener requires a concrete default bind.
+The STUN wrapper therefore clears the endpoint's cached local source/interface
+before each send and lets the kernel choose the current route. This prevents
+stale interface reuse without copying the dependency's route listener. STUN
+mode does not retain WireGuard's source-address stickiness on multihomed hosts;
+real multihomed/NAT route changes remain Open.
