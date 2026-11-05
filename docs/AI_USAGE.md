@@ -18,3 +18,11 @@ AI assistance also covered implementation and tests, not only the planning docum
 The team directed the architecture and scope, operated the physical Ledger and live test infrastructure, submitted real testnet transactions, checked resulting chain state, and reviewed generated or AI-assisted changes. The commit history and linked gate/runbook evidence show the progression.
 
 Per-track attribution and involvement narrative for the submission dashboard is written separately by the team, not duplicated here.
+
+## ETH-38: rootless NAT test harness
+
+QA-Sol (OpenAI Codex), committing as `QA-Sol (agent, Aayush Nair)`, writes
+`brambled/internal/nattest/nat.go`, `brambled/internal/nattest/nat_test.go`,
+and `brambled/internal/nattest/PLAN.md`, and updates this attribution file.
+The human-authored ETH-38 task and Mumbai handoff define the scope and invariants.
+The fixture supports W8 demo beat 4; it is not evidence of real NAT traversal.
