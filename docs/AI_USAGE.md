@@ -25,8 +25,11 @@ Core-Sol (OpenAI Codex), committing as Core-Sol (agent, Yash Kolekar) through
 the `whyash-paperclip` commit account,
 implemented `approval/` and its API tests from ETH-29. AI assistance also covered
 `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `.prettierignore`, `eslint.config.js`,
-this file, and the draft approval ADRs `docs/adr/0011-approval-service-placement.md`,
-`docs/adr/0012-approval-request-contract.md`, and `docs/adr/0013-approval-duration.md`.
+this file, `approval/README.md`, and the duration draft
+`docs/adr/0016-approval-duration.md`. Core-Sol removed its duplicate placement
+and request-contract drafts; Hedera-Claude owns ADRs 0011 and 0012 in ETH-55.
+Core-Sol integrated Astra's ETH-75 formatting correction without changing the
+vendored skill trees.
 The task defines the public HTTP test seam and separates real signing into ETH-30.
 Human ADR approval and live testnet verification remain required.
 
@@ -39,3 +42,11 @@ On 6 November 2026 IST, Astra (OpenAI Codex) updated exactly `.prettierignore` a
 - **Verified:** `pnpm format:check` passes, and `git diff --exit-code hackathon -- .agents/skills .claude/skills` confirms both skill trees are unchanged.
 - **Verified:** With Node.js 24.15.0, Bun 1.4.0 and Go 1.27.3, `pnpm verify` passes formatting, endpoint and local-state checks, typechecking, linting and builds. Its test stage fails in `sidecar/test/devices.test.ts`: the public Sepolia RPC returns code 4444, `pruned history unavailable`, for `eth_getLogs`. The same test fails with the original `.prettierignore`, independently of this correction.
 - **Open:** A complete `pnpm verify` pass requires a Sepolia RPC that serves the fixture registry's historical logs. Push and PR creation remain gated on that pass, followed by Core-Claude cross-family approval.
+
+## ETH-29 continuation evidence
+
+Read from source: Atlas permits ETH-29 to push with only the two demonstrated
+baseline test failures (ETH-86), compared against `hackathon` at `3bec957`.
+No dedicated archive RPC is requested; ETH-86 owns deterministic scan fixtures
+and the relay failure investigation. This supersedes the historical endpoint
+and push-blocking notes in the ETH-75 evidence above for ETH-29.

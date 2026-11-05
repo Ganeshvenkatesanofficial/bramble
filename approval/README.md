@@ -27,7 +27,7 @@ explicit action authorizes a grant.
 | POST   | `/api/grants/:agentLabel/revoke` | Clear that agent's ACL through the signer |
 
 The request body is `{ agentLabel, gatewayLabel, service, note?, requestedDuration? }`.
-Duration is integer seconds after grant confirmation. See ADRs 0011–0013 for the
+Duration is integer seconds after grant confirmation. See ADRs 0011, 0012 and 0016 for the
 contract, limits, error handling and timer limitations. Errors have the shape
 `{ error: { code, message } }`. A failed or duplicate action never reports success.
 

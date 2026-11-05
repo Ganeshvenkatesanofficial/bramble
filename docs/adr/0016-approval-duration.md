@@ -1,4 +1,4 @@
-# ADR 0013 — Grant duration through server-side revoke timers
+# ADR 0016 — Grant duration through server-side revoke timers
 
 **Kind:** Explanation  
 **Status:** Draft, 6 November 2026  
