@@ -67,3 +67,28 @@ pnpm test
 Reads `test/fixtures/dev-tailnet.json`, produced once by
 `scripts/provision-dev-tailnet/`, and resolves it back through this sidecar's
 own code — read-only, no gas, safe to run repeatedly.
+
+## Tor client (`src/tor/`)
+
+The sidecar runs one Tor client (tor-js 0.4.4, `wasm-file` entry,
+in-memory storage) and bootstraps it at startup. Design and measurements:
+`docs/adr/0013-tor-transport.md`.
+
+- `GET /tor/status` returns `{ state, readyAt?, lastError?, message }`, where
+  `state` is `starting`, `ready` or `failed`. It always answers 200.
+- Until `state` is `ready`, every route except `/health` and `/tor/status`
+  answers 503 `{ "error": "starting Tor" }` with `Retry-After: 5`.
+- `torFetch('ens')` and `torFetch('pay')` return a `fetch` that sends requests
+  through Tor, each purpose on its own circuit. A circuit failure is retried
+  once under a fresh isolation key.
+
+Smoke test against the real Tor network (about a minute; needs outbound TCP):
+
+```
+cd sidecar
+bun run scripts/tor-smoke.ts
+```
+
+It prints the bootstrap time and one request per purpose to
+`https://check.torproject.org/api/ip`, and ends with `PASS` when both arrived
+through Tor.
