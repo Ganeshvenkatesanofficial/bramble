@@ -178,6 +178,9 @@ importers:
       hono:
         specifier: ^4.13.7
         version: 4.13.7
+      tor-js:
+        specifier: 0.4.4
+        version: 0.4.4
       viem:
         specifier: ^2.56.3
         version: 2.56.3(typescript@6.0.3)(zod@3.25.76)
@@ -5097,6 +5100,14 @@ packages:
   toidentifier@1.0.1:
     resolution: {integrity: sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==}
     engines: {node: '>=0.6'}
+
+  tor-js@0.4.4:
+    resolution: {integrity: sha512-0biVOvwZrar+kt+y4GIW4haGYITgspZs1Sv/iJriUIDq3Hs0mM/nkwyO5Ygk+oGjqf7gVuBQhV0uF0RMmTb1UA==}
+    peerDependencies:
+      '@kpstreams/quic-client': ^0.2.1
+    peerDependenciesMeta:
+      '@kpstreams/quic-client':
+        optional: true
 
   ts-api-utils@2.5.0:
     resolution: {integrity: sha512-OJ/ibxhPlqrMM0UiNHJ/0CKQkoKF243/AEmplt3qpRgkW8VG7IfOS41h7V8TjITqdByHzrjcS/2si+y4lIh8NA==}
@@ -11093,6 +11104,8 @@ snapshots:
       is-number: 7.0.0
 
   toidentifier@1.0.1: {}
+
+  tor-js@0.4.4: {}
 
   ts-api-utils@2.5.0(typescript@5.9.3):
     dependencies:
