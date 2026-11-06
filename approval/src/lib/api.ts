@@ -2,12 +2,15 @@ import { timingSafeEqual } from 'node:crypto'
 import { ApiError, type GrantSigner, type IdentityResolver, type Clock } from './contracts'
 import { ApprovalService } from './service'
 import { readInput, label } from './validation'
+import { loadActivity, type PaymentsSource, type StatusSource } from './activity'
 
 interface ApiOptions {
   signer?: GrantSigner
   resolver?: IdentityResolver
   clock?: Clock
   token: () => string | undefined
+  /** Read-only feed sources. An omitted source reports `not_configured`. */
+  activity?: { status?: StatusSource; payments?: PaymentsSource }
 }
 
 export function createApprovalApi(options: ApiOptions) {
@@ -32,6 +35,9 @@ export function createApprovalApi(options: ApiOptions) {
           return json(service.create(await readInput(request)), 201)
         }
         if (path === '/api/requests' && request.method === 'GET') return json({ requests: service.list() })
+        if (path === '/api/activity' && request.method === 'GET') {
+          return json(await loadActivity({ requests: service.list(), ...options.activity }))
+        }
         const identity = /^\/api\/identities\/([^/]+)$/.exec(path)
         if (identity && request.method === 'GET') {
           const name = label(identity[1], 'agentLabel')

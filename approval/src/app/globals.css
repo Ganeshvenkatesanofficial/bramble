@@ -363,6 +363,104 @@ main {
 .mobile-break {
   display: none;
 }
+.console-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 40px;
+  align-items: start;
+  margin-top: 24px;
+}
+.console-main > section:first-child {
+  margin-bottom: 0;
+}
+.activity {
+  position: sticky;
+  top: 16px;
+  min-width: 0;
+}
+.activity .section-heading {
+  margin-top: 0;
+}
+.activity-sources,
+.activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.activity-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.activity-sources li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.activity-list {
+  max-height: min(70vh, 720px);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.activity-item {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.activity-item:last-child {
+  border-bottom: 0;
+}
+.activity-item.positive {
+  border-left-color: var(--primary);
+}
+.activity-item.negative {
+  border-left-color: var(--destructive);
+}
+.activity-item.positive .eyebrow {
+  color: var(--primary);
+}
+.activity-item.negative .eyebrow {
+  color: var(--destructive);
+}
+.activity-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.activity-meta time {
+  font-size: 11px;
+}
+.activity-cutoff {
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--destructive);
+}
+.activity-summary {
+  overflow-wrap: anywhere;
+}
+.activity-item a {
+  color: var(--primary);
+  font-size: 12px;
+}
+@media (max-width: 1000px) {
+  .console-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .activity {
+    position: static;
+    order: -1;
+  }
+  .activity-list {
+    max-height: 520px;
+  }
+}
 @media (max-width: 600px) {
   main {
     padding: 28px 18px 20px;
