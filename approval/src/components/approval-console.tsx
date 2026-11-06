@@ -9,7 +9,11 @@ import { ActivityFeed } from './activity-feed'
 import { RequestCard } from './request-card'
 import { HcsPanel } from './hcs-panel'
 import { JoinConsole } from './join-console'
+import { Badge } from './ui/badge'
 import { Button } from './ui/button'
+import { Card } from './ui/card'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
 import { NetworkPanel } from './network-panel'
 
 export function ApprovalConsole() {
@@ -44,71 +48,79 @@ export function ApprovalConsole() {
             </h1>
             <p className="muted">Review the identity. Grant a service. Revoke when you’re done.</p>
           </div>
-          <span className={`connection ${error ? 'negative' : ''}`}>
-            <span className="status-dot" />
+          <Badge variant={error ? 'destructive' : 'outline'} className="connection">
+            <span
+              className={`size-1.5 rounded-full ${error ? 'bg-destructive' : updatedAt ? 'bg-success' : 'bg-muted-foreground'}`}
+              aria-hidden="true"
+            />
             {error ? 'Disconnected' : updatedAt ? 'Live queue · 1s refresh' : 'Connecting…'}
-          </span>
+          </Badge>
         </div>
-        <section className="summary" aria-label="Access summary">
-          <div>
-            <span className="eyebrow">Awaiting decision</span>
-            <strong>{requests ? pending.length : '—'}</strong>
-          </div>
-          <div>
-            <span className="eyebrow">Active grants</span>
-            <strong className="positive">{requests ? grants.length : '—'}</strong>
-          </div>
-          <div>
-            <span className="eyebrow">Closed requests</span>
-            <strong>{requests ? history.length : '—'}</strong>
-          </div>
+        <section className="my-8 grid gap-4 sm:grid-cols-3" aria-label="Access summary">
+          {[
+            ['Awaiting decision', pending.length],
+            ['Active grants', grants.length],
+            ['Closed requests', history.length],
+          ].map(([label, count]) => (
+            <Card key={label} className="gap-2 px-5">
+              <span className="eyebrow">{label}</span>
+              <strong className="text-3xl font-semibold tabular-nums">{requests ? count : '—'}</strong>
+            </Card>
+          ))}
         </section>
         <div className="console-layout">
           <div className="console-main">
-            <section className="authorization" aria-label="Operator authorization">
-              <div>
-                <h2>Operator authorization</h2>
-                <p className="muted">
-                  {token
-                    ? 'Decision controls unlocked. The API checks each action.'
-                    : 'Enter the shared demo token to enable decisions.'}
-                </p>
-              </div>
-              {token ? (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setToken('')
-                    setDraft('')
-                  }}
-                >
-                  Lock console
-                </Button>
-              ) : (
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    setToken(draft.trim())
-                    setDraft('')
-                  }}
-                >
-                  <div className="token-field">
-                    <label htmlFor="demo-token">Demo token</label>
-                    <input
-                      id="demo-token"
-                      type="password"
-                      autoComplete="off"
-                      placeholder="Demo token"
-                      value={draft}
-                      onChange={(event) => setDraft(event.target.value)}
-                    />
-                  </div>
-                  <Button variant="outline" type="submit" disabled={!draft.trim()}>
-                    Unlock
+            <Card asChild className="authorization flex-row flex-wrap items-center justify-between gap-4 px-5">
+              <section aria-label="Operator authorization">
+                <div>
+                  <h2>Operator authorization</h2>
+                  <p className="muted">
+                    {token
+                      ? 'Decision controls unlocked. The API checks each action.'
+                      : 'Enter the shared demo token to enable decisions.'}
+                  </p>
+                </div>
+                {token ? (
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={() => {
+                      setToken('')
+                      setDraft('')
+                    }}
+                  >
+                    Lock console
                   </Button>
-                </form>
-              )}
-            </section>
+                ) : (
+                  <form
+                    className="flex items-end gap-2"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      setToken(draft.trim())
+                      setDraft('')
+                    }}
+                  >
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="demo-token" className="text-xs text-muted-foreground">
+                        Demo token
+                      </Label>
+                      <Input
+                        id="demo-token"
+                        type="password"
+                        autoComplete="off"
+                        placeholder="Demo token"
+                        className="w-48"
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                      />
+                    </div>
+                    <Button variant="outline" size="lg" type="submit" disabled={!draft.trim()}>
+                      Unlock
+                    </Button>
+                  </form>
+                )}
+              </section>
+            </Card>
             {error && (
               <p role="alert" aria-label="Request queue error" className="notice negative">
                 {error}
