@@ -15,7 +15,7 @@ cloud pair; the ETH-244 operator owns that slot.
 
 | Beat | Offline stand-in | What it proves | What it does not prove |
 | --- | --- | --- | --- |
-| 1 Denied, 5 Revoke | `pnpm test:access-flow` | Verified: a loopback WireGuard pair denies, allows, then denies after revoke. Printed revoke-to-denial: 3.67 ms. | Tor delay, Sepolia, a cloud node. Do not quote 3.67 ms as the demo's revoke time. |
+| 1 Denied, 5 Revoke | `pnpm test:access-flow` | Verified: a loopback WireGuard pair denies, allows, then denies after revoke. Printed revoke-to-denial: 2.5 ms and 3.7 ms in two runs. | Tor delay, Sepolia, a cloud node. Do not quote these figures as the demo's revoke time. |
 | 1, 2, 3, 5 sequence | `python3 deploy/scripts/rehearse.py --offline` | Verified: the harness runs its checks in order. Output starts `SIMULATED`. | Any access, payment or chain write. Never show it as evidence. |
 | 6 Provider view | The capture in [beat6-provider-view.md](beat6-provider-view.md) | Verified: the logging proxy records every ENS query with time, source address and parameters; the private payload is absent. | A real Tor exit. Both phases log `127.0.0.1`. |
 | 4 Direct path | None. Use only a pre-recorded clip. | n/a | `deploy/nat-lab/README.md` needs a NAT box or Docker; its steps are Open. |
@@ -45,8 +45,17 @@ a wait only with an on-screen “cut: 24 s” caption. Burn in a caption
 with the recording date, the commit short hash and the word `RECORDED`.
 
 The tool is a human choice. This workstation has no `asciinema`, `ffmpeg`, OBS
-or `wf-recorder` on its path (Verified). Choose a recorder and add this to the
-rehearsal log.
+or `wf-recorder` on its path (Verified). It has util-linux `script`, which is
+enough for the terminal-only offline clips (Verified, recorded and replayed
+`pnpm test:access-flow`):
+
+```sh
+script -q --log-timing clip.tm --log-out clip.log -c 'pnpm test:access-flow'
+scriptreplay --log-timing clip.tm --log-out clip.log --maxdelay 2
+```
+
+Cloud clips with the console need a screen recorder. Choose one and add it to
+the rehearsal log.
 
 | Clip | Beat | Budget | Source | Capture |
 | --- | --- | --- | --- | --- |
@@ -98,7 +107,7 @@ copy secrets onto the screen.
 
 ### Record clip F offline
 
-This is Verified (about 8 s per run on 6 November 2026). Follow
+This is Verified (8–12 s wall clock per run, two runs on 6 November 2026). Follow
 [beat6-provider-view.md](beat6-provider-view.md) to extract and run the capture.
 Show the `direct-local` and `fake-tor-local` phases, the two backend calls and
 the absence checks. Caption the clip: “Local fixture, simulated Tor.” Do not
@@ -116,7 +125,7 @@ and caption them `LOCAL FIXTURE`:
 pnpm test:access-flow
 ```
 
-This is Verified (about 3 s, 6 November 2026). It runs the Go gateway test and
+This is Verified (about 2.4 s wall clock, 6 November 2026). It runs the Go gateway test and
 the agent MCP flow with in-memory ENS and no Tor. Do not present it as the cloud
 demo.
 

@@ -8,4 +8,4 @@ Paths written:
 - `docs/demo/fallback.md`
 - `docs/ai-usage/tor-claude-eth-296.md`
 
-Verified (6 November 2026, base `52a35cb`): the beat 6 capture (49 `eth_call` requests per phase, two backend calls, about 8 s), `pnpm test:access-flow` and `python3 deploy/scripts/rehearse.py --offline`. No cloud node was used.
+Verified (6 November 2026, base `52a35cb`): the beat 6 capture (49 `eth_call` requests per phase, two backend calls, 8–12 s wall clock; decoded params recover device labels and record keys), `pnpm test:access-flow` and `python3 deploy/scripts/rehearse.py --offline`. No cloud node was used.

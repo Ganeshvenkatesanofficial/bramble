@@ -10,18 +10,26 @@ services. Install dependencies before going offline:
 pnpm install --frozen-lockfile
 ```
 
-**Verified, 6 November 2026:** the local capture on base `970461c` records 49
-`eth_call` requests per phase, with decisions `denied`, `allowed`, `denied` in
-each phase. Exactly two backend calls succeed across both phases. The capture
-uses an in-memory chain and a fake Tor transport. Both phases log
-`127.0.0.1`; neither phase demonstrates a Tor exit or source-IP anonymity.
+**Verified, 6 November 2026 (base `52a35cb`):** the local capture records 49
+`eth_call` requests per phase, with gateway decisions `denied`, `allowed`,
+`denied` in each phase. Exactly two backend calls succeed across both phases.
+The run takes 8–12 s wall clock in two runs, mostly the Go test build; the
+script reports under 1 s of capture time. The capture uses an in-memory chain
+and a fake Tor transport. Both phases log `127.0.0.1`. Neither phase shows a Tor
+exit or source-IP anonymity. The request count depends on poll timing; treat 49
+as one observation, not a constant.
+
+**Verified, same run:** the private service name (`staging-api`) and the
+backend response body (`private task over WireGuard`) do not occur in the
+captured RPC log. The logged `params` are hex-encoded ABI (application binary
+interface) calls. Decoding them recovers the device labels (`agent-1`,
+`gateway-1`), the tailnet label (`fixture`) and the record keys (`pubkey`,
+`acl-granters`, `mesh-ip`, `revoked`). Step 4 shows how.
 
 **Read from source:** the provider sees source IP, time, method and RPC
-parameters. ENS lookup parameters can reveal device names, the tailnet name,
-record keys and contract addresses. Tor changes the source-IP exposure, not the
-query contents. Do not say “the provider sees no identity.” This capture uses
-fictional names and no real-person identity. The private service name and its
-response body do not occur in the captured RPC log.
+parameters. Tor changes the source-IP exposure, not the query contents. Do not
+say “the provider sees no identity”: it sees device and network names. This
+capture uses fictional names and no real-person identity.
 
 ## Run the capture
 
@@ -74,6 +82,27 @@ response body do not occur in the captured RPC log.
    without the gateway's explicit `no matching granted digest` is a failure.
    Processes and listeners stop when the script exits. Each run creates a fresh
    in-memory log; the proxy has no reset endpoint.
+
+4. Decode what the provider can read in the `params`:
+
+   ```sh
+   python3 - <<'PYTHON'
+   import collections, json, re
+   from pathlib import Path
+   capture = json.loads(Path('.tmp/eth-296/provider.json').read_text())
+   for phase in capture['phases']:
+       seen = collections.Counter()
+       for entry in phase['entries']:
+           data = json.loads(entry['params'])[0]['data']
+           for word in re.findall(rb'[a-z0-9.-]{4,}', bytes.fromhex(data[2:])):
+               seen[word.decode()] += 1
+       print(phase['phase'], dict(sorted(seen.items())))
+   PYTHON
+   ```
+
+   Each phase lists the device labels, the tailnet label and the record keys
+   with their counts. The decode is a regular expression over the call data. It
+   shows what any reader of the log can recover; it is not a complete parse.
 
 ## Capture script
 
