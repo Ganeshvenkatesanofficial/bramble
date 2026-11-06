@@ -258,3 +258,5 @@ Evidence paths written:
 - `/home/anonjr/bramble-work/status/eth-317-revision-browser.log`
 - `/home/anonjr/bramble-work/status/eth-317-revision-evidence/`
 - `approval/test-results/` (ignored screenshots and axe reports)
+
+- `/home/anonjr/.cache/agent-tmp/eth-317-revision-handoff.md`
