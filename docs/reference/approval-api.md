@@ -90,7 +90,7 @@ A human still approves every grant. A duration does not approve anything.
 
 ## Writes and authentication
 
-Every `POST` requires `Authorization: Bearer <token>`, compared in constant time with the `APPROVAL_DEMO_TOKEN` environment variable. If the variable is unset, writes fail with `503 token_not_configured`. A wrong or missing token returns `401 unauthorized`. The service never returns or logs the token. Reads need no token.
+Except for `POST /api/joins`, every `POST` requires `Authorization: Bearer <token>`, compared in constant time with the `APPROVAL_DEMO_TOKEN` environment variable. If the variable is unset, writes fail with `503 token_not_configured`. A wrong or missing token returns `401 unauthorized`. The service never returns or logs the token. Access-request reads need no token. Join-list and member-list reads require the same token. Individual join status reads remain open.
 
 The token gates the write surface. It does not prove who the agent is, and it does not authorize a grant. The service never auto-approves. Before approving, it re-reads the agent's and the gateway's ENS identity through the resolver and requires an active identity with a published public key.
 
@@ -119,3 +119,61 @@ A double approve, or a revoke of an ungranted agent, returns a 409 before any si
 - **Verified:** on 6 November 2026, at `origin/hackathon` `2403c62`, `pnpm --filter @bramble/approval test` passes 21 tests with 177 assertions (Bun 1.4.0). The tests use the in-memory signer and resolver.
 - **Read from source:** every value above comes from `approval/src/lib` on `hackathon`.
 - **Open:** the 2 s visibility target against a running service and a real signer.
+
+
+## Device joins and membership
+
+These endpoints implement ETH-177 shared contract v1 and the Atlas list-row decision on ETH-181. Device membership is separate from service ACL grants. Approving a join enrolls a device; it does not grant a private service.
+
+| Method | Path | Auth | Result |
+| --- | --- | --- | --- |
+| POST | `/api/joins` | none | `201 {id,status:"pending"}` |
+| GET | `/api/joins/:id` | none | One join record; `404 join_not_found` for an unknown ID |
+| GET | `/api/joins` | token | `{joins:[...]}` |
+| POST | `/api/joins/:id/approve` | token | Confirm enrollment and return the approved record |
+| POST | `/api/joins/:id/deny` | token | Deny a pending suggestion without signing |
+| POST | `/api/joins/:id/revoke` | token | Confirm `revoked=true` through admincli and return the revoked record |
+| GET | `/api/members` | token | `{members:[...]}`, read from ENS registration events and current records |
+
+`POST /api/joins` takes `{label,pubkey,tailnet}`. The label follows the access-request label rule. `pubkey` is exactly 64 hexadecimal characters representing the 32-byte WireGuard public key, normalized to lowercase. `tailnet` must match `APPROVAL_ENS_PARENT`. Unknown fields, malformed JSON and bodies over 16384 bytes are rejected.
+
+The open endpoint accepts at most 30 attempts per rolling minute per process, including invalid submissions. It returns `429 rate_limited` and `Retry-After: 60` above the limit. The limit is global and does not trust forwarded client-IP headers. The process holds at most 1000 join records; a full queue returns `503 queue_full`. Pending requests, history, allocation progress and rate-limit counters remain in memory. A restart drops them.
+
+Every join and member row carries `id`, `label`, `tailnet`, and `status`. Status is `pending`, `approved`, `denied`, or `revoked`. Additional fields are `pubkey`, `createdAt`, `decidedAt`, `meshIp`, `meshCidr`, `enrollTransactions`, `revokeTransaction`, `revokedAt`, `inProgress`, and `failure` when applicable. `meshIp` is a plain address such as `10.77.0.2`; `meshCidr` is the on-chain value such as `10.77.0.2/24`.
+
+Approval calls `admincli.enrollDevice`: deploy a dedicated resolver, register the subname, publish the public key, and allocate and publish `mesh-ip` per ADR 0009. The API reports `approved` only after transaction confirmation and read-back. `enrollTransactions` holds the confirmed `deploy`, `register`, `pubkey`, and `meshIp` hashes. Revoke calls `admincli.setDeviceRevoked`; `revoked` requires a confirmed write and read-back. Peers enforce revocation through their own ENS checks.
+
+`inProgress` is `approving` or `revoking` while an action runs. The stable status remains `pending` or `approved` until confirmation. Concurrent writes return `409 operation_in_progress`. An incomplete enrollment reserves its allocation: retry that join before approving another device (`409 enrollment_incomplete`). Deny is refused after enrollment starts (`409 enrollment_started`); finish approval and then revoke. A failed write returns `502 enroll_failed` or `502 revoke_failed` with fixed text; adapter diagnostics are suppressed. A receipt timeout retains the submitted hash inside the running process; retry checks that receipt instead of submitting it again.
+
+An existing label returns `409 label_taken` before enrollment. A partial registration can resume only when it points to the resolver created for that enrollment. Duplicate or out-of-order decisions return `409 join_not_pending` or `409 join_not_approved`.
+
+Member enumeration includes unexpired registrations, including revoked devices. A partially enrolled device owned by this queue remains `pending` in the member list. After a restart, discovered members use IDs of the form `member:<label>`; pass the URL-encoded ID to the same revoke endpoint. Join IDs and partial enrollment progress do not survive a restart. Reconcile any interrupted enrollment on chain before reusing its label or starting a competing enrollment process. Run a single approval-service process for this operator-driven allocation flow.
+
+## Enrollment configuration
+
+| Variable | Purpose |
+| --- | --- |
+| `APPROVAL_ENS_PARENT` | ENS tailnet served by joins; must match `BRAMBLE_TAILNET_NAME` |
+| `APPROVAL_DEMO_TOKEN` | Existing shared operator token; never sent by joining devices |
+| `SEPOLIA_PRIVATE_KEY` | Existing software Sepolia transaction signer |
+| `BRAMBLE_TAILNET_NAME`, `BRAMBLE_TAILNET_REGISTRY` | Existing tailnet configuration |
+| `BRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK` | First block for bounded device registration-log scans |
+| `SEPOLIA_RPC_URL` | Administrator RPC endpoint; never included in public node configuration |
+
+The existing ACL granter still uses `BRAMBLE_GRANTER_KEY_RING_PATH` and `BRAMBLE_RING_CLI=deploy/scripts/software-ring.sh`. Enrollment uses the same software Sepolia account and does not require Ledger hardware. Its on-chain transactions use testnet funds.
+
+The existing console polls protected joins every second after unlock. ENS member scans run independently every 10 seconds and refresh after actions. The components `PendingJoins`, `Members`, and `JoinActivity` are exported by `@bramble/join-ui`. They take rows, a disabled flag, an optional busy ID, an action callback and an optional button component. They contain no token storage or HTTP client. The local UI admin view can supply rows from `/api/admin/joins` and `/api/admin/members`, with action callbacks to `/api/admin/joins/:id/:action`.
+
+## Public node configuration input
+
+`node scripts/print-node-config.mjs <version>` prints the JSON served at `/.well-known/bramble.json`. It reads only the public variable allowlist in `deploy/scripts/gen-node-config.mjs`. The install-host generator and this command share `buildConfig`.
+
+Required inputs are `BRAMBLE_TAILNET_NAME`, `BRAMBLE_CHAIN_ID`, `BRAMBLE_TAILNET_REGISTRY`, `BRAMBLE_PUBLIC_RPC_URL` (or `BRAMBLE_RPC_HOST`), and `BRAMBLE_APPROVAL_URL` (or `BRAMBLE_CONSOLE_HOST`). Optional inputs are `BRAMBLE_RELAY_REGISTRY`, `BRAMBLE_RENDEZVOUS`, `BRAMBLE_STUN_SERVERS`, `BRAMBLE_DATA_RELAYS`, `BRAMBLE_RELAY_PEERS`, and `BRAMBLE_PUBLIC_SERVICES`. The version can also come from `BRAMBLE_VERSION`.
+
+The output contains `version`, `tailnet`, `chainId`, `rpcUrl`, `registry`, `joinApi`, and optional relay, rendezvous, STUN and service fields. URL validation rejects user info, query strings, fragments and credential-shaped path segments. The generator never uses `SEPOLIA_RPC_URL` as the published RPC URL. The complete launcher schema belongs to `docs/reference/node-config.md` (ETH-180).
+
+## Join verification
+
+- **Verified:** HTTP lifecycle, token checks, validation, global rate limiting, partial-enrollment retries, allocation reservation, and revoking chain-discovered members use the in-memory chain and the real admincli library.
+- **Verified:** the receipt-timeout test uses a loopback JSON-RPC boundary and confirms that a retry sends one transaction total.
+- **Open:** the opt-in Sepolia smoke (`SEPOLIA_PRIVATE_KEY="${SEPOLIA_PRIVATE_KEY:-$SEPOLIA_PK}" pnpm --filter @bramble/approval exec bun scripts/smoke-join.ts`) requires the administrator configuration. On 6 November 2026, the local attempt stopped before signing because `APPROVAL_ENS_PARENT` was absent.
