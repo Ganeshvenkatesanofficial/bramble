@@ -11,7 +11,7 @@ Demo beats served: 1 (denied), 2 (request), 3 (works after approval) and 5 (deni
 ## Before you start
 
 - The worker node runs and its forward listens on `127.0.0.1:8080`.
-- The approval API is reachable from the worker (reverse tunnel or public console URL).
+- The approval API is reachable from the worker at `https://console.13-233-181-104.sslip.io`. The operator confirmed this route on 6 November 2026 at 18:44 UTC. The current agent beat needs no worker reverse tunnel; the private service forward stays on `127.0.0.1:8080`.
 - You have a DeepSeek API key and the shared demo token. Store them only in the two
   files named below. Never put them in the repository or a log.
 
@@ -21,12 +21,16 @@ Demo beats served: 1 (denied), 2 (request), 3 (works after approval) and 5 (deni
 
    ```sh
    BRAMBLE_AGENT_LABEL=<agent-label> BRAMBLE_GATEWAY_LABEL=<gateway-label> \
+     BRAMBLE_APPROVAL_URL=https://console.13-233-181-104.sslip.io \
      deploy/scripts/install-pi-agent.sh
    ```
 
    The script installs Pi 1.5.0, copies `agent-mcp`, writes `~/.pi/agent/mcp.json`
    and the skill `~/.pi/agent/skills/bramble-private-service/SKILL.md`, and installs the
-   launcher as `~/bin/pi-agent`.
+   launcher as `~/bin/pi-agent`. It saves the approval URL in the MCP configuration;
+   its default is `http://127.0.0.1:3001`, so supply the public URL explicitly.
+   For an existing install that used the worker tunnel, rerun this installation
+   step with the public URL before starting a new Pi session.
 
 2. Create `~/.config/bramble/deepseek.key` and `~/.config/bramble/approval.token`
    (mode `0600`, owner `agent`). Each holds one value.
@@ -84,7 +88,9 @@ Operator approval/revoke uses the existing zephyrus approval runtime configurati
 passed directly into the operator process against the public console. The harmless
 nonexistent POST returns authenticated HTTP 404. No admin credential is transferred
 to Pi, and no worker credential file is changed. The MCP tunnel maps worker
-`127.0.0.1:3001` to zephyrus `127.0.0.1:3011` during these runs.
+`127.0.0.1:3001` to zephyrus `127.0.0.1:3011` during these runs. This is historical
+measurement context. The current public-console route above replaces that tunnel;
+these measurements do not verify a Pi lifecycle through the public URL.
 
 | Measurement                            | Run 1        | Run 2        |
 | -------------------------------------- | ------------ | ------------ |

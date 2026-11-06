@@ -11,6 +11,7 @@ Deadline: Saturday 7 November 2026, 09:00 IST. Cloud nodes cost testnet USDC whi
 - [ ] ETH-313 releases the cloud pair to you. Nobody restarts units, edits grants or calls the forward during the take.
 - [ ] Start the nodes at least 3 minutes early. Wait for `serving on` and `adopted new candidate` on both nodes. Start the worker too: it is the backup.
 - [ ] The public console loads and `GET /api/requests` returns 200. A human unlocks it with the demo token. Keep the token and any `.env` off screen.
+- [ ] Worker MCP uses the public console URL saved by the [Pi installation step](../agent-mcp/PI.md#steps). The [worker reachability check](DEMO_SCRIPT.md#close-with-the-agent) returns 200. The agent beat needs no worker reverse tunnel; keep the console's `bramble-console-tunnel` running.
 - [ ] The new device is clean (no `~/.bramble`), has a desktop browser and is not a cloud node. Pick a fresh label, for example `home-laptop-2`.
 - [ ] Remove any old `mumbai-worker` grant. Testnet balances are enough: Sepolia ETH for the admin, Hedera testnet HBAR and USDC (token `0.0.429274`) for the payer.
 - [ ] Two hero-path rehearsals in the ETH-313 slot passed, with each beat timed. Otherwise present the backup path.
@@ -27,7 +28,7 @@ All hero-path windows are **Open / unverified budgets** until the ETH-313 rehear
 | 0:35–1:05 | 3. Install with one line | `curl -fsSL https://console.13-233-181-104.sslip.io/install.sh \| sh`; the local UI asks to join | 60 s | Verified (reported): ETH-179, ETH-250 |
 | 1:05–1:40 | 4. Operator approves | **Pending device joins** → **Approve**; then the `task` request → **Approve** | 30 s per approval | Join: Verified (reported). New device's grant: Verified (reported) in ETH-244 |
 | 1:40–2:35 | 5. Opens in the browser | **Open task** on the connected screen shows the home page | 55 s | **Open**: needs ETH-313 acceptance |
-| 2:35–3:30 | 6. Revoke | **Revoke access**; the page badge turns **No access**; a reload fails | 60 s | **Open** for the new device; Verified (reported) for the worker |
+| 2:35–3:30 | 6. Revoke | **Revoke access**; the page badge turns **Unreachable**; a reload fails | 60 s | **Open** for the new device; Verified (reported) for the worker |
 | 3:30–4:00 | Closer: AI agent | ETH-243 Pi run: denied, request, approve, task, revoke | Recording unless rehearsed | Verified (reported): ETH-243 |
 
 ## During the take

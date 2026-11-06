@@ -8,7 +8,8 @@
 //     it answered, which proves the reply crossed the tunnel rather than being
 //     faked locally. rehearse.py, demo-agent and the agent MCP tool read this.
 //   - GET / (and GET /task from a browser) for people: a self-contained HTML
-//     page. It makes no other requests, so one gateway decision loads it.
+//     page. It loads without subresource requests, then polls /task for
+//     health. Each check opens a connection for a fresh gateway decision.
 //
 // Every response closes its connection. The gateway checks access once per
 // connection, so a browser reload after a revoke opens a new connection and
