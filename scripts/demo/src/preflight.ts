@@ -483,14 +483,14 @@ export async function runPreflight(units: CheckUnit[], opts: RunOptions): Promis
   const now = opts.now ?? Date.now
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
   const deadline = now() + opts.waitMs
-  const results = new Map<string, CheckResult>()
+  const results = new Map<CheckUnit, CheckResult>()
 
   let pending = units
   for (;;) {
     const round = await Promise.all(pending.map(runUnit))
-    for (const r of round) results.set(r.id, r)
+    pending.forEach((u, i) => results.set(u, round[i] as CheckResult))
     const retry = units.filter((u) => {
-      const r = results.get(u.id)
+      const r = results.get(u)
       return r?.status === 'fail' && r.retryable === true
     })
     if (retry.length === 0 || now() + opts.intervalMs > deadline) break
@@ -501,7 +501,7 @@ export async function runPreflight(units: CheckUnit[], opts: RunOptions): Promis
     await sleep(opts.intervalMs)
     pending = retry
   }
-  return units.map((u) => results.get(u.id) as CheckResult)
+  return units.map((u) => results.get(u) as CheckResult)
 }
 
 export function formatReport(results: CheckResult[]): string {

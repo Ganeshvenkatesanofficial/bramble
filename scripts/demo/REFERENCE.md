@@ -1,6 +1,6 @@
 # Demo launcher reference
 
-Facts for the commands in [README.md](README.md). Evidence labels are the ones in `docs/15_MUMBAI_HANDOFF.md`: **Verified**, **Read from source**, **Open**. Anything run against real machines is **needs human verification**.
+Facts for the commands in [README.md](README.md). Terms: NAT (network address translation) is the router behaviour the NAT box simulates; STUN (Session Traversal Utilities for NAT) is the protocol a node uses to learn its public address; TCP is the transport protocol relays accept connections on; API is application programming interface; ENS is the Ethereum Name Service; DER is the binary encoding of a Hedera key; ECDSA and Ed25519 are the two Hedera signature schemes. Evidence labels are the ones in `docs/15_MUMBAI_HANDOFF.md`: **Verified**, **Read from source**, **Open**. Anything run against real machines is **needs human verification**.
 
 ## Roles and units
 
@@ -30,7 +30,7 @@ Set these in the repo `.env` or the shell. The launcher and preflight print only
 | `DEMO_MIN_PAYER_USDC_ATOMIC`              | Minimum payer balance in atomic USDC, default `500000` (0.5 USDC)                             |
 | `HEDERA_MIRROR_URL`                       | Mirror node base URL, default the public testnet mirror                                       |
 
-The sidecar (port 7890) and the node status API (port 7899) bind to loopback, so the preflight reaches another machine's node with `ssh <target> curl http://127.0.0.1:<port>/...`, wrapped in `sudo -n ip netns exec <ns>` for the NAT box. ssh runs with `BatchMode=yes` and `StrictHostKeyChecking=yes`: connect once by hand first. A node the preflight cannot reach is a `FAIL`, never a skip.
+The sidecar (port 7890) and the node status API (port 7899) bind to loopback, so the preflight reaches another machine's node with `ssh <target> curl http://127.0.0.1:<port>/...`, wrapped in `sudo -n ip netns exec <ns>` for the NAT box. ssh runs with `BatchMode=yes` and `StrictHostKeyChecking=yes`, so the host key must already be known. A node the preflight cannot reach is a `FAIL`, never a skip.
 
 ## Preflight checks
 

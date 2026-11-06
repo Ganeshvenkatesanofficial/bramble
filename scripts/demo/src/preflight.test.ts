@@ -452,6 +452,23 @@ describe('runner', () => {
     expect(results.map((r) => r.status)).toEqual(['fail', 'pass'])
   })
 
+  it('keeps a failing node distinct from a healthy one when scrubbing makes their ids collide', async () => {
+    const down: Routes = { '7890/relays': HEALTHY['7890/relays'] as HttpResponse }
+    for (const path of ['7890/health', '7890/tor/status', '7899/endpoint', '7890/devices']) {
+      down[path] = new Error('unreachable')
+    }
+    const ctx = context({
+      env: { ...context().env, APPROVAL_DEMO_TOKEN: 'gateway', OTHER_TOKEN: 'worker' },
+      localRoles: [],
+      nodes: { gateway: probe(down, 'gateway'), worker: probe(HEALTHY, 'worker') },
+    })
+    const results = await runPreflight(buildChecks(ctx), { waitMs: 0, intervalMs: 1, sleep: async () => {} })
+    const nodeResults = results.filter((r) => /^(sidecar|tor|stun):/.test(r.id))
+    expect(new Set(nodeResults.map((r) => r.id)).size).toBeLessThan(nodeResults.length)
+    expect(results.filter((r) => r.status === 'fail').length).toBeGreaterThanOrEqual(3)
+    expect(exitCode(results)).toBe(1)
+  })
+
   it('retries only failed retryable checks and stops at the deadline', async () => {
     const counts = { flaky: 0, stable: 0, hard: 0 }
     const units: CheckUnit[] = [

@@ -8,7 +8,7 @@ Three commands run the live demo: `pnpm demo` starts what the current machine ne
 
 1. On each machine, run the installer from the deploy runbook (`deploy/README.md`, ETH-49). It seeds `/etc/bramble/<role>.env`.
 2. Fill in the env files. Set `SEPOLIA_RPC_URL` to a dedicated endpoint if you have one. If it is unset, the default public endpoint works, but reads can occasionally be stale.
-3. On the machine you drive from, set how to reach the others (see [Connection settings](REFERENCE.md#connection-settings)).
+3. On the machine you drive from, set how to reach the others (see [Connection settings](REFERENCE.md#connection-settings)). Connect to each remote machine once by hand with ssh, so its host key is known.
 4. Run `pnpm demo` on every machine, relays first:
 
    ```sh
