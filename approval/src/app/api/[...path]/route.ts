@@ -1,6 +1,6 @@
 import { createApprovalApi } from '../../../lib/api'
 import { auditTrailFromEnv } from '../../../lib/audit-runtime'
-import { ConfigError, realAdaptersFromEnv } from '../../../lib/chain-env'
+import { ConfigError, realAdaptersFromEnv, realJoinChainFromEnv } from '../../../lib/chain-env'
 import { createSettlementSource } from '../../../lib/payments'
 
 export const runtime = 'nodejs'
@@ -20,7 +20,18 @@ function adapters() {
 
 // One long-lived Node process owns the queue and timers; the real signer runs only on the admin machine.
 const chain = adapters()
+function joinAdapter() {
+  try {
+    return realJoinChainFromEnv()
+  } catch (error) {
+    console.error(
+      `approval: enrollment signer disabled: ${error instanceof ConfigError ? error.message : 'invalid configuration'}`
+    )
+    return undefined
+  }
+}
 const api = createApprovalApi({
+  joinChain: joinAdapter(),
   token: () => process.env.APPROVAL_DEMO_TOKEN,
   signer: chain?.signer,
   resolver: chain?.resolver,

@@ -4,6 +4,7 @@ import type { EnrollChain, Resolver } from './lib'
 export function memoryEnrollChain(options: { tailnetName: string; existing?: Record<string, string> }) {
   const records = new Map(Object.entries(options.existing ?? {}))
   const registered = new Set<string>()
+  const resolvers = new Map<string, string>()
   const labelMeshIps = new Map<string, string>()
   const steps: string[] = []
   const faults = { failOn: undefined as string | undefined, remaining: 0 }
@@ -33,9 +34,13 @@ export function memoryEnrollChain(options: { tailnetName: string; existing?: Rec
     async isRegistered(label) {
       return registered.has(label)
     },
-    async register({ label }) {
+    async registeredResolver(label) {
+      return resolvers.get(label) ?? null
+    },
+    async register({ label, resolver }) {
       const txHash = step('register')
       registered.add(label)
+      resolvers.set(label, resolver)
       return txHash
     },
     async setTextAt(_resolver, name, key, value) {

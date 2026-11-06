@@ -1,10 +1,19 @@
 import { timingSafeEqual } from 'node:crypto'
-import { ApiError, type GrantSigner, type IdentityResolver, type Clock, type PaymentInput } from './contracts'
+import {
+  ApiError,
+  type GrantSigner,
+  type IdentityResolver,
+  type Clock,
+  type PaymentInput,
+  type JoinChain,
+} from './contracts'
+import { JoinService } from './joins'
 import { ApprovalService, systemClock } from './service'
 import { AuditRecorder, type AuditTrail } from './audit'
-import { parsePayment, readInput, readPayment, label } from './validation'
+import { parsePayment, readInput, readPayment, readJoin, label } from './validation'
 
 interface ApiOptions {
+  joinChain?: JoinChain
   signer?: GrantSigner
   resolver?: IdentityResolver
   clock?: Clock
@@ -26,6 +35,7 @@ export function createApprovalApi(options: ApiOptions) {
   const clock = options.clock ?? systemClock
   const audit = new AuditRecorder(options.auditTrail, clock)
   const service = new ApprovalService(options.signer, options.resolver, clock, audit, options.ensParent)
+  const joins = new JoinService(options.joinChain, options.ensParent, clock)
   const json = (value: unknown, status = 200) =>
     Response.json(value, { status, headers: { 'cache-control': 'no-store' } })
 
@@ -64,7 +74,12 @@ export function createApprovalApi(options: ApiOptions) {
     observeSettlements,
     async handle(request: Request): Promise<Response> {
       try {
-        if (request.method === 'POST') {
+        const path = new URL(request.url).pathname.replace(/\/$/, '')
+        const openJoin = path === '/api/joins' && request.method === 'POST'
+        if (
+          (!openJoin && request.method === 'POST') ||
+          (request.method === 'GET' && (path === '/api/joins' || path === '/api/members'))
+        ) {
           const token = options.token()
           if (!token) throw new ApiError(503, 'token_not_configured', 'APPROVAL_DEMO_TOKEN is required for writes.')
           const provided = Buffer.from(request.headers.get('authorization') ?? '')
@@ -73,7 +88,22 @@ export function createApprovalApi(options: ApiOptions) {
             throw new ApiError(401, 'unauthorized', 'A valid demo bearer token is required.')
           }
         }
-        const path = new URL(request.url).pathname.replace(/\/$/, '')
+        if (openJoin) {
+          joins.limit()
+          return json(joins.create(await readJoin(request)), 201)
+        }
+        if (path === '/api/joins' && request.method === 'GET') return json({ joins: joins.list() })
+        if (path === '/api/members' && request.method === 'GET') return json({ members: await joins.members() })
+        const joinDecision = /^\/api\/joins\/([^/]+)\/(approve|deny|revoke)$/.exec(path)
+        if (joinDecision && request.method === 'POST') {
+          const id = decodeURIComponent(joinDecision[1])
+          const action = joinDecision[2]
+          return json(
+            action === 'deny' ? joins.deny(id) : action === 'approve' ? await joins.approve(id) : await joins.revoke(id)
+          )
+        }
+        const joinDetail = /^\/api\/joins\/([^/]+)$/.exec(path)
+        if (joinDetail && request.method === 'GET') return json(joins.get(decodeURIComponent(joinDetail[1])))
         if (path === '/api/requests' && request.method === 'POST') {
           return json(service.create(await readInput(request)), 201)
         }
@@ -116,7 +146,10 @@ export function createApprovalApi(options: ApiOptions) {
         throw new ApiError(404, 'route_not_found', 'Route not found.')
       } catch (error) {
         if (error instanceof ApiError)
-          return json({ error: { code: error.code, message: error.message } }, error.status)
+          return Response.json(
+            { error: { code: error.code, message: error.message } },
+            { status: error.status, headers: { 'cache-control': 'no-store', ...error.headers } }
+          )
         return json({ error: { code: 'internal_error', message: 'The operation failed.' } }, 500)
       }
     },

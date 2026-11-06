@@ -306,3 +306,16 @@ describe('enrollDevice with an in-memory chain', () => {
     ).rejects.toThrow(/pubkey did not round-trip/)
   })
 })
+
+it('a read-back failure retries reads without repeating a confirmed enrollment write', async () => {
+  const m = memoryEnrollChain({ tailnetName: TAILNET })
+  const progress = { txHashes: {} }
+  await expect(
+    enrollDevice(
+      { ...m, resolver: { getText: async () => null }, readbackAttempts: 1 },
+      { deviceLabel: 'lap', pubkey: 'ab'.repeat(32), progress }
+    )
+  ).rejects.toThrow('pubkey did not round-trip')
+  await enrollDevice({ ...m, readbackAttempts: 1 }, { deviceLabel: 'lap', pubkey: 'ab'.repeat(32), progress })
+  expect(m.steps.filter((step) => step === 'setText:pubkey')).toHaveLength(1)
+})

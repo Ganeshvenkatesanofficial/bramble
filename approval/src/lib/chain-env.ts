@@ -8,6 +8,11 @@ import { ringDecrypt } from '../../../admincli/src/ledger-ring'
 import type { LoadGranterKey, Signer } from '../../../admincli/src/lib'
 import { RPC_URL, tailnetName, tailnetRegistry } from '../../../sidecar/src/ens/config'
 import { createChainAdapters, type ChainAdapters } from './chain'
+import { createViemEnrollChain } from '../../../admincli/src/enroll-chain-viem'
+import { listDeviceLabels } from '../../../sidecar/src/ens/devices'
+import { deviceName } from '../../../admincli/src/lib'
+import { createJoinChain } from './join-chain'
+import type { JoinChain } from './contracts'
 import { publicClient, readDevice } from './ens-reader'
 
 type Env = Record<string, string | undefined>
@@ -113,5 +118,44 @@ export function realAdaptersFromEnv(env: Env = process.env): ChainAdapters | und
     tailnetName: tailnet,
     granterLabel,
     loadGranterKey: ringKeyLoader(ringPath),
+  })
+}
+
+/** Enrollment uses the existing software Sepolia account; ACL key decryption stays in the ring. */
+export function realJoinChainFromEnv(env: Env = process.env): JoinChain | undefined {
+  if (!env.APPROVAL_ENS_PARENT?.trim()) return undefined
+  const rawKey = required(env, 'SEPOLIA_PRIVATE_KEY')
+  const key = rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new ConfigError('SEPOLIA_PRIVATE_KEY must be 32 bytes of hex')
+  const account = sanitized('SEPOLIA_PRIVATE_KEY', 'is not a valid secp256k1 private key', () =>
+    privateKeyToAccount(key as Hex)
+  )
+  const tailnet = sanitized('BRAMBLE_TAILNET_NAME', 'is required for enrollment', () => tailnetName())
+  if (env.APPROVAL_ENS_PARENT !== tailnet) throw new ConfigError('APPROVAL_ENS_PARENT must match BRAMBLE_TAILNET_NAME')
+  const enrollChain = createViemEnrollChain({ account, publicClient, chain: sepolia })
+  return createJoinChain({
+    chain: enrollChain,
+    signer: {
+      async setText(name, key, value) {
+        const resolver = await publicClient.getEnsResolver({ name })
+        if (!resolver || resolver === ZERO_ADDRESS) throw new Error('Device resolver is unavailable.')
+        const hash = await enrollChain.setTextAt(resolver, name, key, value)
+        return { hash, async wait() {} }
+      },
+    },
+    resolver: { getText: (name, key) => publicClient.getEnsText({ name, key }) },
+    tailnetName: tailnet,
+    async members() {
+      const labels = await listDeviceLabels(publicClient)
+      return Promise.all(
+        labels.map(async (label) => {
+          const [device, meshIp] = await Promise.all([
+            readDevice(label),
+            publicClient.getEnsText({ name: deviceName(label, tailnet), key: 'mesh-ip' }),
+          ])
+          return { label, pubkey: device.pubkey, revoked: device.revoked, expiry: Number(device.expiry), meshIp }
+        })
+      )
+    },
   })
 }

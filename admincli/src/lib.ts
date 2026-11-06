@@ -266,6 +266,7 @@ export interface EnrollChain {
   deployResolver(): Promise<{ address: string; txHash: string }>
   /** True when `label` holds an unexpired registration on the tailnet registry. */
   isRegistered(label: string): Promise<boolean>
+  registeredResolver(label: string): Promise<string | null>
   register(params: { label: string; resolver: string; expirySeconds: number }): Promise<string>
   /** `setText` through a known resolver, so a lagging node cannot hide a resolver just set. */
   setTextAt(resolver: string, name: string, key: string, value: string): Promise<string>
@@ -363,7 +364,10 @@ export async function enrollDevice(deps: EnrollDeps, params: EnrollParams): Prom
     const expirySeconds = Math.floor(now / 1000) + (params.expiryYears ?? 10) * 365 * 24 * 60 * 60
     // A retry after an unconfirmed register may find it landed; the registry then holds the label.
     if (await deps.chain.isRegistered(deviceLabel)) {
-      log('   already registered; continuing')
+      if ((await deps.chain.registeredResolver(deviceLabel))?.toLowerCase() !== resolverAddress.toLowerCase()) {
+        throw new LabelRegisteredError(deviceLabel)
+      }
+      log('   registered with this enrollment resolver; continuing')
     } else {
       progress.txHashes.register = await deps.chain.register({
         label: deviceLabel,
@@ -377,9 +381,9 @@ export async function enrollDevice(deps: EnrollDeps, params: EnrollParams): Prom
   if (!progress.pubkeyWritten) {
     log('[3/4] Writing initial pubkey...')
     progress.txHashes.pubkey = await deps.chain.setTextAt(resolverAddress, fullname, 'pubkey', pubkey)
-    await readBack(deps, fullname, 'pubkey', pubkey)
     progress.pubkeyWritten = true
   }
+  await readBack(deps, fullname, 'pubkey', pubkey)
 
   if (!progress.meshCidr) {
     log('[4/4] Allocating mesh-ip...')
@@ -387,9 +391,9 @@ export async function enrollDevice(deps: EnrollDeps, params: EnrollParams): Prom
   }
   if (!progress.meshIpWritten) {
     progress.txHashes.meshIp = await deps.chain.setTextAt(resolverAddress, fullname, 'mesh-ip', progress.meshCidr)
-    await readBack(deps, fullname, 'mesh-ip', progress.meshCidr)
     progress.meshIpWritten = true
   }
+  await readBack(deps, fullname, 'mesh-ip', progress.meshCidr)
 
   log(`done. ${fullname} enrolled, resolver ${resolverAddress}, pubkey ${pubkey}, mesh-ip ${progress.meshCidr}.`)
   return {

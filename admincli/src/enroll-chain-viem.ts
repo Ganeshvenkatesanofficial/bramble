@@ -13,6 +13,7 @@ import {
   type Account,
   type Chain,
   type PublicClient,
+  type Hex,
 } from 'viem'
 import { packetToBytes } from 'viem/ens'
 import {
@@ -23,10 +24,11 @@ import {
   VERIFIABLE_FACTORY,
   registryAbi,
   tailnetRegistry,
+  tailnetName,
 } from '../../sidecar/src/ens/config'
 import { registryWriteAbi, resolverWriteAbi } from './roles'
 import { usedMeshIPs } from './mesh-ip-scan'
-import type { EnrollChain } from './lib'
+import { deviceName, type EnrollChain } from './lib'
 
 const verifiableFactoryAbi = parseAbi([
   'function deployProxy(address implementation, uint256 salt, bytes data) returns (address proxy)',
@@ -48,11 +50,18 @@ export function createViemEnrollChain(options: ViemEnrollChainOptions): EnrollCh
   const { account, publicClient } = options
   const log = options.log ?? (() => {})
   const wallet = createWalletClient({ account, chain: options.chain, transport: http(options.rpcUrl ?? RPC_URL) })
+  // A receipt timeout is not a revert. Keep its hash and check it on retry, never submit twice.
+  const submitted = new Map<string, Hex>()
 
   async function writeAndWait(label: string, args: Parameters<typeof wallet.writeContract>[0]) {
-    const hash = await wallet.writeContract(args)
-    log(`   tx (${label}): ${hash}`)
+    let hash = submitted.get(label)
+    if (!hash) {
+      hash = await wallet.writeContract(args)
+      submitted.set(label, hash)
+      log(`   tx (${label}): ${hash}`)
+    }
     const receipt = await publicClient.waitForTransactionReceipt({ hash })
+    submitted.delete(label)
     if (receipt.status !== 'success') throw new Error(`${label} reverted on-chain`)
     return { hash, receipt }
   }
@@ -88,6 +97,7 @@ export function createViemEnrollChain(options: ViemEnrollChainOptions): EnrollCh
     },
 
     async isRegistered(label) {
+      if (submitted.has(`register:${label}`)) return false
       const [, expiry] = await publicClient.readContract({
         address: tailnetRegistry(),
         abi: registryAbi,
@@ -97,8 +107,12 @@ export function createViemEnrollChain(options: ViemEnrollChainOptions): EnrollCh
       return expiry > BigInt(Math.floor(Date.now() / 1000))
     },
 
+    async registeredResolver(label) {
+      return publicClient.getEnsResolver({ name: deviceName(label, tailnetName()) })
+    },
+
     async register({ label, resolver, expirySeconds }) {
-      const { hash } = await writeAndWait('register', {
+      const { hash } = await writeAndWait(`register:${label}`, {
         address: tailnetRegistry(),
         abi: registryWriteAbi,
         functionName: 'register',
@@ -117,7 +131,7 @@ export function createViemEnrollChain(options: ViemEnrollChainOptions): EnrollCh
     },
 
     async setTextAt(resolver, name, key, value) {
-      const { hash } = await writeAndWait(`setText(${key})`, {
+      const { hash } = await writeAndWait(`setText:${resolver}:${name}:${key}:${value}`, {
         address: resolver as `0x${string}`,
         abi: resolverWriteAbi,
         functionName: 'setText',
