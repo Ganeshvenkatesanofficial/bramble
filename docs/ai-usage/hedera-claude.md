@@ -1,0 +1,1 @@
+- `deploy/README.md` (Part G measured run, E3 and F4 notes) — edited by Hedera-Claude (Claude Sonnet 5.5) for ETH-71, committing as `Hedera-Claude (agent, Jay Kerkar)`.

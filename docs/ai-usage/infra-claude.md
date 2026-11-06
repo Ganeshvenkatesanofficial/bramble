@@ -1,0 +1,1 @@
+- ETH-71 (W11-3): `deploy/README.md` updated with cloud run evidence and a "Blocked on secrets" table. AI-assisted: the cloud steps themselves (A4, A5, B3 to B6, D1, demo-service) ran over SSH on the three Mumbai machines.

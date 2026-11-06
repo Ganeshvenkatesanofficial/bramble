@@ -58,6 +58,7 @@ Each agent commits under the git identity shown here. Confirm yours with `git co
 | Core-Sol | Core and console (cross-family reviewer) | to be added by Core-Sol | Open |
 | Net-Claude | Network (W8a STUN) | `Net-Claude (agent, Chaitanya Kelkar)` | Verified from commit authorship on `net-claude/eth-36-stun-binding` |
 | Infra-Claude | Demo and infra (took over ETH-30) | `Infra-Claude (agent, Aayush Nair)` | Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026 |
+| Hedera-Claude | Demo and infra (took over ETH-71 from Infra-Claude) | `Hedera-Claude (agent, Jay Kerkar)` | Verified from `git var GIT_AUTHOR_IDENT` on 6 Nov 2026 |
 | Other lane agents | Network, Tor, Hedera, Demo and infra | to be added by each agent | Open |
 
 ### Paths
@@ -170,7 +171,11 @@ Each agent commits under the git identity shown here. Confirm yours with `git co
 | `docs/adr/0013-tor-transport.md`, Tor section of `sidecar/README.md` | ETH-59 | Keystone | Documentation |
 | `sidecar/src/ens/client.ts`, `sidecar/src/payments/client.ts`, `sidecar/src/payments/datarelay.ts`, `sidecar/test/ens-tor.test.ts`, `sidecar/test/helpers/fake-tor.ts`, Tor wiring in `sidecar/test/device.test.ts` and `sidecar/test/hedera-signer-network.test.ts`, `brambled/admission/tor_startup_test.go`, `brambled/sidecar/client.go` (per-operation budgets), `brambled/sidecar/client_budget_test.go`, `sidecar/src/ens/devices.ts` (required client), `sidecar/src/routes/devices.ts`, `admincli/src/enroll.ts`, `admincli/src/mesh-ip-scan.ts`, `admincli/src/mesh-ip-scan.test.ts`, `admincli/package.json`, `sidecar/src/serve.ts`, `sidecar/src/index.ts` (server timeout), `sidecar/test/serve.test.ts`, `sidecar/test/fixtures/slow-bun-server.ts` | ETH-60 | Tor-Claude | Code, tests |
 | `sidecar/src/tor/index.ts`, `sidecar/test/tor.test.ts`, `docs/adr/0013-tor-transport.md`, `docs/AI_USAGE.md` | ETH-59 | Tor-Astra | Shutdown cleanup races, regression tests, documentation |
+| `sidecar/scripts/revocation-poll.ts`, the `createEnsClient` seam and optional `client` argument in `sidecar/src/ens/client.ts`, `docs/measurements/2026-11-06-revocation-over-tor.md`, `README.md` ("CROPS", W9 row, revocation sentence), Open items in `docs/adr/0013-tor-transport.md` | ETH-61 | Tor-Claude | Measurement script, documentation |
 | `docs/adr/0014-hcs-audit-trail.md`, `docs/spikes/0014-hcs-audit-trail.md`, `hedera-audit/test/freeze-round-trip.ts`, `hedera-audit/test/sdk-freeze.test.ts`, `docs/AI_USAGE.md` | ETH-66 | Hedera-Sol (first draft), Infra-Claude (amendment, test) | Draft design, offline SDK check, documentation |
+| `deploy/scripts/software-ring.sh`, `BRAMBLE_RING_CLI` override in `admincli/src/ledger-ring.ts` | ETH-71 | Hedera-Claude | Code (software stand-in for the Key Ring on the cloud admin machine) |
+| `admincli/src/enroll.ts` (read-back retry after each write) | ETH-71 | Infra-Claude, Hedera-Claude | Code |
+| `brambled/gateway/server.go` (`gatewayDecisionDeadline` 20 s to 90 s) | ETH-71 | Hedera-Claude | Code |
 
 ## Mumbai formatting gate correction (ETH-75)
 

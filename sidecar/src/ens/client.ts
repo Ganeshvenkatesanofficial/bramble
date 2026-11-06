@@ -23,11 +23,17 @@ const hackathonSepolia = {
 // global fetch, which would send the node's IP to an off-chain gateway;
 // Bramble's names resolve on-chain through Permissioned Resolvers, so no
 // lookup is lost.
-export const publicClient = createPublicClient({
-  chain: hackathonSepolia,
-  transport: http(RPC_URL, { fetchFn: torFetch('ens'), timeout: 60_000 }),
-  ccipRead: false,
-})
+export function createEnsClient(fetchFn: typeof fetch) {
+  return createPublicClient({
+    chain: hackathonSepolia,
+    transport: http(RPC_URL, { fetchFn, timeout: 60_000 }),
+    ccipRead: false,
+  })
+}
+
+export type EnsClient = ReturnType<typeof createEnsClient>
+
+export const publicClient = createEnsClient(torFetch('ens'))
 
 export interface DeviceRecord {
   fullname: string
@@ -75,23 +81,25 @@ export interface DeviceRecord {
   meshIP: string | null
 }
 
-export async function resolveDevice(label: string): Promise<DeviceRecord> {
+// `client` defaults to the Tor-backed client. Only scripts/revocation-poll.ts
+// passes another one, to time the same reads without Tor.
+export async function resolveDevice(label: string, client: EnsClient = publicClient): Promise<DeviceRecord> {
   const fullname = normalize(`${label}.${tailnetName()}`)
 
   // Text records resolve across the whole naming hierarchy automatically via
   // the Universal Resolver — proven end to end by Gate 0.3 ("subname text
   // record round-trips through full hierarchy").
-  const pubkey = await publicClient.getEnsText({ name: fullname, key: 'pubkey' })
-  const revokedText = await publicClient.getEnsText({ name: fullname, key: 'revoked' })
-  const aclText = await publicClient.getEnsText({ name: fullname, key: 'acl' })
-  const aclGrantersText = await publicClient.getEnsText({ name: fullname, key: 'acl-granters' })
-  const meshIP = await publicClient.getEnsText({ name: fullname, key: 'mesh-ip' })
+  const pubkey = await client.getEnsText({ name: fullname, key: 'pubkey' })
+  const revokedText = await client.getEnsText({ name: fullname, key: 'revoked' })
+  const aclText = await client.getEnsText({ name: fullname, key: 'acl' })
+  const aclGrantersText = await client.getEnsText({ name: fullname, key: 'acl-granters' })
+  const meshIP = await client.getEnsText({ name: fullname, key: 'mesh-ip' })
   // getEnsResolver's own type says non-nullable, but an unset name returns
   // the zero address rather than throwing or returning null (same "falsy
   // check catches it" convention already used at every other
   // getEnsResolver call site in this repo, e.g. set-acl.ts) — normalize to
   // null here so the dashboard doesn't have to know that quirk too.
-  const resolverAddressRaw = await publicClient.getEnsResolver({ name: fullname })
+  const resolverAddressRaw = await client.getEnsResolver({ name: fullname })
   const resolverAddress =
     resolverAddressRaw && resolverAddressRaw !== '0x0000000000000000000000000000000000000000'
       ? resolverAddressRaw
@@ -104,7 +112,7 @@ export async function resolveDevice(label: string): Promise<DeviceRecord> {
   // labelhash of the name's own label, unlike ownerOf() which requires the
   // exact current (version-matched) token ID.
   const labelhash = BigInt(keccak256(toHex(label)))
-  const [status, expiry, , tokenId] = await publicClient.readContract({
+  const [status, expiry, , tokenId] = await client.readContract({
     address: tailnetRegistry(),
     abi: registryAbi,
     functionName: 'getState',
