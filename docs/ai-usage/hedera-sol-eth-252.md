@@ -42,3 +42,11 @@ Open: the operator-only admin CLI entrypoints still print raw failure objects,
 which can include a credentialed RPC URL. This is reported as P2 diagnostic
 hardening; no operator command with live credentials was run. Deployment artifact
 ownership and live Pi isolation also remain reported follow-ups.
+
+Continuation on 6 November 2026: merged `origin/hackathon` at `c8ca61b`
+and scanned its four-file documentation delta with local, value-redacted
+private-key, provider-token, JWT, credential-assignment, URL, hex, and entropy
+checks. No candidates were detected. No live credential file was inspected.
+Read from source: the added manual dry-run guide limits token handling to the
+operator workstation and keeps the human approval step explicit. Live isolation
+remains Open.
