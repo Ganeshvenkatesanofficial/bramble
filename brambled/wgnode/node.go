@@ -274,6 +274,11 @@ type PeerInfo struct {
 	// brambled/datarelay.WaitForStall): no per-packet WireGuard protocol
 	// awareness needed, just "is this number still moving."
 	RxBytes int64
+	// Endpoint is the peer's current UDP endpoint ("ip:port") from the
+	// UAPI `endpoint=` field, or "" before one is known. A local launcher
+	// compares it against known relay addresses to show whether the path
+	// to this peer is direct or relayed.
+	Endpoint string
 }
 
 // Handshaked reports whether this peer has ever completed a handshake.
@@ -316,6 +321,8 @@ func (n *Node) Peers() ([]PeerInfo, error) {
 			cur.LastHandshakeUnixNs += nsecs
 		case "rx_bytes":
 			cur.RxBytes, _ = strconv.ParseInt(value, 10, 64)
+		case "endpoint":
+			cur.Endpoint = value
 		}
 	}
 	return peers, nil

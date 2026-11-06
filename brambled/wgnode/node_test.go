@@ -103,5 +103,15 @@ func TestGate1_1_PeerRejectsUnregisteredKey(t *testing.T) {
 		if !pingUntil(t, peer, underTestAddr, 8*time.Second) {
 			t.Fatal("node under test refused a handshake from a now-registered key")
 		}
+
+		peers, err := underTest.Peers()
+		if err != nil {
+			t.Fatalf("reading node-under-test peer table: %v", err)
+		}
+		for _, p := range peers {
+			if p.PublicKeyHex == peerPub && p.Endpoint != peerEndpoint.String() {
+				t.Fatalf("peer endpoint = %q, want %q", p.Endpoint, peerEndpoint)
+			}
+		}
 	})
 }

@@ -138,6 +138,11 @@ type Server struct {
 	PeerTable PeerTable
 	// EndpointSource supplies the node's in-memory STUN observation.
 	EndpointSource interface{ EndpointStatus() wgnode.EndpointStatus }
+	// DataRelays is the data-relay pool this node uses, label to relay
+	// sidecar URL, from -data-relay flags and ENS discovery alike. A caller
+	// that sees a peer's WireGuard endpoint on one of these hosts knows the
+	// path is relayed. Set once at startup; not modified afterwards.
+	DataRelays map[string]string
 
 	admission admissionCache
 	activity  activityBuffer
@@ -184,6 +189,8 @@ type PeerStatus struct {
 	Handshaked          bool     `json:"handshaked"`
 	LastHandshakeUnixNs int64    `json:"lastHandshakeUnixNs"`
 	RxBytes             int64    `json:"rxBytes"`
+	// Endpoint is the peer's current WireGuard UDP endpoint, if known.
+	Endpoint string `json:"endpoint,omitempty"`
 }
 
 func (s *Server) wgPeersByPubkey() (map[string]wgnode.PeerInfo, error) {
@@ -217,6 +224,7 @@ func (s *Server) handlePeers(w http.ResponseWriter, _ *http.Request) {
 			ps.Handshaked = wp.Handshaked()
 			ps.LastHandshakeUnixNs = wp.LastHandshakeUnixNs
 			ps.RxBytes = wp.RxBytes
+			ps.Endpoint = wp.Endpoint
 		}
 		out = append(out, ps)
 	}
@@ -315,7 +323,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// Handler returns the mux mounting /peers, /activity, /ping, /endpoint.
+// Handler returns the mux mounting /peers, /activity, /ping, /endpoint, /relays.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /endpoint", func(w http.ResponseWriter, _ *http.Request) {
@@ -324,6 +332,9 @@ func (s *Server) Handler() http.Handler {
 			state = s.EndpointSource.EndpointStatus()
 		}
 		writeJSON(w, state)
+	})
+	mux.HandleFunc("GET /relays", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, map[string]map[string]string{"dataRelays": s.DataRelays})
 	})
 	mux.HandleFunc("/peers", s.handlePeers)
 	mux.HandleFunc("/activity", s.handleActivity)
