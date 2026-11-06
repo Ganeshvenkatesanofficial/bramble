@@ -244,6 +244,8 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0(@types/node@26.4.1)(vite@8.2.2(@types/node@26.4.1)(jiti@2.7.0)(terser@5.51.2))
 
+  node-daemon: {}
+
   relay: {}
 
   relay-sidecar:

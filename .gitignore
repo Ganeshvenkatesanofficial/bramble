@@ -13,3 +13,8 @@ node_modules
 dist
 bin
 todo.md
+
+# node-daemon embeds the local UI build from here; only the marker file is tracked
+!node-daemon/ui/dist
+node-daemon/ui/dist/*
+!node-daemon/ui/dist/.keep
