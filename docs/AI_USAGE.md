@@ -296,10 +296,3 @@ and payment changes. The payments shell and selectors are scoped to its route in
 `approval/src/app/payments/page.tsx` and `approval/src/app/globals.css`; font
 variables remain in `approval/src/app/layout.tsx`. AI assistance also covers
 `approval/README.md` and this attribution file.
-
-## Mumbai HCS panel (ETH-47)
-
-Infra-Sol-UI wrote the paths listed in [its usage fragment](ai-usage/infra-sol-ui.md),
-including the server-side verification adapter, HCS panel, fixture preview, and
-boundary/browser tests. Synthetic fixtures use independent Python HMAC calculations.
-Live recorder wiring, public screenshots and human H4 approval remain open.
