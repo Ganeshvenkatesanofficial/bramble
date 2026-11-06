@@ -39,3 +39,22 @@ Paths written:
 Merge `origin/hackathon` into the existing PR branch without rewriting history.
 Keep the activity feed's failed-revoke timestamp cleanup and the approval
 service's signer failure logging.
+
+## ETH-214: review round 1 fixes
+
+Demo beats: 2 (request and approve), 5 (revoke).
+
+Paths written:
+
+- `approval/src/lib/service.ts`
+- `deploy/env/admin.env.example`
+- `docs/ai-usage/core-sol-eth-214.md`
+
+Comment out the five optional environment entries so the system unit keeps its
+default PATH. Mask WebSocket URLs in signer diagnostics as well as HTTP URLs.
+The existing merge preserves failed-revoke timestamp cleanup before logging.
+
+Verification logs written outside git:
+
+- `/home/anonjr/bramble-work/status/eth-214-review-fixes-verify.log`
+- `/home/anonjr/bramble-work/status/eth-214-review-fixes-access-flow.log`

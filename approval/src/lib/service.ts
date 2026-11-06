@@ -19,7 +19,7 @@ function logSignerFailure(operation: 'grant' | 'revoke', error: unknown): void {
   const raw =
     error instanceof Error ? ((error as { shortMessage?: string }).shortMessage ?? error.message) : String(error)
   const message = raw
-    .replace(/https?:\/\/\S+/g, '<url>')
+    .replace(/(?:https?|wss?):\/\/\S+/g, '<url>')
     .replace(/\s+/g, ' ')
     .slice(0, 300)
   const name = error instanceof Error ? error.name : typeof error
