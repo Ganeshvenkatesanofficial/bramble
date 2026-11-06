@@ -22,7 +22,7 @@ import (
 
 // message is the wire protocol: newline-delimited JSON over TCP.
 //
-//	{"type":"hello","pubkey":"<hex>","token":"<rendezvous token, omitted if unmetered>"}  client -> relay
+//	{"type":"hello","pubkey":"<hex>","to":"<peer hex, optional>","token":"<rendezvous token, omitted if unmetered>"}  client -> relay
 //	{"type":"offer","to":"<peer pubkey>","candidate":"<ip:port>"}      client -> relay
 //	{"type":"offer","from":"<sender pubkey>","candidate":"<ip:port>"}  relay -> client
 //	{"type":"ack"}                                                     relay -> client (offer was forwarded)
@@ -69,19 +69,27 @@ func (p *peer) send(m message) error {
 // for, a metering concern (docs/adr/0007), never an admission one.
 type Server struct {
 	mu       sync.Mutex
-	peers    map[string]*peer
+	peers    map[peerRoute]*peer
 	verifier *tokenVerifier // nil means unmetered — every hello is accepted, as before
 }
 
+// A node opens one exchange per remote peer. Its public key alone cannot
+// identify which connection should receive that remote peer's offer.
+// An empty remote keeps the legacy unscoped registration.
+type peerRoute struct {
+	pubkey string
+	remote string
+}
+
 func NewServer() *Server {
-	return &Server{peers: make(map[string]*peer)}
+	return &Server{peers: make(map[peerRoute]*peer)}
 }
 
 // NewMeteredServer is NewServer with rendezvous-token enforcement on every
 // hello. secret must match whatever relay-sidecar was started with — see
 // paySidecar in sidecar.go, which owns generating and distributing it.
 func NewMeteredServer(secret []byte) *Server {
-	return &Server{peers: make(map[string]*peer), verifier: newTokenVerifier(secret)}
+	return &Server{peers: make(map[peerRoute]*peer), verifier: newTokenVerifier(secret)}
 }
 
 func (s *Server) Serve(ln net.Listener) error {
@@ -101,13 +109,14 @@ func (s *Server) handle(conn net.Conn) {
 	dec := json.NewDecoder(conn)
 
 	var pubkey string
+	var route peerRoute
 	defer func() {
 		if pubkey == "" {
 			return
 		}
 		s.mu.Lock()
-		if s.peers[pubkey] == self {
-			delete(s.peers, pubkey)
+		if s.peers[route] == self {
+			delete(s.peers, route)
 		}
 		s.mu.Unlock()
 	}()
@@ -126,20 +135,30 @@ func (s *Server) handle(conn net.Conn) {
 					return
 				}
 			}
-			pubkey = m.Pubkey
 			s.mu.Lock()
-			s.peers[pubkey] = self
+			if s.peers[route] == self {
+				delete(s.peers, route)
+			}
+			pubkey = m.Pubkey
+			route = peerRoute{pubkey: pubkey, remote: m.To}
+			s.peers[route] = self
 			s.mu.Unlock()
 
 		case "offer":
 			s.mu.Lock()
-			target, ok := s.peers[m.To]
+			target, ok := s.peers[peerRoute{pubkey: m.To, remote: pubkey}]
+			if !ok {
+				target, ok = s.peers[peerRoute{pubkey: m.To}]
+			}
 			s.mu.Unlock()
 			if !ok {
 				_ = self.send(message{Type: "error", Message: fmt.Sprintf("peer %q not registered", m.To)})
 				continue
 			}
-			_ = target.send(message{Type: "offer", From: pubkey, Candidate: m.Candidate})
+			if err := target.send(message{Type: "offer", From: pubkey, Candidate: m.Candidate}); err != nil {
+				_ = self.send(message{Type: "error", Message: "peer disconnected"})
+				continue
+			}
 			_ = self.send(message{Type: "ack"})
 
 		default:

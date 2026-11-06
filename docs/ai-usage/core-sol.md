@@ -2,7 +2,7 @@
 
 ## ETH-293: concurrent rendezvous exchanges (demo beats 3 and 4)
 
-Paths written: `relay/main.go`, `relay/concurrent_exchange_test.go`, `brambled/rendezvous/client.go`, `brambled/concurrent_sponsored_relay_test.go`, `docs/reference/endpoint-exchange.md`, and this file.
+Paths written: `relay/main.go`, `relay/concurrent_exchange_test.go`, `brambled/rendezvous/client.go`, `brambled/rendezvous/client_test.go`, `brambled/concurrent_sponsored_relay_test.go`, `docs/reference/endpoint-exchange.md`, and this file.
 
 Verified: a real-relay regression fails at pristine `970461c` because a second gateway connection takes the first connection's offers. Pair-scoped registrations pass that regression with real WireGuard and HTTP 200. Registry admission is a fixture. Live public-device acceptance remains Open; no runtime or ACL change ran for this code-only fix.
 

@@ -10,7 +10,15 @@ Reference for how two Bramble nodes swap their UDP endpoints through the paid re
 
 ## Carrier
 
-The announcement rides in the existing `candidate` field of the relay's `offer` message. The relay wire protocol does not change.
+The announcement rides in the existing `candidate` field of the relay's `offer` message.
+
+An exchange registers both public keys in `hello`. The optional `to` field identifies the remote peer, so simultaneous exchanges under the same node key receive the correct offers.
+
+```json
+{"type":"hello","pubkey":"<own pubkey hex>","to":"<peer pubkey hex>","token":"<rendezvous token>"}
+```
+
+The relay routes an offer to the registration whose `pubkey` matches the offer's `to` and whose `to` matches the sender. If no such registration exists, it tries a legacy registration with no `to`. Legacy clients remain supported. Old relays ignore the new hello field and retain their single-connection limitation. Deploy the updated relay and node clients together to support simultaneous peer exchanges. This routing hint does not grant admission or change token metering.
 
 ```json
 {"type":"offer","to":"<peer pubkey hex>","candidate":"<announcement>"}
