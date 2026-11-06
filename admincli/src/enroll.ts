@@ -79,6 +79,18 @@ async function main() {
     return receipt
   }
 
+  // A load-balanced RPC can serve the read from a node that has not seen the
+  // block yet (found live, 6 Nov 2026), so poll briefly before declaring a mismatch.
+  async function readTextEventually(name: string, key: string, expected: string) {
+    let value: string | null = null
+    for (let attempt = 0; attempt < 10; attempt++) {
+      value = await publicClient.getEnsText({ name, key })
+      if (value === expected) break
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+    }
+    return value
+  }
+
   try {
     console.log(`[1/4] Deploying a dedicated resolver for ${deviceLabel}...`)
     const version = BigInt(Date.now()) * 1000n + BigInt(Math.floor(Math.random() * 1000))
@@ -129,7 +141,7 @@ async function main() {
       args: [dnsName, 'pubkey', pubkey],
     })
 
-    const readBack = await publicClient.getEnsText({ name: fullname, key: 'pubkey' })
+    const readBack = await readTextEventually(fullname, 'pubkey', pubkey)
     if (readBack !== pubkey) throw new Error(`pubkey did not round-trip: got ${JSON.stringify(readBack)}`)
 
     console.log('\n[4/4] Allocating mesh-ip...')
@@ -141,7 +153,7 @@ async function main() {
       args: [dnsName, 'mesh-ip', meshIP],
     })
 
-    const meshIPReadBack = await publicClient.getEnsText({ name: fullname, key: 'mesh-ip' })
+    const meshIPReadBack = await readTextEventually(fullname, 'mesh-ip', meshIP)
     if (meshIPReadBack !== meshIP) throw new Error(`mesh-ip did not round-trip: got ${JSON.stringify(meshIPReadBack)}`)
 
     console.log(
