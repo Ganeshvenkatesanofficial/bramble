@@ -89,3 +89,26 @@ Additional local evidence paths written in this wake:
 - `/home/anonjr/bramble-work/status/eth-243-release-auth-verify.log`
 - `/home/anonjr/bramble-work/status/eth-243-release-auth-receipts.json`
 - `/home/anonjr/.cache/agent-tmp/eth-243-post-release-handoff.md` (handoff references the saved task report)
+
+
+## ETH-243 running-slot validation
+
+Demo beats 1, 2, 3 and 5. Verified two isolated Pi access-lifecycle runs at
+15:51–15:57 UTC on 6 November 2026. Full beat 3 payment/feed acceptance stays
+Open on ETH-294. Both requests are revoked; Pi/MCP and the temporary tunnel
+are gone. The running pair is handed to ETH-271 for measurements and final stop.
+
+Paths written:
+
+- `agent-mcp/PI.md`
+- `agent-mcp/README.md`
+- `deploy/README.md`
+- `docs/ai-usage/hedera-sol.md`
+- `/home/anonjr/bramble-work/status/eth-243/running-slot.py`
+- `/home/anonjr/bramble-work/status/eth-243/summarize-running-slot.py`
+- `/home/anonjr/bramble-work/status/eth-243/running-slot/` (transcripts, timings, receipts, feed metadata)
+- `/home/anonjr/bramble-work/status/eth-243/running-slot-evidence.tar.gz`
+- `/home/anonjr/bramble-work/status/eth-243-running-slot-verify.log`
+
+No launcher, MCP implementation, tests, node configuration, or credentials change.
+Round 2 remains bound to `91f7ca4`; merge-captain disposition covers later docs.
