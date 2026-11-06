@@ -16,6 +16,10 @@ AI assistance also covered implementation and tests, not only the planning docum
 - **`admincli/src/lib.ts`, `admincli/src/lib-viem.ts`, `admincli/src/lib.test.ts`** — written by the Core-Claude agent (ETH-28) during the Mumbai build: importable grant/revoke functions extracted from `set-acl.ts`, `revoke-acl.ts` and `revoke.ts`, the viem-backed `Resolver`/`Signer`, and in-memory unit tests. The same change rewrote `admincli/src/set-acl.ts`, `revoke-acl.ts` and `revoke.ts` as thin wrappers and removed `admincli/src/acl-grant.ts`.
 - **`dashboard/`** — the read-only application UI and API routes.
 
+Mumbai-hackathon agent work (paths written by agents; commits use each agent's own git identity):
+
+- **`docs/W9a_NETWORK_CALL_AUDIT.md`, `sidecar/test/hedera-signer-network.test.ts`, `sidecar/test/helpers/network-guard.ts`** — W9a network-call audit of the Hedera client signer and `brambled` (ETH-40), written by Tor-Claude (Claude Sonnet 5.5).
+
 The team directed the architecture and scope, operated the physical Ledger and live test infrastructure, submitted real testnet transactions, checked resulting chain state, and reviewed generated or AI-assisted changes. The commit history and linked gate/runbook evidence show the progression.
 
 Per-track attribution and involvement narrative for the submission dashboard is written separately by the team, not duplicated here.
