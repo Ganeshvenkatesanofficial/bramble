@@ -240,3 +240,15 @@ and payment changes. The payments shell and selectors are scoped to its route in
 `approval/src/app/payments/page.tsx` and `approval/src/app/globals.css`; font
 variables remain in `approval/src/app/layout.tsx`. AI assistance also covers
 `approval/README.md` and this attribution file.
+
+ETH-35 (live activity feed) was written with AI assistance (Core-Claude). Paths:
+`approval/src/lib/activity.ts`, `approval/src/lib/payments-handler.ts`,
+`approval/src/hooks/use-activity.ts`, `approval/src/components/activity-feed.tsx`,
+`approval/src/components/approval-console.tsx`, `approval/src/lib/{api,service,contracts}.ts`,
+`approval/src/app/api/{[...path],payments}/route.ts`, `approval/src/app/globals.css`,
+`approval/test/activity.test.ts`, `approval/test/fixtures/activity-status.json`,
+`approval/e2e/{console.spec.ts,memory-server.ts}`, `approval/README.md`,
+`brambled/statusapi/{server.go,server_test.go,activity_contract_test.go}`,
+`dashboard/README.md`, and this entry. The feed adds read-only HTTP reads and
+no write path. Human H4 screenshot approval and a live two-machine cut-off
+measurement remain required.
