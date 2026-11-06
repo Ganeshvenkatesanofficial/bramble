@@ -201,3 +201,9 @@ Paths written in the UI and evidence slice:
 
 The screenshot check caught repeated onboarding panels from duplicate sibling
 keys. A browser count assertion reproduces the defect before the key correction.
+
+Implementation review: Standards found no documented violation and one optional
+duplicated-validator smell. Spec found numeric peer endpoints were misclassified
+against DNS-named relays. A failing API test reproduces that issue; bounded
+server-side DNS resolution fixes it and keeps unresolved paths unknown.
+The network module also avoids importing browser fetch types into server consumers.

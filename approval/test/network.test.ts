@@ -53,6 +53,7 @@ test('device and relay probes report their actual measurement, reject arbitrary 
   let failed = false
   const source = createNetworkSource({
     baseUrl: () => 'http://status.test',
+    resolveHost: async () => ['192.0.2.20'],
     fetchImpl: async (url) => {
       const path = new URL(String(url)).pathname
       if (path === '/peers') return Response.json([peer])
@@ -136,4 +137,22 @@ test('a new pending request cannot hide an existing grant, and another namespace
       .grants.map((grant: { state: string }) => grant.state)
   ).toEqual(['approved', 'pending'])
   expect(view.nodes.find((node: { label: string }) => node.label === 'agent-1.other.eth').grants).toEqual([])
+})
+
+test('numeric WireGuard endpoints match DNS-named relays, and unresolved relays leave paths unknown', async () => {
+  let resolved = true
+  const api = createApprovalApi({
+    token: () => 'network-test-only',
+    network: createNetworkSource({
+      baseUrl: () => 'http://status.test',
+      resolveHost: async () => (resolved ? ['192.0.2.10'] : []),
+      fetchImpl: async (url) =>
+        Response.json(url.pathname === '/peers' ? [peer] : { dataRelays: { 'relay-eu': 'http://relay.test:8080' } }),
+    }),
+  })
+  const view = await (await api.handle(apiRequest('/network'))).json()
+  expect(view.links).toContainEqual({ from: 'peer:laptop.bramble.eth', to: 'relay:relay-eu', path: 'relayed' })
+  resolved = false
+  const uncertain = await (await api.handle(apiRequest('/network'))).json()
+  expect(uncertain.nodes.find((node: { kind: string }) => node.kind === 'device').path).toBe('unknown')
 })

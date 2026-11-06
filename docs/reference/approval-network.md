@@ -34,6 +34,8 @@ An admitted peer whose endpoint host matches a configured relay host has a
 `relayed` link through that relay. With a complete relay table, an unmatched
 observed endpoint is `direct`. Missing endpoints or unavailable relay discovery
 produce `unknown`. Non-admitted or unobserved devices have no observed link.
+The server resolves relay DNS names with bounded A/AAAA lookups. Failed relay
+resolution keeps unmatched paths `unknown`.
 Host matching cannot distinguish a direct peer colocated on a relay host from
 a relay allocation. A line never proves reachability. Handshake timestamps are
 the gateway's last recorded WireGuard handshake, not a freshness guarantee.

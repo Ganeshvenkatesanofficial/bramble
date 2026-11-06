@@ -1,7 +1,11 @@
 import { ApiError } from './contracts'
 import { readLimited, type SourceState } from './activity'
-import type { RequestView } from './console-api'
+import type { ApprovalService } from './service'
 import type { JoinRecord } from './contracts'
+import { Resolver } from 'node:dns/promises'
+import { isIP } from 'node:net'
+
+type RequestView = ReturnType<ApprovalService['get']>
 
 type Path = 'direct' | 'relayed' | 'unknown' | 'none'
 export interface NetworkNode {
@@ -48,7 +52,7 @@ function httpUrl(raw: string): URL {
 function endpointHost(raw: unknown): string | undefined {
   if (typeof raw !== 'string' || !raw) return undefined
   try {
-    return new URL(`http://${raw}`).hostname
+    return new URL(`http://${raw}`).hostname.replace(/^\[|\]$/g, '')
   } catch {
     return undefined
   }
@@ -62,13 +66,20 @@ function handshake(raw: unknown): string | null {
 /** Reads only the configured gateway's status surface. No private addresses reach the browser. */
 export function createNetworkSource(options: {
   baseUrl: () => string | undefined
-  fetchImpl?: (input: URL | RequestInfo, init?: RequestInit) => Promise<Response>
+  fetchImpl?: (input: URL, init?: RequestInit) => Promise<Response>
+  resolveHost?: (host: string) => Promise<string[]>
   timeoutMs?: number
 }): NetworkSource {
   const fetchImpl = options.fetchImpl ?? fetch
+  const resolver = new Resolver({ timeout: 1000, tries: 1 })
+  const resolveHost =
+    options.resolveHost ??
+    (async (host: string) => {
+      const results = await Promise.allSettled([resolver.resolve4(host), resolver.resolve6(host)])
+      return results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
+    })
   async function get(url: URL, init?: RequestInit): Promise<unknown> {
     const response = await fetchImpl(url, {
-      cache: 'no-store',
       redirect: 'error',
       signal: AbortSignal.timeout(options.timeoutMs ?? 3000),
       ...init,
@@ -95,7 +106,7 @@ export function createNetworkSource(options: {
       (row): row is Record<string, unknown> =>
         object(row) && validLabel(row.label) && typeof row.authorized === 'boolean'
     )
-    const relays: { label: string; url: URL }[] = []
+    const relays: { label: string; url: URL; hosts: string[] }[] = []
     let relayState: SourceState = 'unavailable'
     if (
       relaysResult.status === 'fulfilled' &&
@@ -105,14 +116,25 @@ export function createNetworkSource(options: {
       const entries = Object.entries(relaysResult.value.dataRelays ?? {})
       if (entries.length <= 50) {
         relayState = 'ok'
-        for (const [label, value] of entries) {
-          try {
-            if (!validLabel(label) || typeof value !== 'string') throw new Error('Invalid relay')
-            relays.push({ label, url: httpUrl(value) })
-          } catch {
-            relayState = 'unavailable'
-          }
-        }
+        await Promise.all(
+          entries.map(async ([label, value]) => {
+            try {
+              if (!validLabel(label) || typeof value !== 'string') throw new Error('Invalid relay')
+              const url = httpUrl(value)
+              const hostname = url.hostname.replace(/^\[|\]$/g, '')
+              const hosts = isIP(hostname) ? [hostname] : (await resolveHost(hostname)).filter((host) => isIP(host))
+              if (!hosts.length) relayState = 'unavailable'
+              relays.push({
+                label,
+                url,
+                hosts: [hostname, ...hosts.map((host) => endpointHost(isIP(host) === 6 ? `[${host}]` : host)!)],
+              })
+            } catch {
+              relayState = 'unavailable'
+            }
+          })
+        )
+        relays.sort((a, b) => a.label.localeCompare(b.label))
       }
     }
     return { base, peers, relays, relayState }
@@ -156,7 +178,7 @@ export function createNetworkSource(options: {
         const usedRelays = new Set<string>()
         for (const peer of data.peers) {
           const host = endpointHost(peer.endpoint)
-          const relay = host ? data.relays.find((relay) => relay.url.hostname === host) : undefined
+          const relay = host ? data.relays.find((relay) => relay.hosts.includes(host)) : undefined
           const path: Path = !peer.authorized
             ? 'none'
             : relay
