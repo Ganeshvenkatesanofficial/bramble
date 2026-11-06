@@ -40,7 +40,7 @@ At `pre-mumbai` Bramble already had: userspace WireGuard nodes in Go (`brambled/
 
 ## ENS: ENSv2 in an existing project
 
-Bramble uses an ENSv2 Permissioned Registry as the network's authorization source. The demo tailnet is `bramble-dev-c91e55e9.eth` on Sepolia. Each device is a subname with its own Permissioned Resolver. Enhanced Access Control gives separate accounts narrow rights for enrollment, key rotation, revocation, access rules and relay registration. Access records hold digests of service names, never plaintext. Each peer re-resolves the registry and updates its own WireGuard peer table, so a changed record changes live access without restarting anything. Relay endpoints sit in a separate registry, so device records never publish topology.
+Bramble uses an ENSv2 Permissioned Registry as the network's authorization source. The demo tailnet is `bramble-mumbai-20261107.eth` on Sepolia. Each device is a subname with its own Permissioned Resolver. Enhanced Access Control gives separate accounts narrow rights for enrollment, key rotation, revocation, access rules and relay registration. Access records hold digests of service names, never plaintext. Each peer re-resolves the registry and updates its own WireGuard peer table, so a changed record changes live access without restarting anything. Relay endpoints sit in a separate registry, so device records never publish topology.
 
 **New for Mumbai:** the node sidecar reads ENS through Tor (`torFetch('ens')`), with CCIP-Read disabled so no off-chain lookup bypasses that transport. The RPC provider no longer sees node IP addresses. It still sees names, requested records and timing.
 
