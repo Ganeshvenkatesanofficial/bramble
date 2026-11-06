@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+
 import { useState } from 'react'
 import { useAdmin } from '../hooks/use-admin'
 import { useBrambleState } from '../hooks/use-bramble'
@@ -31,7 +33,7 @@ export function LocalApp() {
       <header className="nav">
         <div className="nav-inner">
           <span className="brand">
-            <span className="brand-dot" />
+            <Image className="brand-mark" src="/bramble-logo.png" alt="" width={28} height={28} unoptimized />
             bramble
           </span>
           {isAdmin && (

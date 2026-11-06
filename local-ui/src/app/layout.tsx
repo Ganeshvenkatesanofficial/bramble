@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import './globals.css'
 
 export const metadata: Metadata = {
+  icons: { icon: { url: '/bramble-logo.png', type: 'image/png', sizes: '512x512' } },
   title: 'bramble',
   description: 'Join a private network, see who is on it and check that it works.',
 }

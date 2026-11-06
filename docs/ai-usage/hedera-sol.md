@@ -260,3 +260,31 @@ Evidence paths written:
 - `approval/test-results/` (ignored screenshots and axe reports)
 
 - `/home/anonjr/.cache/agent-tmp/eth-317-revision-handoff.md`
+
+## ETH-325 — console branding
+
+Read from source: this visual change serves demo beats 1–5. The approval console,
+local UI and dashboard use the existing landing logo as their header mark and
+favicon. The join UI inherits branding from its approval and local UI hosts.
+The light palette uses the landing green; PR #66's dark palette, control borders,
+focus outlines and semantic warning colours stay in place.
+
+Paths written:
+
+- `approval/public/bramble-logo.png`
+- `approval/src/app/globals.css`
+- `approval/src/app/layout.tsx`
+- `approval/src/app/payments/page.tsx`
+- `approval/src/components/approval-console.tsx`
+- `local-ui/public/bramble-logo.png`
+- `local-ui/src/app/globals.css`
+- `local-ui/src/app/layout.tsx`
+- `local-ui/src/components/local-app.tsx`
+- `dashboard/public/bramble-logo.png`
+- `dashboard/src/app/globals.css`
+- `dashboard/src/app/layout.tsx`
+- `dashboard/src/components/nav.tsx`
+- `dashboard/src/app/favicon.ico` (removed the starter icon)
+- `docs/ai-usage/hedera-sol.md`
+
+Validation: Open until the checks below run.
