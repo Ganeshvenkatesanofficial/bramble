@@ -54,7 +54,9 @@ function parseRelayAddress(target: string): { host: string; port: number } {
 // The default (`tor-js`) downloads it from jsDelivr, unpkg or GitHub in the
 // clear and caches it under ~/.local/share/tor-js-wasm, which would leak
 // "this host runs tor-js" to a CDN and write local state. `tor-js/wasm-file`
-// reads tor_js_bg.wasm from node_modules instead: no network, no writes.
+// reads tor_js_bg.wasm from node_modules at run time, which fails inside a
+// `bun build --compile` executable. `tor-js/wasm-base64` carries the WASM inside the module,
+// so it needs no network, no writes and no file next to the binary.
 //
 // Storage is MemoryStorage for the same reason. The Node default is a
 // filesystem store under ~/.local/share/tor-js; MemoryStorage keeps the
@@ -70,7 +72,7 @@ function parseRelayAddress(target: string): { host: string; port: number } {
 // socket from the moment it is created, and on close() destroys them all and
 // refuses new dials.
 export async function torJsTransport(opts: TorJsTransportOptions = {}): Promise<TorTransport> {
-  const { TorClient, ArtiSocket, ArtiSocketProvider, storage } = await import('tor-js/wasm-file')
+  const { TorClient, ArtiSocket, ArtiSocketProvider, storage } = await import('tor-js/wasm-base64')
   const dial = opts.dial ?? defaultDial
   // Each open socket, with a promise that resolves when it has closed.
   const sockets = new Map<net.Socket, Promise<void>>()
