@@ -2,6 +2,13 @@ import { LabelRegisteredError, type EnrollProgress } from '../../../admincli/src
 import { ApiError, type Clock, type JoinChain, type JoinInput, type JoinRecord } from './contracts'
 
 /** In-memory suggestions. Only confirmed chain writes change membership. */
+function hiddenLabelPrefixes(): string[] {
+  return (process.env.APPROVAL_HIDE_LABEL_PREFIXES ?? '')
+    .split(',')
+    .map((prefix) => prefix.trim())
+    .filter(Boolean)
+}
+
 export class JoinService {
   private readonly rows = new Map<string, JoinRecord>()
   private readonly progress = new Map<string, EnrollProgress>()
@@ -130,6 +137,8 @@ export class JoinService {
       const facts = await chain.members()
       return facts
         .filter((member) => member.expiry > this.clock.now() / 1000)
+        // Demo hygiene: APPROVAL_HIDE_LABEL_PREFIXES="dryrun-" keeps rehearsal devices out of the console.
+        .filter((member) => !hiddenLabelPrefixes().some((prefix) => member.label.startsWith(prefix)))
         .map((member) => {
           const row = [...this.rows.values()].find(
             (row) =>
