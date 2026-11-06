@@ -7,6 +7,12 @@ pnpm install --frozen-lockfile --offline
 bun test deploy/pi-offline/replay.test.ts
 ```
 
+To type-check this standalone directory, run:
+
+```sh
+pnpm --filter @bramble/agent-mcp exec tsc --ignoreConfig --noEmit --module esnext --moduleResolution bundler --target es2022 --types bun,node --skipLibCheck ../deploy/pi-offline/operator-route.ts ../deploy/pi-offline/replay.test.ts
+```
+
 If the pnpm store is empty, run `pnpm install --frozen-lockfile` first. The replay
 itself needs no network access beyond loopback. It binds three ephemeral ports to
 `127.0.0.1` and closes them after the test. It accepts no provider URL, credential

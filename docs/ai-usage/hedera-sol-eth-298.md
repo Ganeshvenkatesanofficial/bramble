@@ -21,6 +21,13 @@ after implementation. It asserts the ordered lifecycle, authentication-before-
 routing diagnostic, wrong-auth decision refusal, and absence of synthetic
 operator auth from actual agent tool/request payloads.
 
+Verification: `pnpm verify` passes (12 Turbo tasks reused from cache; root
+format/invariants/lint run locally). The existing `test:access-flow` also passes
+when run directly (one test, 31 assertions); the new replay passes directly
+(one test, 26 assertions). A separate TypeScript check covers the new standalone
+directory. It exposed a Bun `fetch.preconnect` typing issue in the capture wrapper;
+the wrapper now preserves that function property and the check passes.
+
 Open: cloud acceptance remains gated by the explicit ETH-244 to ETH-243 handoff.
 The mock uses distinct request/operator fixture auth; it does not prove that
 production runtimes provide separate approval credentials.

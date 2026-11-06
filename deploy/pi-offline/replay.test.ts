@@ -22,10 +22,13 @@ test('offline operator route replays denied/request/approve/success/revoke/denie
       forwardTimeoutMs: 1000,
     },
     {
-      fetch: async (url, init) => {
-        agentHttp.push({ url, headers: init?.headers, body: init?.body })
-        return fetch(url, init)
-      },
+      fetch: Object.assign(
+        async (url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+          agentHttp.push({ url, headers: init?.headers, body: init?.body })
+          return fetch(url, init)
+        },
+        { preconnect: fetch.preconnect }
+      ),
     }
   )
   const call = async () => {
