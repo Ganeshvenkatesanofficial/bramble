@@ -1,23 +1,20 @@
 import type { Metadata } from 'next'
+import type { ReactNode } from 'react'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] })
+
 export const metadata: Metadata = {
-  title: 'Bramble approval console',
-  description: 'Scoped access and agent payments',
+  title: 'bramble · Approval console',
+  description: 'Review agent identities and manage scoped access to private services.',
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body>
-        <header>
-          <a href="/payments">bramble / approval</a>
-        </header>
-        <main>{children}</main>
-      </body>
+      <body>{children}</body>
     </html>
   )
 }

@@ -215,3 +215,28 @@ uncached verify run found six TS7017 errors in the incoming audit helper.
 - **Open:** funded settlement, deployed cap agreement, public tester screenshots
   and human H4 remain required. These corrections authorize no funded payment or
   deployment and change no handoff invariant.
+
+## Mumbai approval console (ETH-31)
+
+Infra-Sol-UI (OpenAI Codex), committing as `Infra-Sol-UI (agent, Jay Kerkar)`
+through the `jaykerkar0405` account, wrote
+`approval/src/app/{layout.tsx,page.tsx,globals.css}`,
+`approval/src/components/{approval-console,request-card,identity-facts}.tsx`,
+`approval/src/hooks/use-requests.ts`, `approval/src/lib/console-api.ts`, the public
+identity read in `approval/src/lib/api.ts`, and its API regression test.
+AI assistance also covered `approval/e2e/`, `approval/playwright.config.ts`,
+`approval/package.json`, `approval/.gitignore`, `pnpm-lock.yaml`,
+`approval/README.md`, `docs/eth-31-console-spec.md`,
+`docs/how-to-test-approval-console.md`, and this entry.
+The console reuses the dashboard shadcn/Radix button in
+`approval/src/components/ui/button.tsx`.
+The browser harness uses the existing test-only in-memory signer; production
+imports no test adapter. UI/HTTP behavior is the task-authorized test seam.
+Human H4 screenshot approval and live testnet verification remain required.
+
+Infra-Sol-UI merged `origin/hackathon` at `2403c62` for PR #20 without rewriting
+history. Conflict resolution preserves the console styles and all upstream API
+and payment changes. The payments shell and selectors are scoped to its route in
+`approval/src/app/payments/page.tsx` and `approval/src/app/globals.css`; font
+variables remain in `approval/src/app/layout.tsx`. AI assistance also covers
+`approval/README.md` and this attribution file.
