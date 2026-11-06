@@ -43,13 +43,23 @@ function failureFrom(status: number, body: unknown, fallback: ApiFailure): ApiFa
   return new ApiFailure(fallback.message, fallback.nextStep, status)
 }
 
-async function call(path: string, init: RequestInit | undefined, fallback: ApiFailure): Promise<unknown> {
+/** Ordinary calls answer at once; the connection test may wait on ENS authorization over Tor. */
+const DEFAULT_TIMEOUT_MS = 10_000
+/** The daemon allows 95 s for authorization over Tor, so the page waits slightly longer. */
+export const TEST_TIMEOUT_MS = 100_000
+
+async function call(
+  path: string,
+  init: RequestInit | undefined,
+  fallback: ApiFailure,
+  timeoutMs = DEFAULT_TIMEOUT_MS
+): Promise<unknown> {
   let response: Response
   try {
     response = await fetch(path, {
       cache: 'no-store',
       ...init,
-      signal: AbortSignal.any([...(init?.signal ? [init.signal] : []), AbortSignal.timeout(10_000)]),
+      signal: AbortSignal.any([...(init?.signal ? [init.signal] : []), AbortSignal.timeout(timeoutMs)]),
     })
   } catch {
     throw unreachable
@@ -59,7 +69,7 @@ async function call(path: string, init: RequestInit | undefined, fallback: ApiFa
   return body
 }
 
-const post = (path: string, body?: unknown) =>
+const post = (path: string, body?: unknown, timeoutMs?: number) =>
   call(
     path,
     {
@@ -67,7 +77,8 @@ const post = (path: string, body?: unknown) =>
       headers: { 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     },
-    new ApiFailure('Bramble could not do that.', 'Try again. If it keeps failing, run `bramble status` in a terminal.')
+    new ApiFailure('Bramble could not do that.', 'Try again. If it keeps failing, run `bramble status` in a terminal.'),
+    timeoutMs
   )
 
 export async function fetchState(signal?: AbortSignal): Promise<BrambleState> {
@@ -87,7 +98,7 @@ export const joinNetwork = (tailnet: string) => post('/api/join', { tailnet })
 export const leaveNetwork = () => post('/api/leave')
 
 export async function testConnection(peer?: string): Promise<TestResult> {
-  return parseTestResult(await post('/api/test', peer ? { peer } : {}))
+  return parseTestResult(await post('/api/test', peer ? { peer } : {}, TEST_TIMEOUT_MS))
 }
 
 const adminFallback = (status?: number) =>

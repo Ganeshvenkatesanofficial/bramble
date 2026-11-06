@@ -5,7 +5,8 @@
  */
 import type { BrambleState, JoinRecord, Peer } from '../src/lib/contract'
 
-export type Scenario = 'fresh' | 'ready' | 'pending' | 'approved' | 'denied' | 'connected' | 'connected-empty' | 'error'
+export type Scenario =
+  'fresh' | 'ready' | 'pending' | 'approved' | 'denied' | 'connected' | 'connected-empty' | 'error' | 'error-first-join'
 
 export interface Flags {
   /** `/api/state` answers 503, as if the daemon were down. */
@@ -16,6 +17,7 @@ export interface Flags {
   test: { ok: boolean; status: number; ms: number }
   /** Delay in ms before an approved device becomes connected. */
   connectDelayMs: number
+  testDelayMs: number
 }
 
 const FINGERPRINT = '9f3ac1d27b4e86a05c13de7f2a98b410'
@@ -86,7 +88,13 @@ export function createMock() {
 
   function reset(scenario: Scenario = 'fresh', admin = false) {
     clearTimeout(connectTimer)
-    flags = { offline: false, admin: 'ok', test: { ok: true, status: 200, ms: 38 }, connectDelayMs: 2500 }
+    flags = {
+      offline: false,
+      admin: 'ok',
+      test: { ok: true, status: 200, ms: 38 },
+      connectDelayMs: 2500,
+      testDelayMs: 600,
+    }
     joins = admin ? seedJoins() : []
     nextId = 200
     const base: BrambleState = {
@@ -113,6 +121,14 @@ export function createMock() {
         peers: peers(),
       },
       'connected-empty': { ...named, phase: 'connected', tailnet, joinId: 'join-099', meshIp: '100.64.0.7' },
+      'error-first-join': {
+        ...named,
+        phase: 'error',
+        error: {
+          message: 'Bramble could not reach the approval service for acme.bramble.eth.',
+          nextStep: 'Check your internet connection, then start over and request to join again.',
+        },
+      },
       error: {
         ...named,
         phase: 'error',
@@ -214,7 +230,7 @@ export function createMock() {
       return json({ ok: true })
     }
     if (path === 'test' && request.method === 'POST') {
-      await sleep(600)
+      await sleep(flags.testDelayMs)
       return json(flags.test)
     }
     return failure(404, 'Route not found.', 'Update Bramble.')

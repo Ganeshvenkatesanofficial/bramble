@@ -1,2 +1,3 @@
 - ETH-182 (ETH-177e): `local-ui/` (Next static export, mock `bramble` API, unit and Playwright tests, README), `docs/screenshots/local-ui/` (Playwright screenshots), root `pnpm-workspace.yaml`, `turbo.json` and `.prettierignore` entries. AI-assisted: Claude wrote the code and ran the tests and screenshots.
 - local-ui/scripts/embed.mjs (ETH-182: copies the export into node-daemon/ui/dist/)
+- README.md, eslint.config.js, pnpm-lock.yaml (ETH-182: local-ui entries and workspace lockfile)

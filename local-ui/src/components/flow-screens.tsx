@@ -242,11 +242,10 @@ export function ErrorScreen({ state, refresh }: { state: BrambleState; refresh: 
           <Button variant="outline" disabled={busy} onClick={() => void run(() => Promise.resolve())}>
             Check again
           </Button>
-          {(state.tailnet || state.joinId) && (
-            <Button variant="outline" disabled={busy} onClick={() => void run(leaveNetwork)}>
-              Leave network
-            </Button>
-          )}
+          {/* A first join can fail before it has a network or join id, so reset is always offered. */}
+          <Button variant="outline" disabled={busy} onClick={() => void run(leaveNetwork)}>
+            {state.tailnet || state.joinId ? 'Leave network' : 'Start over'}
+          </Button>
         </div>
       </section>
     </>

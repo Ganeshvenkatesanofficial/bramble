@@ -126,6 +126,30 @@ test('connected: peers show direct and relayed paths, tests report results, leav
   await expect(page.getByRole('heading', { name: 'Which network do you want to join?' })).toBeVisible()
 })
 
+test('a slow connection test over Tor still reports success', async ({ page, request }) => {
+  await reset(request, 'connected')
+  await hook(request, 'flags', { testDelayMs: 11_500 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Test connection', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Testing…' })).toBeDisabled()
+  await expect(page.getByRole('status').filter({ hasText: 'Reached the network in 38 ms.' })).toBeVisible({
+    timeout: 20_000,
+  })
+  await expect(page.getByText('Bramble is not answering')).toHaveCount(0)
+})
+
+test('a first join that fails before it has a network can be started over', async ({ page, request }, info) => {
+  await reset(request, 'error-first-join')
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Bramble hit a problem' })).toBeVisible()
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('could not reach the approval service')
+  await shot(page, info, '13b-error-first-join')
+  await page.getByRole('button', { name: 'Check again' }).click()
+  await expect(page.getByRole('heading', { name: 'Bramble hit a problem' })).toBeVisible()
+  await page.getByRole('button', { name: 'Start over' }).click()
+  await expect(page.getByRole('heading', { name: 'Which network do you want to join?' })).toBeVisible()
+})
+
 test('connected with nobody else on the network shows an empty state', async ({ page, request }, info) => {
   await reset(request, 'connected-empty')
   await page.goto('/')
