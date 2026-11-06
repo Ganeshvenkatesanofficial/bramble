@@ -12,3 +12,10 @@ The agent used the merged HCS record format and verifier. A Python standard-libr
 - Appended `docs/ai-usage/infra-sol-ui.md` to record these paths.
 
 - Addressed round-1 findings in `docs/DEMO_SCRIPT.md`: full-lifecycle warmup evidence, more operating time with a pre-created pending request, action-relative stall deadlines, Tor attribution, preflight probes, installer link and rehearsal/startup cost. Appended this usage record. No live rehearsal or cloud changes.
+
+## ETH-244: post-fix validation (beats 1, 2, 3 and 5)
+
+- Built `release/bramble_{linux,darwin}_{amd64,arm64}.tar.gz`, `release/SHA256SUMS`, and embedded `node-daemon/ui/dist` from `970461c`. Used the existing corrected release driver and installer from the earlier validation branch. Published to the established console host and verified all four downloaded archive hashes.
+- Wrote validation drivers, `paid-capture.ts`, sanitized evidence and reports under `/home/anonjr/bramble-work/status/eth-244/postfix-*` and `postfix-public-device/`. The private device home is excluded from deliverables. Wrote a temporary `/opt/bramble/sidecar/.eth276-capture.ts` on the gateway and removed it after one bounded Tor negotiation.
+- Updated Paperclip reports for ETH-244 and ETH-276. The payment attempt returned HTTP 200; the historical rejection cause remains Open. Credentials were passed through the existing runtime configuration to their consumers without inspection or output.
+- Updated this usage record. No application source changed.
