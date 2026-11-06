@@ -24,7 +24,10 @@ const connectRequestLineDeadline = 5 * time.Second
 // gatewayDecisionDeadline bounds how long a local forward waits for the
 // gateway's OK or DENY. The gateway resolves the live ENS ACL before it can
 // answer, which can take longer than receiving the short CONNECT line itself.
-const gatewayDecisionDeadline = 20 * time.Second
+// Every ENS read goes through Tor and one decision resolves three records in
+// turn (about 9 s each on the cloud nodes, Verified 6 Nov 2026), so 20 s was
+// too short and the forward gave up before the gateway had answered.
+const gatewayDecisionDeadline = 90 * time.Second
 
 // Server is the gateway's single fixed-port CONNECT listener (adr/0005 §
 // "What Section C still owns", adr/0006). It never trusts a self-declared
