@@ -26,4 +26,6 @@ Both runtime commands exit 0 and print `Verified offline: SDK freeze/round-trip;
 
 The fixtures do not prove consensus or a real mirror response. A future console must recompute the expected message from an authenticated private opening before comparing bytes. Matching a mirror response trusts that mirror; it does not prove completeness or truth of the source event. Salt leakage enables guessing for that event; public payer metadata and timing still permit correlation. See ADR 0014 for the proposed privacy boundary.
 
-**Verified baseline limitation:** `pnpm install --frozen-lockfile` passes. Baseline `pnpm verify` fails in `format:check` on 50 existing skill files before code checks. ETH-75 owns that repair; ETH-76 owns missing runtime provisioning. Do not interpret the successful offline spike as a green repository verification gate.
+**Verified initial baseline limitation:** `pnpm install --frozen-lockfile` passed, but baseline `3bec957` failed `pnpm verify` in `format:check` on 50 existing skill files before code checks. ETH-75 and ETH-76 tracked the formatting repair and runtime provisioning.
+
+**Verified after baseline repair, 6 November 2026:** Merged `origin/hackathon` at `4a8cfc8` into the ETH-66 branch, preserving both AI usage sections. `pnpm verify` passes, with Turbo reusing cached package checks; `pnpm test:access-flow` passes. Both offline spike commands above also pass again. These checks do not verify live Hedera submission or explorer rendering.
