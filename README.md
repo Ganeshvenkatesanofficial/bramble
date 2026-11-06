@@ -14,7 +14,7 @@ The Mumbai continuity entry separates work that existed before the hackathon fro
 
 ### Pre-existing at `pre-mumbai`
 
-The sections below this one, from "Why the integrations matter" to "Open source and AI usage", describe the pre-existing system, except where they link to a row in the next table. The pre-existing system includes `brambled/`, `sidecar/`, `relay/`, `relay-sidecar/`, `admincli/` and `dashboard/`.
+The pre-existing system includes `brambled/`, `sidecar/`, `relay/`, `relay-sidecar/`, `admincli/` and `dashboard/`. The sponsor sections below distinguish this baseline from the Mumbai additions. Older runbooks remain historical evidence, not proof of the current deployment.
 
 ### New since `pre-mumbai`
 
@@ -35,6 +35,36 @@ This table is the index of new work. Each agent adds or updates its row in the s
 | ETH-177 T6 | Relay-first forwarding for a key-less device: operator-sponsored, capped relay sessions for enrolled devices (`relay -sponsor-enrolled`, `brambled -sponsored-relay`)                                                                                                      | in review: Verified in a symmetric-NAT Docker lab and with the real `relay` binary on loopback; live relays machine Open ([ADR 0018](docs/adr/0018-sponsored-relay-sessions.md))                                                                                                           |
 
 W6 (this documentation) is a deliverable and not a feature. W7 (Ledger approval signing) is out of scope.
+
+## Mumbai sponsor integrations
+
+These sections support demo beats 1–6. **Read from source** describes implementation; **Verified (reported)** attributes a recorded run to its operator; **Open** requires acceptance evidence. This documentation task does not run cloud nodes. Use the [one-page demo checklist](docs/DEMO_CHECKLIST.md), [operator script](docs/DEMO_SCRIPT.md) and [Mumbai submission draft](docs/13_SUBMISSION_DRAFT.md) together.
+
+### ENS: tailnet naming and authorization
+
+**Read from source.** A tailnet is an ENSv2 Permissioned Registry on Sepolia. A device is a subname such as `worker.<tailnet>.eth`, with its own Permissioned Resolver. Enhanced Access Control separates enrollment, key rotation, revocation and access-rule writes. Each peer reads the registry independently; the approval service writes grants but does not enforce them. Device access records contain capability digests. Public relay service addresses live in a separate registry, while mesh members' public endpoints stay off-chain.
+
+**New for Mumbai:** the node sidecar routes ENS reads through `torFetch('ens')`, with CCIP-Read disabled to prevent off-chain lookups bypassing that transport ([client](sidecar/src/ens/client.ts)). This protects the node's source IP from the RPC provider; names, requested records and timing remain visible. It does not cover every admin or console read. Beats 1, 2 and 5 show the authorization lifecycle; beat 6 needs provider-log evidence of the privacy change.
+
+**Deployment (reported).** The demo tailnet is `bramble-dev-c91e55e9.eth` on Sepolia (chain ID `11155111`). The operator's ETH-244 comment of 6 November, 12:14 UTC, reports the device registry at `0xEdA4b78CcA4472522bf2b521A6D2987306579058` and the relay registry at `0x3276eA61D05001586d6eE450F982312B345746a6`. This author has not queried either contract.
+
+**Prize entry:** Bramble enters ENS for ENSv2 in an existing project, on the Sepolia tailnet above.
+
+### Hedera: x402 payments, relay metering and HCS
+
+**Read from source.** The baseline uses x402 HTTP payment challenges and Blocky402 settlement on Hedera testnet. Rendezvous tokens cost a fixed session fee; data-relay sessions sell explicit byte allotments. They are purchases for relay service, not a charge for every private API call. Retries can incur spend while service access is denied. Operator-sponsored sessions also do not establish that each device pays individually.
+
+The node payer uses `HEDERA_CLIENT_ACCOUNT_ID` and its software signer; the relay has a separate payee account. Both use testnet USDC token `0.0.429274`. The client allows this asset on `hedera:testnet` and caps each payment with `HEDERA_MAX_PAYMENT_ATOMIC` (default `100000`, or 0.10 USDC). This is a per-payment ceiling, not an aggregate budget. Follow the [relay payment runbook](relay-sidecar/README.md) for account association, funding and metering. A historical settlement is `0.0.7162784@1788941365.961612782` ([HashScan](https://hashscan.io/testnet/transaction/0.0.7162784@1788941365.961612782)); it is **Verified (reported), 9 September 2026**, pre-existing evidence, not a Mumbai result.
+
+**New for Mumbai:** W10 adds Hedera Consensus Service (HCS) audit commitments for grant, revoke and payment events ([module](hedera-audit/README.md), [record format](docs/16_HCS_AUDIT_RECORD_FORMAT.md)); W9 routes node payment HTTP through `torFetch('pay')`. HCS publishes salted commitments with public kind and timing, while retaining event details and salts off-chain. The approval service needs `HEDERA_AUDIT_TOPIC_ID` and payer configuration. A payment receipt proves settlement separately from an HCS receipt. Beat 3's fresh, mirror-verified cloud HCS record remains **Open** at the [demo script's evidence cutoff](docs/DEMO_SCRIPT.md#choose-what-you-can-show); fixtures are synthetic.
+
+### Ethereum Foundation: the new privacy property
+
+**Read from source.** The continuity upgrade protects Ethereum-native authorization reads and payment HTTP with Tor. Before W9, the node sent them directly. After W9, `torFetch('ens')` and `torFetch('pay')` use separate isolation keys. The protected requests fail closed until Tor is ready. This changes what the RPC and payment endpoints observe without replacing ENS as the authorization source ([Tor design](docs/adr/0013-tor-transport.md)).
+
+**Verified (reported):** the [6 November measurement](docs/measurements/2026-11-06-revocation-over-tor.md) records two 600-second Tor runs on one machine, with replayed median detection times of 7.0–11.5 seconds and a worst observation of 29 seconds. It excludes chain confirmation and is not a live cloud revoke. The [operator script](docs/DEMO_SCRIPT.md#budget-for-the-measured-waits) separately reports cloud revoke-to-first-failure observations of 36.6 and 37.0 seconds on build `4928612`. This author has not rerun either experiment. Beat 6's current-build before/after provider-log comparison remains **Open**.
+
+The [CROPS analysis](#crops) records the remaining dependencies and disclosures. Tor protects these control-plane requests; WireGuard, STUN and relay UDP still expose addresses to their counterparties. The RPC provider sees names and timing, payments expose payer accounts, and the admin and payer use software keys. The entry targets [Best CROPS Upgrade to an Existing Project](https://ethglobal.com/events/mumbai/prizes); it requires evidence of the new property, not just the prior mesh.
 
 ## CROPS
 
@@ -151,7 +181,7 @@ Copy secrets into an ignored `.env` file or the process environment. Never commi
 4. Trust the granter on the gateway with `pnpm --dir admincli set-acl-granters -- <gateway-label> <granter-label>`, then grant the service with `pnpm --dir admincli set-acl -- <worker-label> <gateway-label> <granter-label> web`. The identical agent command prints a private-service health result without restarting either node.
 5. Revoke the worker with `pnpm --dir admincli revoke -- <worker-label> true`. The gateway removes it on its next ENS poll and the task fails at the tunnel boundary.
 
-For the recorded demo, distinguish the two Ledger paths: enrollment transactions are hardware-signed, while `set-acl` decrypts the granter secret through Key Ring on the provisioned admin machine and submits a software-signed ENS write. Do not describe the ACL write as requiring a per-grant device confirmation.
+For the Mumbai demo, enrollment and access-rule writes use software signing; Ledger signing is out of scope. The historical Ledger paths remain documented below and in the older runbooks. Do not describe an access-rule write as requiring a per-grant device confirmation.
 
 The paid relay proof is run separately with `brambled demo-data-relay`; it prints the Hedera settlement transaction IDs for differently sized sessions and for pre/post-failure relay selection. See [relay-sidecar's runbook](relay-sidecar/README.md).
 
