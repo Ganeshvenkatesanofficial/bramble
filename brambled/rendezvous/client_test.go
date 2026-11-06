@@ -8,6 +8,40 @@ import (
 	"time"
 )
 
+func TestExchangeRegistersRemotePeer(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	helloCh := make(chan message, 1)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
+		var hello, offer message
+		dec := json.NewDecoder(conn)
+		if dec.Decode(&hello) != nil || dec.Decode(&offer) != nil {
+			return
+		}
+		helloCh <- hello
+		enc := json.NewEncoder(conn)
+		_ = enc.Encode(message{Type: "offer", From: "remote-key", Candidate: "203.0.113.2:51820"})
+		_ = enc.Encode(message{Type: "ack"})
+	}()
+	candidate, err := Exchange(ln.Addr().String(), "own-key", "remote-key", "203.0.113.1:51820", "test-token", 2*time.Second)
+	if err != nil || candidate != "203.0.113.2:51820" {
+		t.Fatalf("exchange: candidate=%q error=%v", candidate, err)
+	}
+	hello := <-helloCh
+	if hello.Type != "hello" || hello.Pubkey != "own-key" || hello.To != "remote-key" || hello.Token != "test-token" {
+		t.Fatal("hello must identify both peers and carry its single-use token")
+	}
+}
+
 // fakeRelay is a minimal stand-in for ../../relay's Server, reimplemented
 // here rather than imported: the relay is a separate Go module by design
 // (it's a standalone deployable, not a brambled dependency), and the two

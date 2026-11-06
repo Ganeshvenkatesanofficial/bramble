@@ -31,6 +31,113 @@ Paths written:
 
 - `docs/ai-usage/hedera-sol.md`
 
+## ETH-243 Pi launcher continuation
+
+Demo beats: 1, 2, 3 and 5. Continued PR #42 from `7c0b8fe` in an isolated worktree.
+
+Paths written:
+
+- `deploy/scripts/pi-agent.sh`
+- `agent-mcp/test/pi-launcher.test.ts`
+- `agent-mcp/PI.md`
+- `agent-mcp/PI_SECURITY.md`
+- `agent-mcp/REFERENCE.md`
+- `deploy/README.md`
+- `docs/ai-usage/hedera-sol.md`
+
+The launcher check reproduced the overwritten skill-path failure before the fix.
+Verified on 6 November 2026: both focused launcher tests, shell syntax checks,
+`git diff --check`, and `pnpm verify` pass (34 agent-mcp tests).
+Clean worker sequence remains Open pending the ETH-244 node handoff.
+
+## ETH-243 isolated cloud attempt
+
+Demo beats: 1, 2, 3 and 5. Verified the stopped-node handoff, deployed the
+reviewed launcher and workflow, and ran the initial deny call and Pi prompt.
+The gateway confirmed a missing grant. Pi requested `task`; the operator POST
+failed with HTTP 401. No grant was approved. Both nodes, the Pi process and its
+MCP child, and the worker approval tunnel were stopped. Two full runs remain Open.
+
+Paths written:
+
+- `agent-mcp/PI.md`
+- `deploy/README.md`
+- `docs/ai-usage/hedera-sol.md`
+- `/home/anonjr/bramble-work/status/eth-243/isolated-w2.py`
+- `/home/anonjr/bramble-work/status/eth-243/isolated-w2/` (timings and Pi output)
+- `/home/anonjr/bramble-work/status/eth-243-isolated-docs-verify.log`
+- Worker: `/home/agent/bin/pi-agent`
+- Worker: `/home/agent/.pi/agent/skills/bramble-private-service/SKILL.md`
+
+## ETH-243 authentication check after operator release
+
+Demo beats: 2, 3 and 5. Verified both node services inactive with MainPID 0.
+Reopened only the worker approval tunnel, confirmed the same pending request,
+and reproduced HTTP 401 on a protected GET and a nonexistent POST with the
+authorized worker file passed directly into the HTTP header. Neither node
+service was started. No request, grant, credential or service configuration
+changed. Closed the temporary tunnel and verified its listener absent.
+
+Paths written:
+
+- `agent-mcp/PI.md`
+- `deploy/README.md`
+- `docs/ai-usage/hedera-sol.md`
+
+Additional local evidence paths written in this wake:
+
+- `/home/anonjr/bramble-work/status/eth-243-release-auth-verify.log`
+- `/home/anonjr/bramble-work/status/eth-243-release-auth-receipts.json`
+- `/home/anonjr/.cache/agent-tmp/eth-243-post-release-handoff.md` (handoff references the saved task report)
+
+
+## ETH-243 running-slot validation
+
+Demo beats 1, 2, 3 and 5. Verified two isolated Pi access-lifecycle runs at
+15:51–15:57 UTC on 6 November 2026. Full beat 3 payment/feed acceptance stays
+Open on ETH-294. Both requests are revoked; Pi/MCP and the temporary tunnel
+are gone. The running pair is handed to ETH-271 for measurements and final stop.
+
+Paths written:
+
+- `agent-mcp/PI.md`
+- `agent-mcp/README.md`
+- `deploy/README.md`
+- `docs/ai-usage/hedera-sol.md`
+- `/home/anonjr/bramble-work/status/eth-243/running-slot.py`
+- `/home/anonjr/bramble-work/status/eth-243/summarize-running-slot.py`
+- `/home/anonjr/bramble-work/status/eth-243/running-slot/` (transcripts, timings, receipts, feed metadata)
+- `/home/anonjr/bramble-work/status/eth-243/running-slot-evidence.tar.gz`
+- `/home/anonjr/bramble-work/status/eth-243-running-slot-verify.log`
+
+No launcher, MCP implementation, tests, node configuration, or credentials change.
+Round 2 remains bound to `91f7ca4`; merge-captain disposition covers later docs.
+
+Additional handoff paths:
+
+- `/home/anonjr/bramble-work/status/eth-243/artifact-helper/` (upload receipts)
+- `/home/anonjr/.cache/agent-tmp/eth-243-running-slot-handoff.md`
+
+
+## ETH-308 PR 42 documentation conflict resolution
+
+Demo beats: 1, 2, 3 and 5. Merge `origin/hackathon` at `70fbfb7` into
+PR 42 with a merge commit. Preserve the Pi runtime, lifecycle measurements,
+Claude Code token isolation guidance and approval authority limits. Resolve
+conflicts only in the two agent MCP documentation files.
+
+Paths written:
+
+- `agent-mcp/README.md`
+- `agent-mcp/REFERENCE.md`
+- `docs/ai-usage/hedera-sol.md`
+
+Read from source: the incoming branch changes `deploy/scripts/gen-node-key.sh`
+and adds `gen-node-key.test.sh`, `join-test.py` and `rehearse.py`. These inherited
+changes make the requested whole-directory diff against `91f7ca4` nonempty.
+The conflict resolution does not edit scripts, tests, launchers or SKILL files.
+The approved Pi files remain byte-identical to `91f7ca4`.
+
 ## 2026-11-06 — ETH-184 documentation closeout
 
 Demo beats: 1–5. Reconciled recorded installer, enrollment, cloud access and
