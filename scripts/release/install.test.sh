@@ -27,6 +27,8 @@ tarball="bramble_${os}_${arch}.tar.gz"
 mkdir -p "$work/site/dl" "$work/site/.well-known" "$work/stub"
 cat > "$work/stub/bramble" <<'EOF'
 #!/bin/sh
+# Like the real launcher, refuse to run without a subcommand.
+[ "$1" = up ] || { echo "usage: bramble up ..." >&2; exit 2; }
 d="${BRAMBLE_HOME:?}"
 mkdir -p "$d"
 echo $$ > "$d/bramble.pid"
@@ -34,8 +36,9 @@ echo "http://127.0.0.1:7777/" > "$d/ui.url"
 while :; do sleep 1; done
 EOF
 printf '#!/bin/sh\nexit 0\n' > "$work/stub/bramble-sidecar"
-chmod 755 "$work/stub/bramble" "$work/stub/bramble-sidecar"
-tar -C "$work/stub" -czf "$work/site/dl/$tarball" bramble bramble-sidecar
+printf '#!/bin/sh\nexit 0\n' > "$work/stub/brambled"
+chmod 755 "$work/stub/bramble" "$work/stub/brambled" "$work/stub/bramble-sidecar"
+tar -C "$work/stub" -czf "$work/site/dl/$tarball" bramble brambled bramble-sidecar
 (cd "$work/site/dl" && sha256sum "$tarball" > SHA256SUMS)
 cat > "$work/site/.well-known/bramble.json" <<'EOF'
 {"version": "test", "tailnet": "demo-net.eth", "chainId": 11155111, "rpcUrl": "https://rpc.example.com/",
@@ -64,7 +67,7 @@ for sh in "${shells[@]}"; do
   echo "--- $sh"
   out="$(run_install "$sh" "$home" 2>&1)"; rc=$?
   [ "$rc" -eq 0 ] && ok "$sh: install exits 0" || { bad "$sh: install exited $rc"; echo "$out"; }
-  [ -x "$home/bin/bramble" ] && [ -x "$home/bin/bramble-sidecar" ] && ok "$sh: binaries installed and executable" || bad "$sh: binaries missing"
+  [ -x "$home/bin/bramble" ] && [ -x "$home/bin/brambled" ] && [ -x "$home/bin/bramble-sidecar" ] && ok "$sh: binaries installed and executable" || bad "$sh: binaries missing"
   [ "$(stat -c %a "$home" 2>/dev/null || stat -f %Lp "$home")" = 700 ] && ok "$sh: data dir is mode 700" || bad "$sh: data dir is not mode 700"
   [ "$(cat "$home/config.url" 2>/dev/null)" = "$base/.well-known/bramble.json" ] && ok "$sh: config.url written" || bad "$sh: config.url wrong"
   echo "$out" | grep -q "demo-net.eth" && ok "$sh: prints the tailnet" || bad "$sh: tailnet not printed"

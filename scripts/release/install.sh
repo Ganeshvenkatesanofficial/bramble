@@ -137,6 +137,7 @@ fi
 mkdir "$TMP/stage"
 tar -xzf "$TMP/$TARBALL" -C "$TMP/stage"
 [ -f "$TMP/stage/bramble" ] || die "$TARBALL has no bramble binary"
+[ -f "$TMP/stage/brambled" ] || die "$TARBALL has no brambled binary"
 
 # --- Stop a previous run so its binaries can be replaced. ---
 daemon_pid() {
@@ -194,10 +195,10 @@ esac
 
 if [ "$NO_START" = 1 ]; then
   say ""
-  say "Installed. Start it with: $BIN_DIR/bramble"
+  say "Installed. Start it with: $BIN_DIR/bramble up"
 else
   rm -f "$HOME_DIR/ui.url"
-  BRAMBLE_HOME="$HOME_DIR" nohup "$BIN_DIR/bramble" > "$HOME_DIR/logs/bramble.out" 2>&1 < /dev/null &
+  BRAMBLE_HOME="$HOME_DIR" nohup "$BIN_DIR/bramble" up -open=false > "$HOME_DIR/logs/bramble.out" 2>&1 < /dev/null &
   BPID=$!
   say ""
   say "Starting bramble (pid $BPID)..."
