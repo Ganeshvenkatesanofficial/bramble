@@ -1,72 +1,56 @@
-# ADR 0014 — HCS audit trail
+# ADR 0014 — HCS audit trail reconciliation
 
-**Status:** Draft, 6 November 2026. **Human approver:** Mumbai project human operator, pending; record their name and approval before accepting this ADR. **Task:** ETH-66 / W10-0. **Demo beat:** 3, the new Hedera service record beside the payment.
+**Kind:** Explanation. **Status:** Draft, 6 November 2026; format decision pending. **Human approver:** Mumbai project human operator, pending; record their name before accepting this ADR. **Task:** ETH-66, workstream W10 (new Hedera service). **Demo beat:** 3.
 
-The proposed option A uses Hedera Consensus Service (HCS) to timestamp salted commitments to completed grant, revoke and payment events. The approval service posts them. Nodes continue to enforce access independently from ENS; neither HCS nor the approval service becomes an admission authority. This draft follows handoff §5.2's default while H1 remains open. Scheduled Transactions and HCS-14 identity remain alternatives if the judge chooses them; this draft does not settle H1.
+## Context
 
-## Public message and private opening
+The [handoff, section 5.2](../15_MUMBAI_HANDOFF.md#52-w10-a-new-hedera-service-hedera-continuity) makes a Hedera Consensus Service (HCS) audit trail the default new service. The approval service posts salted commitments after confirmed grant, revoke and payment events. Nodes enforce access independently from Ethereum Name Service (ENS) state. The audit trail must not become an enforcement dependency.
 
-**Proposed.** Each HCS message is compact UTF-8 JSON with exactly two fields, in this order:
+**Read from source:** PR #3 merged `hedera-audit/`, [the record format](../16_HCS_AUDIT_RECORD_FORMAT.md) and [ADR 0011's service options](0011-w10-hedera-service-options.md) into `hackathon`. ADR 0011 remains a draft. The original version of this ADR proposed a different format without accounting for that module. PR #18's review identified the incompatibility. A merged implementation is evidence of current behavior; it is not human approval of either draft.
 
-```json
-{"v":1,"commitment":"<64 lowercase SHA-256 hex characters, no 0x prefix>"}
-```
+## Decision pending
 
-The public message contains no event type, event ID, identity, access digest, payment amount, transaction reference or salt. Never post plaintext service names, ENS names, hosts, ports or endpoints, including in transaction/topic memos. A version identifies the decoding algorithm, not a mesh or service.
+**Open:** choose one format before changing the writer, reader or console contract. Neither option is accepted by this ADR. Retain the merged implementation while this decision is pending; the offline alternative is an experiment, not a second supported format.
 
-For each event, generate a fresh 32-byte salt with a cryptographically secure random generator. Keep it private and separate from signing keys. Define the private event as an array with fixed positions:
+| Aspect          | Retain merged format (recommended)                                    | Replace with the original alternate                                          |
+| --------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Public message  | `v`, `kind`, `c`                                                      | `v`, `commitment`; hides kind                                                |
+| Commitment      | HMAC-SHA256 keyed by a fresh salt; sorted fields with length prefixes | SHA-256 over domain, salt and positional event array                         |
+| Private event   | Named fields per kind, including ENS subject or payment parties       | Random event identifier, subject digest, source reference and payment fields |
+| Existing parser | Retained                                                              | Rejects alternate messages; migration required                               |
+| Topic           | Existing memo, payer submit key, no admin key                         | Policy must be settled before topic creation                                 |
+| Mirror reader   | Existing ordered list reader                                          | Exact topic/sequence lookup experiment                                       |
 
-```text
-[1, eventId, kind, occurredAt, subjectDigest, accessDigest, sourceTxId, amountAtomic, assetId]
-```
+HMAC means hash-based message authentication code; SHA-256 means Secure Hash Algorithm with a 256-bit output. The byte-level alternate is preserved in [a separate reference](../reference/hcs-audit-alternative.md). The merged byte format remains documented in `docs/16_HCS_AUDIT_RECORD_FORMAT.md`.
 
-| Position | Meaning |
-| --- | --- |
-| `eventId` | Fresh random UUID for this event; reused for retries only |
-| `kind` | `grant`, `revoke` or `payment` |
-| `occurredAt` | UTC ISO 8601 string with milliseconds, from the confirmed source event |
-| `subjectDigest` | Lowercase 64-character SHA-256 hex of the normalized requesting identity's public key; never the key or ENS name |
-| `accessDigest` | Existing ADR 0005 access digest for grant/revoke; `null` for payment |
-| `sourceTxId` | Confirmed source transaction identifier: Sepolia hash for grant/revoke, Hedera settlement transaction ID for payment |
-| `amountAtomic` | Unsigned decimal string for a settled payment; `null` for grant/revoke |
-| `assetId` | Hedera token ID for payment; `null` for grant/revoke |
+### Retain: amend the merged format
 
-Normalize public-key text as in ADR 0005 (`trim().toLowerCase()`) before hashing its UTF-8 bytes. Preserve the existing access digest exactly in its canonical representation. Serialize the array using `JSON.stringify` with no whitespace. All values except the first integer are strings or explicit `null`; never use floating-point amounts, omitted positions, nested objects or arbitrary metadata. Generate the event once and retain these exact bytes for its opening.
+Recommend retaining the merged format because it keeps the existing writer, reader and event contract compatible. Rewrite this ADR as an amendment explaining approval-service posting, authenticated opening delivery, salt leakage, audit failure status and retry limitations. Rework the SDK (software development kit) experiment to use the merged message. It must not define a second version-1 format.
 
-```text
-commitment = lowercaseHex(SHA256(
-  UTF8("bramble-hcs-audit-v1\0") || saltBytes32 || eventBytes
-))
-```
+The trade-off is public event kind. Timing, counts, topic and payer metadata already allow correlation; publishing kind adds information. The original alternate was intended to hide that field. Human approval must explicitly consider that privacy difference.
 
-Here `\0` is one zero byte, `||` means byte concatenation, and `eventBytes` is the serialized array in UTF-8. The salt is raw bytes, not its hexadecimal text. This format domain-separates audit commitments from ENS access digests. It does not replace or change ADR 0005's access algorithm.
+### Replace: supersede the merged format
 
-## Posting and failure behavior
+The alternate hides event kind in the public message. It requires an approved replacement specification, an explicit supersession note in `docs/16` and ADR 0011, and changes to `hedera-audit/` plus its consumers and tests. Use a distinct version or a separately configured topic so two incompatible version-1 messages cannot be confused. The human decision must settle that migration choice before implementation.
 
-**Proposed.** The approval service submits after the grant/revoke write is confirmed, or after it has evidence of a successful Hedera payment settlement. A denied request, approval click, payment attempt or successful HTTP response alone is insufficient evidence. The payment integration must supply a settlement transaction ID; its exact event hook remains Open.
+The private event schema also changes. Payment parties and grant expiry cannot silently disappear from a consumer contract. Reconcile each field, topic policy and opening format before migrating. No live topic or deployment inventory has been checked in this task; do not assume there are no records to preserve.
 
-The service receives an injected, operator-configured Hedera client and topic ID. A testnet topic requires a submit key controlled by the approval service; read access remains public. H3 must supply the payer and authorized signing setup through the approved secret channel. The console and nodes receive neither signer nor payer credentials. The SDK transaction uses `setMaxChunks(1)` and an explicit fee cap approved during H3 setup; topic custom fees must also be checked. Do not create a topic or submit a message during this design spike.
+## Consequences shared by both options
 
-Retain the private opening and eventual topic/sequence/receipt mapping in approval-service memory for the demo. Expose the opening only to the authorized operator console over an authenticated connection; a shared write token alone does not protect read access. Do not put openings in URLs, public responses, logs or HashScan links. A restart loses unrevealed openings and pending submissions; show them as unavailable, never reconstruct an opening from guessed data. Durable storage is a future human decision, not a new node-state write.
+The approval service posts only after a confirmed source transaction. A payment attempt or a successful service response is insufficient settlement evidence. The payment hook remains Open. Audit failure never undoes a grant, delays revocation or blocks peer enforcement.
 
-Submission failure does not undo an ENS change, hide a revocation or block peer enforcement. Show audit status separately: pending submission, consensus received, mirror pending, matched, mismatch or unavailable. Retry using the same event bytes and salt. Resolve an ambiguous submission by its transaction ID before resubmitting; duplicates may still occur and are grouped by the private event ID. Never claim exactly-once delivery. Audit lag must not become access revocation latency.
+A private opening contains the event and salt. Only the authenticated operator console receives it. Never post plaintext service names, hosts, ports or openings, including in memos or public responses. Losing an in-memory opening makes its entry unavailable for verification after restart. Durable retention remains a human decision.
 
-## Console verification
+A mirror match means that the configured mirror reports matching commitment bytes. It does not prove consensus independently, source-event truth or log completeness. Verify the source transaction separately. The merged reader lists entries; the alternative experiment looks up a receipt sequence. Those are different read strategies and have not been integrated.
 
-**Proposed.** The approval console, outside read-only `dashboard/`, receives the private opening and receipt locator from the approval service. It uses an injected read-only HTTP client for the mirror query:
+Salt leakage permits checking candidate events when every other field is known or guessable. In the alternate, the random event identifier must also be known or guessed; it is not an additional security key. A full opening reveals its event and links it to the public entry. Topic activity, payer metadata and timing remain public under either format.
 
-1. Read the configured testnet topic and exact receipt sequence using `GET /api/v1/topics/{topicId}/messages/{sequenceNumber}`. Preserve sequence numbers as decimal strings; reject values a JSON parser cannot represent exactly.
-2. Check the response topic, sequence, expected payer and single-chunk shape. Base64-decode `message`, require the exact version-1 envelope with no extra fields, and recompute the commitment from the private opening. Compare both the decoded bytes and commitment against the expected message. Reject malformed data or a mismatch.
-3. Display “commitment matched via mirror node,” the consensus timestamp, sequence and a HashScan link. A 404 can mean mirror ingestion lag: show pending and retry with a bounded timeout. Distinguish transport failure, unavailable opening and mismatch. Never display a successful match before comparison.
+**Read from source:** `HcsAuditTrail.record()` creates a new salt on each call. Calling it again does not resubmit the same commitment. An interface for resubmitting existing bytes and resolving ambiguous submissions by transaction identifier remains Open. Neither design guarantees exactly-once delivery.
 
-The testnet topic's message list is `https://hashscan.io/testnet/topic/{topicId}/messages`. An individual message's transaction detail uses the mirror consensus timestamp: `https://hashscan.io/testnet/transaction/{seconds.nanoseconds}/message`. Do not invent a topic-message sequence path. Explorer rendering remains Open until H3 permits live validation; source evidence is in the [spike note](../spikes/0014-hcs-audit-trail.md).
+The HashScan transaction link differs between the merged reader and the experiment's cited explorer source. Keep both interpretations labelled Read from source; a browser check of a real submitted entry remains Open. Do not call either route verified from these offline results.
 
-An HTTPS mirror response is a trust boundary. Matching proves that the mirror reports these commitment bytes at this topic and sequence; it is not independent consensus-proof validation. HCS ordering does not prove that the original grant, revoke or payment was truthful or that the approval service logged every event. Verify the underlying ENS/payment transaction separately. The topic submit key restricts posting but does not make the log private.
+## Approval and verification gates
 
-## Privacy consequences and gates
+**Open:** human format selection and named ADR approval; H1 (judge preference); H3 (payer, topic and signing setup); payment settlement hook; live submission, receipt, mirror ingestion and HashScan rendering. This offline task does not require a payer. Selecting a format does not approve testnet writes or accept the final ADR.
 
-**Proposed.** A fresh secret salt prevents observers from checking guesses against a small event dictionary. If an event's salt leaks, guesses about that event become checkable; known identities, public ENS transactions and payment references can help recover its fields. A leaked salt does not decrypt the digest, reveal other independent salts or permit spending or granting access. A leaked full opening reveals its contents and links that event to its public HCS entry forever. Never reuse salts or put them on-chain.
-
-HCS still exposes topic activity, message count, ordering, timestamps and payer metadata. These allow timing correlation with public ENS writes and payments. Sharing openings with a browser also trusts that browser and its operator. State these limitations when describing privacy; do not claim anonymity or hide existing on-chain disclosures.
-
-**Open gates:** H1 judge preference; human approval of this draft; H3 payer, topic and signing setup; payment settlement hook; live Bun/Node submission, receipt and mirror latency; working HashScan rendering. ETH-66 needs no payer to complete offline design work. Later implementation must preserve all handoff §3 invariants and demonstrate a real testnet record at beat 3.
+The [spike evidence](../spikes/0014-hcs-audit-trail.md) records what ran. Merge of the draft and spike note remains gated on cross-family re-review after reconciliation. All changes serve demo beat 3 and preserve the handoff's section 3 invariants.

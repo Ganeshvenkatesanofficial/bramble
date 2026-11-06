@@ -49,14 +49,14 @@ The fixture supports W8 demo beat 4; it is not evidence of real NAT traversal.
 
 Agent: Net-Claude, committing as `Net-Claude (agent, Chaitanya Kelkar)` (Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026). Move these rows into the shared Paths table from ETH-27 when that lands.
 
-| Path | Kind |
-| --- | --- |
-| `brambled/rendezvous/endpoints.go` | Code |
-| `brambled/rendezvous/endpoints_test.go` | Test |
-| `brambled/rendezvous/endpoints_integration_test.go` | Test |
-| `brambled/endpoint_candidate_test.go` | Test |
-| `brambled/main.go` (`peerEndpointFromCandidate`) | Code |
-| `docs/reference/endpoint-exchange.md` | Documentation |
+| Path                                                | Kind          |
+| --------------------------------------------------- | ------------- |
+| `brambled/rendezvous/endpoints.go`                  | Code          |
+| `brambled/rendezvous/endpoints_test.go`             | Test          |
+| `brambled/rendezvous/endpoints_integration_test.go` | Test          |
+| `brambled/endpoint_candidate_test.go`               | Test          |
+| `brambled/main.go` (`peerEndpointFromCandidate`)    | Code          |
+| `docs/reference/endpoint-exchange.md`               | Documentation |
 
 ## Mumbai approval API (ETH-29)
 
@@ -94,30 +94,30 @@ Baseline: commit `28e2a8f`, tag `pre-mumbai`. Agents wrote the paths below after
 
 Each agent commits under the git identity shown here. Confirm yours with `git config user.name` before your first commit.
 
-| Agent | Lane | Commit author name | Status |
-| --- | --- | --- | --- |
-| Core-Claude | Core and console | `Core-Claude (agent, Jay Kerkar)` | Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026 |
-| Core-Sol | Core and console (cross-family reviewer) | to be added by Core-Sol | Open |
-| Net-Claude | Network (W8a STUN) | `Net-Claude (agent, Chaitanya Kelkar)` | Verified from commit authorship on `net-claude/eth-36-stun-binding` |
-| Tor-Claude | Tor (took over ETH-50 from Core-Claude) | `Tor-Claude (agent, Chaitanya Kelkar)` | Verified from the author of commit `06e52d9` |
-| Hedera-Sol | Hedera | `Hedera-Sol (agent, Aayush Nair)` | Verified from `git var GIT_AUTHOR_IDENT` on 6 Nov 2026 |
-| Other lane agents | Network, Tor, Hedera, Demo and infra | to be added by each agent | Open |
+| Agent             | Lane                                     | Commit author name                     | Status                                                              |
+| ----------------- | ---------------------------------------- | -------------------------------------- | ------------------------------------------------------------------- |
+| Core-Claude       | Core and console                         | `Core-Claude (agent, Jay Kerkar)`      | Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026                       |
+| Core-Sol          | Core and console (cross-family reviewer) | to be added by Core-Sol                | Open                                                                |
+| Net-Claude        | Network (W8a STUN)                       | `Net-Claude (agent, Chaitanya Kelkar)` | Verified from commit authorship on `net-claude/eth-36-stun-binding` |
+| Tor-Claude        | Tor (took over ETH-50 from Core-Claude)  | `Tor-Claude (agent, Chaitanya Kelkar)` | Verified from the author of commit `06e52d9`                        |
+| Hedera-Sol        | Hedera                                   | `Hedera-Sol (agent, Aayush Nair)`      | Verified from `git var GIT_AUTHOR_IDENT` on 6 Nov 2026              |
+| Other lane agents | Network, Tor, Hedera, Demo and infra     | to be added by each agent              | Open                                                                |
 
 ### Paths
 
 Hedera-Sol uses OpenAI Codex. Human approval of ADR 0014 is pending.
 
-| Path | Ticket | Agent | Kind |
-| --- | --- | --- | --- |
-| `README.md` ("Pre-existing vs new", "CROPS" skeleton) | ETH-27 | Core-Claude | Documentation |
-| `docs/adr/0014-hcs-audit-trail.md`, `docs/spikes/0014-hcs-audit-trail.md`, `scripts/spikes/hcs-audit.mjs`, `docs/AI_USAGE.md` | ETH-66 | Hedera-Sol | Draft design, offline experiment, documentation |
-| `docs/AI_USAGE.md` (this section) | ETH-27 | Core-Claude | Documentation |
-| `scripts/demo/src/*.ts`, `scripts/demo/package.json`, `scripts/demo/tsconfig.json` | ETH-50 | Core-Claude | Code and unit tests (launcher, preflight, probe, reset) |
-| `scripts/demo/README.md` | ETH-50 | Core-Claude | Documentation |
-| `scripts/demo/REFERENCE.md` | ETH-50 | Tor-Claude | Documentation (split from the README) |
-| `scripts/demo/src/redact.ts`, `scripts/demo/src/run-command.ts`, and the review fixes in `scripts/demo/src/*.ts` and `scripts/demo/README.md` | ETH-50 | Tor-Claude (took over from Core-Claude, 5 Nov 2026) | Code, unit tests, documentation |
-| `package.json` (`demo`, `demo:preflight`, `demo:reset` scripts), `pnpm-workspace.yaml`, `pnpm-lock.yaml` | ETH-50 | Core-Claude | Configuration |
-| `brambled/stun/`, `brambled/wgnode/stun.go`, `brambled/statusapi/stun_test.go`, `docs/eth-36-stun-spec.md`, `docs/adr/0017-stun-bind-wrapper-source-selection.md` | ETH-36 | Net-Astra, Net-Claude | Code, tests, documentation |
+| Path                                                                                                                                                                                                                 | Ticket | Agent                                               | Kind                                                    |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------- | ------------------------------------------------------- |
+| `README.md` ("Pre-existing vs new", "CROPS" skeleton)                                                                                                                                                                | ETH-27 | Core-Claude                                         | Documentation                                           |
+| `docs/adr/0014-hcs-audit-trail.md`, `docs/spikes/0014-hcs-audit-trail.md`, `scripts/spikes/hcs-audit.mjs`, `scripts/spikes/hcs-audit-reproduction.md`, `docs/reference/hcs-audit-alternative.md`, `docs/AI_USAGE.md` | ETH-66 | Hedera-Sol                                          | Draft design, offline experiment, documentation         |
+| `docs/AI_USAGE.md` (this section)                                                                                                                                                                                    | ETH-27 | Core-Claude                                         | Documentation                                           |
+| `scripts/demo/src/*.ts`, `scripts/demo/package.json`, `scripts/demo/tsconfig.json`                                                                                                                                   | ETH-50 | Core-Claude                                         | Code and unit tests (launcher, preflight, probe, reset) |
+| `scripts/demo/README.md`                                                                                                                                                                                             | ETH-50 | Core-Claude                                         | Documentation                                           |
+| `scripts/demo/REFERENCE.md`                                                                                                                                                                                          | ETH-50 | Tor-Claude                                          | Documentation (split from the README)                   |
+| `scripts/demo/src/redact.ts`, `scripts/demo/src/run-command.ts`, and the review fixes in `scripts/demo/src/*.ts` and `scripts/demo/README.md`                                                                        | ETH-50 | Tor-Claude (took over from Core-Claude, 5 Nov 2026) | Code, unit tests, documentation                         |
+| `package.json` (`demo`, `demo:preflight`, `demo:reset` scripts), `pnpm-workspace.yaml`, `pnpm-lock.yaml`                                                                                                             | ETH-50 | Core-Claude                                         | Configuration                                           |
+| `brambled/stun/`, `brambled/wgnode/stun.go`, `brambled/statusapi/stun_test.go`, `docs/eth-36-stun-spec.md`, `docs/adr/0017-stun-bind-wrapper-source-selection.md`                                                    | ETH-36 | Net-Astra, Net-Claude                               | Code, tests, documentation                              |
 
 ## Mumbai formatting gate correction (ETH-75)
 
@@ -140,7 +140,7 @@ and push-blocking notes in the ETH-75 evidence above for ETH-29.
 ### ETH-34 — agent payments panel (Core-Sol)
 
 - Agent: Core-Sol; committing as `Core-Sol (agent, Yash Kolekar)
-  <153986822+whyash-paperclip@users.noreply.github.com>`.
+<153986822+whyash-paperclip@users.noreply.github.com>`.
 - Task/spec: ETH-34 and `docs/14_MUMBAI_BUILD_BRIEF.md` W3, superseded where
   applicable by `docs/15_MUMBAI_HANDOFF.md`; demo beat 3.
 - Prompt: inspect real rendezvous/data-relay purchase timing, reuse the read-only
