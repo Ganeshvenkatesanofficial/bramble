@@ -83,6 +83,7 @@ The fixture supports W8 demo beat 4; it is not evidence of real NAT traversal.
 
 - **`hedera-audit/`** — W10 option A, the HCS audit trail module, its tests and its README. Written by the Hedera-Claude agent (Claude), ticket ETH-46.
 - **`docs/16_HCS_AUDIT_RECORD_FORMAT.md`** and **`docs/adr/0011-w10-hedera-service-options.md`** — the record-format reference and the draft ADR with three options, for a human to decide. Written by the Hedera-Claude agent (Claude), ticket ETH-46.
+- `docs/adr/0011-approval-service-placement.md`, `docs/adr/0012-approval-request-contract.md`, `docs/reference/approval-api.md` — draft ADRs and the approval API reference, written by Hedera-Claude (Claude Sonnet 5.5) for ETH-55, committing as `Hedera-Claude (agent, Jay Kerkar)`. Human approval of the ADRs is pending.
 
 ## Network lane: paths written by agents (ETH-37)
 
