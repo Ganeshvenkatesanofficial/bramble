@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/WhyAsh5114/bramble/brambled/sidecar"
+	"github.com/WhyAsh5114/bramble/brambled/sponsor"
 	"github.com/WhyAsh5114/bramble/brambled/wgnode"
 )
 
@@ -736,4 +737,76 @@ func pingUntilConnected(t *testing.T, node *wgnode.Node, addr netip.Addr, timeou
 		time.Sleep(200 * time.Millisecond)
 	}
 	return false
+}
+
+// An acknowledged candidate exchange is not a WireGuard handshake. A cloud
+// adopter may still be waiting for admission or the shared sponsored poll
+// budget. Keep its advertised session usable while it catches up.
+func TestSponsoredRelay_BootstrapKeepsSessionUntilPeerHandshakes(t *testing.T) {
+	rdvAddr, sidecarURL := startRealSponsoringRelay(t, "device1,cloud1", 1<<20)
+	relays := []sidecar.RendezvousRelay{{Label: "relay1", Address: rdvAddr, SidecarURL: sidecarURL}}
+	pool := dataRelayFlag{"relay1": sidecarURL}
+	devicePriv, devicePub, err := wgnode.GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cloudPriv, cloudPub, err := wgnode.GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	deviceIP := netip.MustParseAddr("10.100.0.1")
+	cloudIP := netip.MustParseAddr("10.100.0.2")
+	device, err := wgnode.New(wgnode.Config{PrivateKeyHex: devicePriv, LocalAddress: deviceIP, Netstack: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer device.Close()
+	cloud, err := wgnode.New(wgnode.Config{PrivateKeyHex: cloudPriv, LocalAddress: cloudIP, Netstack: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cloud.Close()
+	payer := &countingPayer{relayPayer: &sponsor.Payer{Label: "device1"}}
+	candidateCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		candidate, _, err := exchangeAnyMetered(relays, &sponsor.Payer{Label: "cloud1"}, cloudPub, devicePub, "", 15*time.Second)
+		candidateCh <- candidate
+		errCh <- err
+	}()
+	endpoint, label, err := relayRoutedEndpoint(device, payer, pool, 10_000, unrestrictedDataRelayPurchasePolicy, relays, devicePub, cloudPub, 15*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate := <-candidateCh
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
+	}
+	if candidate != endpoint.String() {
+		t.Fatalf("initial endpoints differ: %s vs %s", endpoint, candidate)
+	}
+	if err := device.AddPeer(cloudPub, netip.PrefixFrom(cloudIP, 32), endpoint); err != nil {
+		t.Fatal(err)
+	}
+	state := newRelayState()
+	state.set("cloud1", cloudPub, label)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go watchDataRelayFailover(ctx, device, payer, state, "cloud1", netip.PrefixFrom(cloudIP, 32), pool, 10_000,
+		unrestrictedDataRelayPurchasePolicy, staticRendezvous(relays), devicePub, 15*time.Second)
+	// Hold cloud admission beyond the six-second stall timeout. No handshake
+	// or received bytes exist yet, so that silence must not replace the session.
+	time.Sleep(12 * time.Second)
+	if n := payer.sessions.Load(); n != 1 {
+		t.Fatalf("bootstrap replaced an unhandshaked session: allocated %d sessions, want 1", n)
+	}
+	if err := cloud.SetPersistentKeepalive(devicePub, dataRelayKeepaliveSeconds); err != nil {
+		t.Fatal(err)
+	}
+	if err := cloud.AddPeer(devicePub, netip.PrefixFrom(deviceIP, 32), endpoint); err != nil {
+		t.Fatal(err)
+	}
+	if !pingUntilConnected(t, device, cloudIP, 10*time.Second) {
+		t.Fatal("delayed cloud adopter could not handshake through the original session")
+	}
 }
