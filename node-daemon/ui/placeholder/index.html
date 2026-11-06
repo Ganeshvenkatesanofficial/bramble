@@ -149,7 +149,7 @@
         refresh()
       })
       $('test').addEventListener('click', async () => {
-        $('testResult').textContent = 'Testing…'
+        $('testResult').textContent = 'Testing… this can take up to a minute.'
         const r = await post('/api/test')
         $('testResult').textContent = r.ok
           ? `OK, HTTP ${r.status} in ${r.ms} ms`

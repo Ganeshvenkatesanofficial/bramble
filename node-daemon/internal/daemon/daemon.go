@@ -480,6 +480,11 @@ type TestResult struct {
 	Error   *ErrorInfo `json:"error,omitempty"`
 }
 
+// testTimeout covers the gateway's ACL decision: it reads three ENS records
+// over Tor before it answers (brambled/gateway gatewayDecisionDeadline is
+// 90 s). A first request took 21.8 s on 6 Nov 2026 (Verified, dev tailnet).
+const testTimeout = 95 * time.Second
+
 // testTarget picks the configured service matching peer and service; empty
 // values match anything.
 func testTarget(cfg *NodeConfig, own, peer, service string) (Service, bool) {
@@ -514,7 +519,7 @@ func (d *Daemon) Test(ctx context.Context, peer, service string, get func(ctx co
 		return TestResult{Peer: target.Peer, Service: target.Service, Error: &ErrorInfo{Message: "The test service was added after the connection started.", NextStep: "Leave and join again, or restart Bramble."}}
 	}
 	start := time.Now()
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, testTimeout)
 	defer cancel()
 	status, err := get(ctx, fmt.Sprintf("http://127.0.0.1:%d%s", port, target.Path))
 	res := TestResult{Status: status, MS: time.Since(start).Milliseconds(), Peer: target.Peer, Service: target.Service}
