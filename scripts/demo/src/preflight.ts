@@ -6,8 +6,8 @@
 // PreflightContext, so unit tests use fakes. The checks print names, states
 // and public identifiers. They never print an env value or a URL.
 import { HEDERA_USDC_ASSET_ID } from '../../../sidecar/src/payments/config'
-import { errorText } from './redact'
-import { NODE_ROLES, SIDECAR_PORT, STATUS_API_PORT, type NodeRole, type Role } from './topology'
+import { errorText, scrub, secretValues } from './redact'
+import { NODE_ROLES, RELAY_SUPPORT_UNITS, SIDECAR_PORT, STATUS_API_PORT, type NodeRole, type Role } from './topology'
 
 export type Status = 'pass' | 'warn' | 'fail'
 
@@ -45,6 +45,10 @@ export interface PreflightContext {
   tcp(hostPort: string, timeoutMs: number): Promise<void>
   /** True when the Key Ring file that holds the granter key exists. */
   granterRingPresent: boolean
+  /** Secret values known on this machine, beyond what `env` and `roleEnv` hold. Scrubbed from every printed line. */
+  secrets?: string[]
+  /** True when systemd reports a unit active on this machine. Without it the support-unit check is skipped. */
+  unitActive?(unit: string): Promise<boolean>
 }
 
 export interface CheckUnit {
@@ -196,7 +200,7 @@ function nodeUnits(ctx: PreflightContext, role: NodeRole): CheckUnit[] {
       if (res.status !== 200) return fail(id, `${where}: /tor/status answered ${res.status}`, true)
       if (body.state === 'ready') return { id, status: 'pass', detail: `${where}: Tor ready` }
       if (body.state === 'failed')
-        return fail(id, `${where}: Tor failed to start: ${errorText(body.lastError ?? 'unknown error')}`, true)
+        return fail(id, `${where}: Tor failed to start; read the sidecar log on that node`, true)
       return fail(id, `${where}: starting Tor`, true)
     },
   }
@@ -221,7 +225,7 @@ function nodeUnits(ctx: PreflightContext, role: NodeRole): CheckUnit[] {
         case 'disabled':
           return fail(id, `${where}: STUN discovery disabled; set BRAMBLE_STUN_SERVERS`)
         case 'unavailable':
-          return fail(id, `${where}: STUN discovery failed: ${errorText(body.error ?? 'unknown error')}`, true)
+          return fail(id, `${where}: STUN discovery failed; read the brambled log on that node`, true)
         default:
           return fail(id, `${where}: STUN discovery state ${String(body.state)}`, true)
       }
@@ -234,12 +238,7 @@ function nodeUnits(ctx: PreflightContext, role: NodeRole): CheckUnit[] {
       const id = `registry:${role}`
       const res = await probe.getJson(SIDECAR_PORT, '/devices')
       if (res.status !== 200) {
-        const reason = asRecord(res.body).error
-        return fail(
-          id,
-          `${where}: /devices answered ${res.status}${typeof reason === 'string' ? ` (${errorText(reason)})` : ''}`,
-          true
-        )
+        return fail(id, `${where}: /devices answered ${res.status}`, true)
       }
       const labels = asRecord(res.body).labels
       if (!Array.isArray(labels) || labels.length === 0)
@@ -294,8 +293,10 @@ function relayUnit(ctx: PreflightContext): CheckUnit {
       const dataRelays = Array.isArray(lists.dataRelays) ? lists.dataRelays : []
       if (rendezvous.length === 0) return fail(id, 'the relay registry lists no rendezvous relay')
 
-      const okLabels: string[] = []
-      const badLabels: string[] = []
+      // The paid demo path needs one reachable rendezvous relay AND one healthy payment sidecar.
+      // Extra relays of either kind are redundancy: losing one is a warning, losing all is a failure.
+      const rendezvousUp: string[] = []
+      const rendezvousDown: string[] = []
       for (const relay of rendezvous) {
         let ok = isHostPort(relay.address)
         if (ok) {
@@ -305,11 +306,13 @@ function relayUnit(ctx: PreflightContext): CheckUnit {
             ok = false
           }
         }
-        ;(ok ? okLabels : badLabels).push(`${relay.label} (rendezvous)`)
+        ;(ok ? rendezvousUp : rendezvousDown).push(relay.label)
       }
       const sidecarUrls = new Map<string, string>()
       for (const relay of rendezvous) if (relay.sidecarUrl) sidecarUrls.set(relay.sidecarUrl, relay.label)
       for (const relay of dataRelays) sidecarUrls.set(relay.sidecarUrl, relay.label)
+      const sidecarUp: string[] = []
+      const sidecarDown: string[] = []
       for (const [raw, label] of sidecarUrls) {
         const base = httpUrl(raw)
         let ok = false
@@ -320,13 +323,44 @@ function relayUnit(ctx: PreflightContext): CheckUnit {
             ok = false
           }
         }
-        ;(ok ? okLabels : badLabels).push(`${label} (payment sidecar)`)
+        ;(ok ? sidecarUp : sidecarDown).push(label)
       }
-      if (okLabels.length === 0) return fail(id, `no relay reachable: ${badLabels.join(', ')}`, true)
-      if (badLabels.length > 0) {
-        return { id, status: 'warn', detail: `reachable: ${okLabels.join(', ')}; unreachable: ${badLabels.join(', ')}` }
+      const list = (labels: string[]) => (labels.length > 0 ? labels.join(', ') : 'none')
+      if (rendezvousUp.length === 0) {
+        return fail(id, `no rendezvous relay reachable (down: ${list(rendezvousDown)})`, true)
       }
-      return { id, status: 'pass', detail: `reachable: ${okLabels.join(', ')}` }
+      if (sidecarUrls.size === 0) return fail(id, 'the relay registry lists no payment sidecar')
+      if (sidecarUp.length === 0) {
+        return fail(id, `no payment sidecar healthy (down: ${list(sidecarDown)}); paid access cannot start`, true)
+      }
+      const detail = `rendezvous up: ${list(rendezvousUp)}; payment sidecar up: ${list(sidecarUp)}`
+      if (rendezvousDown.length > 0 || sidecarDown.length > 0) {
+        return {
+          id,
+          status: 'warn',
+          detail: `${detail}; redundant relays down: ${list([...rendezvousDown, ...sidecarDown])}`,
+        }
+      }
+      return { id, status: 'pass', detail }
+    },
+  }
+}
+
+function relaySupportUnit(unitActive: (unit: string) => Promise<boolean>): CheckUnit {
+  const id = 'services:relays'
+  return {
+    id,
+    async run() {
+      const down: string[] = []
+      for (const unit of RELAY_SUPPORT_UNITS) if (!(await unitActive(unit))) down.push(unit)
+      if (down.length > 0) {
+        return fail(
+          id,
+          `not active: ${down.join(', ')}; start with: sudo systemctl enable --now ${down.join(' ')}`,
+          true
+        )
+      }
+      return { id, status: 'pass', detail: `active: ${RELAY_SUPPORT_UNITS.join(', ')}` }
     },
   }
 }
@@ -392,6 +426,7 @@ export function buildChecks(ctx: PreflightContext): CheckUnit[] {
   units.push(sepoliaRpcUnit(ctx))
   for (const role of NODE_ROLES) units.push(...nodeUnits(ctx, role))
   units.push(relayUnit(ctx))
+  if (ctx.localRoles.includes('relays') && ctx.unitActive) units.push(relaySupportUnit(ctx.unitActive))
   const payers = payerAccounts(ctx)
   if (payers.length === 0) {
     units.push({
@@ -400,7 +435,28 @@ export function buildChecks(ctx: PreflightContext): CheckUnit[] {
     })
   }
   for (const account of payers) units.push(payerUnit(ctx, account))
-  return units
+  return units.map((unit) => sanitized(ctx, unit))
+}
+
+/** Every secret value this context knows, for scrubbing. */
+export function contextSecrets(ctx: PreflightContext): string[] {
+  return [...(ctx.secrets ?? []), ...secretValues(ctx.env, ...Object.values(ctx.roleEnv))]
+}
+
+/** Scrubs a unit's detail and any error it throws, so no check can print a secret or a URL. */
+function sanitized(ctx: PreflightContext, unit: CheckUnit): CheckUnit {
+  const secrets = contextSecrets(ctx)
+  return {
+    id: unit.id,
+    async run() {
+      try {
+        const result = await unit.run()
+        return { ...result, detail: scrub(result.detail, secrets) }
+      } catch (err) {
+        return fail(unit.id, errorText(err, secrets), true)
+      }
+    },
+  }
 }
 
 export interface RunOptions {

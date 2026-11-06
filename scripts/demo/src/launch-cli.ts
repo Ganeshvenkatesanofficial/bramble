@@ -4,25 +4,14 @@
 //
 // Usage: pnpm demo [--role relays,gateway,worker,admin] [--dry-run] [--no-preflight] [--wait <seconds>]
 // DEMO_NAT_BOX=1 starts bramble-nat-box first and probes local nodes inside it.
-import { spawn } from 'node:child_process'
-import { buildContext, detectRoles, loadEnv, natBoxEnabled, REPO_ENV_PATH } from './context'
+import { ambientSecrets, buildContext, detectRoles, loadEnv, natBoxEnabled, REPO_ENV_PATH } from './context'
 import { parseFlags } from './cli-args'
 import { readEnvFile } from './env-file'
-import { formatPlan, planLaunch, startUnits, type RunCommand } from './launch'
+import { formatPlan, planLaunch, startUnits } from './launch'
+import { run } from './run-command'
 import { buildChecks, exitCode, formatReport, runPreflight } from './preflight'
 import { errorText } from './redact'
 import { parseRelayInstances, parseRoles } from './topology'
-
-const run: RunCommand = (file, args) =>
-  new Promise((resolve, reject) => {
-    const child = spawn(file, args, { stdio: ['inherit', 'pipe', 'inherit'] })
-    let stdout = ''
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString()
-    })
-    child.on('error', reject)
-    child.on('close', (code) => resolve({ code: code ?? 1, stdout }))
-  })
 
 async function main() {
   const { values, bools } = parseFlags(process.argv.slice(2), {
@@ -75,6 +64,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('demo launch failed:', errorText(err, [process.env.SEPOLIA_RPC_URL]))
+  console.error('demo launch failed:', errorText(err, ambientSecrets(process.env)))
   process.exit(2)
 })

@@ -59,9 +59,16 @@ export interface UnitOptions {
 }
 
 /**
+ * Units the relays machine also needs: the logging RPC proxy (`rpc-proxy.service`,
+ * ETH-44), Caddy and coturn (distribution packages). `pnpm demo` does not start
+ * them, because the installer does not create or enable them yet. It prints the
+ * command, and the preflight checks they are active.
+ */
+export const RELAY_SUPPORT_UNITS = ['rpc-proxy', 'caddy', 'coturn']
+
+/**
  * The systemd units a role needs, in start order. Source: deploy/REFERENCE.md.
- * The logging proxy, Caddy and coturn on the relays machine are not listed
- * here: their unit names are not in the repository yet (Open).
+ * The relays machine's support units are in RELAY_SUPPORT_UNITS.
  */
 export function unitsFor(role: Role, opts: UnitOptions): string[] {
   const nat = opts.natBox ? ['bramble-nat-box'] : []

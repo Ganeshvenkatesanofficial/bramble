@@ -222,17 +222,19 @@ describe('node checks', () => {
     expect(byId(waited, 'tor:gateway').status).toBe('pass')
   })
 
-  it('a failed Tor start carries the sidecar error text, scrubbed', async () => {
+  it('a failed Tor start gives a fixed diagnostic and never echoes the sidecar error text', async () => {
     const tor = probe({
       ...HEALTHY,
       '7890/tor/status': {
         status: 200,
-        body: { state: 'failed', lastError: 'bootstrap failed at https://x.example/y' },
+        body: { state: 'failed', lastError: `bootstrap failed at https://x.example/y key ${SECRET}` },
       },
     })
     const r = byId(await run(context({ nodes: { gateway: tor, worker: probe(HEALTHY) } })), 'tor:gateway')
     expect(r.status).toBe('fail')
-    expect(r.detail).toContain('<url>')
+    expect(r.detail).toContain('Tor failed to start')
+    expect(r.detail).not.toContain('x.example')
+    expect(r.detail).not.toContain(SECRET)
   })
 
   it('an old sidecar with no /tor/status fails with a clear reason', async () => {
@@ -245,7 +247,7 @@ describe('node checks', () => {
     const states: Array<[unknown, string]> = [
       [{ state: 'disabled' }, 'BRAMBLE_STUN_SERVERS'],
       [{ state: 'discovering' }, 'in progress'],
-      [{ state: 'unavailable', error: 'no response' }, 'no response'],
+      [{ state: 'unavailable', error: 'no response' }, 'STUN discovery failed'],
     ]
     for (const [body, text] of states) {
       const node = probe({ ...HEALTHY, '7899/endpoint': { status: 200, body } })
@@ -285,13 +287,68 @@ describe('relay', () => {
     expect(r.detail).toContain('relay1')
   })
 
-  it('warns when only some relay endpoints answer', async () => {
+  const TWO_RELAYS = probe({
+    ...HEALTHY,
+    '7890/relays': {
+      status: 200,
+      body: {
+        rendezvous: [
+          { label: 'relay1', address: 'relay1.example.org:3478', sidecarUrl: 'https://pay1.example.org' },
+          { label: 'relay2', address: 'relay2.example.org:3478', sidecarUrl: 'https://pay2.example.org' },
+        ],
+        dataRelays: [],
+      },
+    },
+  })
+
+  it('warns, naming the redundant relay, when one of two relays is down', async () => {
+    const ctx = context({
+      nodes: { gateway: TWO_RELAYS, worker: TWO_RELAYS },
+      async tcp(hostPort) {
+        if (hostPort.startsWith('relay2')) throw new Error('timeout')
+      },
+    })
+    const r = byId(await run(ctx), 'relay')
+    expect(r.status).toBe('warn')
+    expect(r.detail).toContain('redundant relays down: relay2')
+  })
+
+  it('fails when the rendezvous relay is reachable but the only payment sidecar is unhealthy', async () => {
+    const ctx = context({
+      async http(url) {
+        if (url.includes('/api/v1/accounts/'))
+          return { status: 200, body: { tokens: [{ token_id: USDC, balance: 2_000_000 }] } }
+        return { status: 503, body: {} }
+      },
+    })
+    const r = byId(await run(ctx), 'relay')
+    expect(r.status).toBe('fail')
+    expect(r.detail).toContain('no payment sidecar healthy')
+    expect(exitCode([r])).toBe(1)
+  })
+
+  it('fails when every rendezvous relay is down even though a payment sidecar answers', async () => {
     const ctx = context({
       async tcp() {
         throw new Error('timeout')
       },
     })
-    expect(byId(await run(ctx), 'relay').status).toBe('warn')
+    const r = byId(await run(ctx), 'relay')
+    expect(r.status).toBe('fail')
+    expect(r.detail).toContain('no rendezvous relay reachable')
+  })
+
+  it('fails when the registry lists no payment sidecar', async () => {
+    const bare = probe({
+      ...HEALTHY,
+      '7890/relays': {
+        status: 200,
+        body: { rendezvous: [{ label: 'r', address: 'relay.example.org:3478' }], dataRelays: [] },
+      },
+    })
+    const r = byId(await run(context({ nodes: { gateway: bare, worker: bare } })), 'relay')
+    expect(r.status).toBe('fail')
+    expect(r.detail).toContain('no payment sidecar')
   })
 
   it('does not fetch a rendezvous address that is not host:port', async () => {
@@ -451,3 +508,71 @@ function clock(): () => number {
   let t = 0
   return () => (t += 10)
 }
+
+describe('secrets never reach the report', () => {
+  const KEY = '0x' + 'ab'.repeat(32)
+  const PAYER_KEY = 'payer-private-key-synthetic-0001'
+
+  it('scrubs a context secret thrown inside a check, in the unit and in the rendered report', async () => {
+    const throwing: NodeProbe = {
+      describe: 'worker',
+      async getJson() {
+        throw new Error(`ssh failed with ${PAYER_KEY} and ${KEY}`)
+      },
+    }
+    const ctx = context({
+      env: { ...context().env, HEDERA_CLIENT_PRIVATE_KEY: PAYER_KEY },
+      nodes: { gateway: throwing, worker: throwing },
+    })
+    const text = formatReport(await run(ctx))
+    expect(text).toContain('<redacted>')
+    expect(text).not.toContain(PAYER_KEY)
+    expect(text).not.toContain(KEY)
+  })
+
+  it('scrubs secrets that only the role env file or ambient list knows', async () => {
+    const throwing: NodeProbe = {
+      describe: 'worker',
+      async getJson() {
+        throw new Error('boom role-file-secret-value ambient-secret-value')
+      },
+    }
+    const ctx = context({
+      roleEnv: { gateway: { ...GOOD_NODE_ENV, BRAMBLE_PRIVATE_KEY: 'role-file-secret-value' } },
+      secrets: ['ambient-secret-value'],
+      nodes: { gateway: throwing, worker: throwing },
+    })
+    const text = formatReport(await run(ctx))
+    expect(text).not.toContain('role-file-secret-value')
+    expect(text).not.toContain('ambient-secret-value')
+  })
+
+  it('never prints remote error text from the registry check', async () => {
+    const node = probe({ ...HEALTHY, '7890/devices': { status: 502, body: { error: `upstream ${SECRET}` } } })
+    const r = byId(await run(context({ nodes: { gateway: node, worker: probe(HEALTHY) } })), 'registry:gateway')
+    expect(r.detail).toContain('502')
+    expect(r.detail).not.toContain(SECRET)
+  })
+})
+
+describe('relay support units', () => {
+  it('fails on the relays machine when a support unit is not active, naming the fix', async () => {
+    const ctx = context({
+      localRoles: ['relays'],
+      env: { ...context().env, RELAY_PAYEE_ACCOUNT_ID: '0.0.9' },
+      async unitActive(unit) {
+        return unit !== 'coturn'
+      },
+    })
+    const r = byId(await run(ctx), 'services:relays')
+    expect(r.status).toBe('fail')
+    expect(r.detail).toContain('systemctl enable --now coturn')
+  })
+
+  it('passes when all three are active, and is absent off the relays machine', async () => {
+    const on = context({ localRoles: ['relays'], unitActive: async () => true })
+    expect(byId(await run(on), 'services:relays').status).toBe('pass')
+    const off = await run(context({ unitActive: async () => true }))
+    expect(off.some((r) => r.id === 'services:relays')).toBe(false)
+  })
+})

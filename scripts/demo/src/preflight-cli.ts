@@ -4,7 +4,7 @@
 // Usage: pnpm demo:preflight [--role relays,gateway,worker,admin] [--wait <seconds>]
 // Without --role, the roles come from the env files under /etc/bramble.
 // Other machines are reached with DEMO_GATEWAY_SSH / DEMO_WORKER_SSH (see README).
-import { buildContext, detectRoles } from './context'
+import { ambientSecrets, buildContext, detectRoles } from './context'
 import { parseFlags } from './cli-args'
 import { errorText } from './redact'
 import { exitCode, formatReport, buildChecks, runPreflight } from './preflight'
@@ -34,6 +34,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('preflight failed:', errorText(err, [process.env.SEPOLIA_RPC_URL]))
+  console.error('preflight failed:', errorText(err, ambientSecrets(process.env)))
   process.exit(2)
 })

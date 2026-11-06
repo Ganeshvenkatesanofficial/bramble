@@ -62,13 +62,19 @@ export async function resetDemo(deps: LibDeps, params: ResetParams): Promise<Res
     log(`${deviceFullname} is not revoked`)
   }
 
+  // Test the raw record, not the parsed digests: a record such as ", ," holds no digest but is not empty.
   const before = (await deps.resolver.getText(deviceFullname, 'acl')) ?? ''
-  if (parseAclRecord(before).length === 0) {
-    log(`${deviceFullname} has no acl digests`)
+  const digests = parseAclRecord(before)
+  if (before === '') {
+    log(`${deviceFullname} has an empty acl record`)
   } else {
-    actions.push(`${verb} remove the digests for ${params.serviceNames.join(', ') || '(no services)'}`)
+    actions.push(
+      digests.length > 0
+        ? `${verb} remove the digests for ${params.serviceNames.join(', ') || '(no services)'}`
+        : `${verb} clear the acl record, which holds no digest`
+    )
     let remaining = before
-    if (!dryRun && params.serviceNames.length > 0) {
+    if (!dryRun && digests.length > 0 && params.serviceNames.length > 0) {
       const change = await revokeAcl(deps, {
         deviceLabel: params.agentLabel,
         gatewayLabel: params.gatewayLabel,
@@ -79,10 +85,10 @@ export async function resetDemo(deps: LibDeps, params: ResetParams): Promise<Res
       if (change.txHash) txHashes.push(change.txHash)
       remaining = change.after
     }
-    if (dryRun || parseAclRecord(remaining).length > 0) {
-      actions.push(`${verb} clear any remaining acl digests`)
+    if (dryRun || remaining !== '') {
+      if (digests.length > 0) actions.push(`${verb} clear any remaining acl record`)
       if (!dryRun) {
-        log(`digests the demo did not grant remain on ${deviceFullname}; clearing the acl record`)
+        log(`the acl record on ${deviceFullname} is not empty after the demo's revoke; clearing it`)
         const pending = await deps.signer.setText(deviceFullname, 'acl', '')
         log(`   tx: ${pending.hash}`)
         await pending.wait()
@@ -94,7 +100,7 @@ export async function resetDemo(deps: LibDeps, params: ResetParams): Promise<Res
   if (!dryRun) {
     const finalRevoked = (await deps.resolver.getText(deviceFullname, 'revoked')) ?? ''
     const finalAcl = (await deps.resolver.getText(deviceFullname, 'acl')) ?? ''
-    if (finalRevoked === 'true' || parseAclRecord(finalAcl).length > 0) {
+    if (finalRevoked === 'true' || finalAcl !== '') {
       throw new Error(
         `reset did not reach the initial state for ${deviceFullname} (revoked=${finalRevoked || 'unset'}, acl ${finalAcl === '' ? 'empty' : 'not empty'})`
       )

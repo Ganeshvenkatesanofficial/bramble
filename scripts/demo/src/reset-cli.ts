@@ -8,6 +8,7 @@
 // when set, otherwise from the Key Ring file. No key is printed.
 import { parseServiceNames, type LoadGranterKey } from '../../../admincli/src/lib'
 import { cliDeps, loadGranterKeyFromRing } from '../../../admincli/src/lib-viem'
+import { ambientSecrets } from './context'
 import { parseFlags } from './cli-args'
 import { errorText } from './redact'
 import { resetDemo } from './reset'
@@ -42,6 +43,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('\nreset failed:', errorText(err, [process.env.SEPOLIA_RPC_URL]))
+  console.error('\nreset failed:', errorText(err, ambientSecrets(process.env)))
   process.exit(1)
 })

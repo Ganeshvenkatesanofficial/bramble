@@ -2,13 +2,15 @@
 // prints what to start on the other machines. The demo spans up to four
 // machines (relays, gateway, worker, admin), so a launcher that only knew
 // about one machine would hide the rest of the setup.
-import { ROLES, unitsFor, type Role, type UnitOptions } from './topology'
+import { RELAY_SUPPORT_UNITS, ROLES, unitsFor, type Role, type UnitOptions } from './topology'
 
 export interface LaunchPlan {
   /** Roles this machine runs, in start order, each with its units. */
   here: Array<{ role: Role; units: string[] }>
   /** Roles another machine must start, with the command to run there. */
   elsewhere: Array<{ role: Role; command: string }>
+  /** Steps this command does not perform. The operator runs them on the machine that has the role. */
+  manual: Array<{ role: Role; command: string; why: string }>
 }
 
 export function planLaunch(localRoles: Role[], opts: UnitOptions): LaunchPlan {
@@ -17,7 +19,14 @@ export function planLaunch(localRoles: Role[], opts: UnitOptions): LaunchPlan {
     role,
     command: `pnpm demo --role ${role}`,
   }))
-  return { here, elsewhere }
+  const manual = [
+    {
+      role: 'relays' as const,
+      command: `sudo systemctl enable --now ${RELAY_SUPPORT_UNITS.join(' ')}`,
+      why: 'the logging RPC proxy, HTTPS front end and STUN server. The paid demo and STUN discovery need them',
+    },
+  ]
+  return { here, elsewhere, manual }
 }
 
 export function formatPlan(plan: LaunchPlan): string {
@@ -25,6 +34,10 @@ export function formatPlan(plan: LaunchPlan): string {
   lines.push('On this machine:')
   if (plan.here.length === 0) lines.push('  (no roles)')
   for (const { role, units } of plan.here) lines.push(`  ${role}: ${units.join(' -> ')}`)
+  if (plan.manual.length > 0) {
+    lines.push('', 'Not started by this command (run once on the relays machine):')
+    for (const { role, command, why } of plan.manual) lines.push(`  ${role.padEnd(7)} ${command}`, `          ${why}`)
+  }
   if (plan.elsewhere.length > 0) {
     lines.push('', 'Start on the other machines (start order: relays, gateway, worker, admin):')
     for (const { role, command } of plan.elsewhere) lines.push(`  ${role.padEnd(7)} ${command}`)

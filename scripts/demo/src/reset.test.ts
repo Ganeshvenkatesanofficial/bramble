@@ -118,6 +118,41 @@ describe('resetDemo', () => {
     expect(t.keyLoads()).toBe(0)
   })
 
+  it('clears a nonempty acl record that holds no digest, without loading the granter key', async () => {
+    const t = setup()
+    t.records.set(`${AGENT}|acl`, ', ,')
+
+    const result = await resetDemo(t.deps, t.params())
+
+    expect(t.records.get(`${AGENT}|acl`)).toBe('')
+    expect(t.writes.map((w) => `${w.key}=${w.value}`)).toEqual(['acl='])
+    expect(t.keyLoads()).toBe(0)
+    expect(result.actions).toHaveLength(1)
+  })
+
+  it('--dry-run reports a digest-less nonempty record as an action', async () => {
+    const t = setup()
+    t.records.set(`${AGENT}|acl`, ',')
+    const result = await resetDemo(t.deps, t.params({ dryRun: true }))
+    expect(result.actions).toEqual(['would clear the acl record, which holds no digest'])
+    expect(t.writes).toEqual([])
+  })
+
+  it('fails when the acl record is still nonempty after the reset', async () => {
+    const t = setup()
+    t.records.set(`${AGENT}|acl`, ',')
+    // A signer whose write is accepted but never lands.
+    const lost: typeof t.deps = {
+      ...t.deps,
+      signer: {
+        async setText() {
+          return { hash: '0x1', async wait() {} }
+        },
+      },
+    }
+    await expect(resetDemo(lost, t.params())).rejects.toThrow(/did not reach the initial state/)
+  })
+
   it('refuses a device that is not enrolled and writes nothing', async () => {
     const t = setup({ enrolled: false, revoked: 'true' })
     await expect(resetDemo(t.deps, t.params())).rejects.toThrow(/not enrolled/)

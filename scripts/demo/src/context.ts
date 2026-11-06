@@ -1,11 +1,13 @@
 // Builds the preflight context for this machine from the process env, the repo
 // `.env`, the seeded /etc/bramble env files, and the DEMO_* connection settings.
+import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { GRANTER_KEY_RING_PATH } from '../../../admincli/src/granter-key-path'
 import { listDir, readEnvFile } from './env-file'
 import { httpGet, makeNodeProbe, tcpConnect, type ProbeSpec } from './probe'
+import { secretValues } from './redact'
 import type { Env, NodeProbe, PreflightContext } from './preflight'
 import { ENV_DIR, NODE_ROLES, rolesFromEnvFileNames, sortRoles, type NodeRole, type Role } from './topology'
 
@@ -39,6 +41,24 @@ export function probeSpecs(env: Env, localRoles: Role[]): Partial<Record<NodeRol
     }
   }
   return specs
+}
+
+/**
+ * Every secret value this machine's env knows: the process env, the repo `.env`
+ * and every file under /etc/bramble. Used to scrub text before it is printed.
+ */
+export function ambientSecrets(processEnv: Env, envDir = ENV_DIR): string[] {
+  const files = listDir(envDir)
+    .filter((name) => name.endsWith('.env'))
+    .map((name) => readEnvFile(path.join(envDir, name)))
+  return secretValues(processEnv, readEnvFile(REPO_ENV_PATH), ...files)
+}
+
+/** True when systemd reports the unit active on this machine. */
+export function localUnitActive(unit: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile('systemctl', ['is-active', '--quiet', unit], (err) => resolve(!err))
+  })
 }
 
 export interface Detected {
@@ -78,5 +98,7 @@ export function buildContext(opts: {
     http: httpGet,
     tcp: tcpConnect,
     granterRingPresent: existsSync(GRANTER_KEY_RING_PATH),
+    secrets: ambientSecrets(opts.processEnv, dir),
+    unitActive: localUnitActive,
   }
 }

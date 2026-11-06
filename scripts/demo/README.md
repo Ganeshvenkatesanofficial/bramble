@@ -21,7 +21,7 @@ Three commands run the live demo: `pnpm demo` starts what the current machine ne
 
 5. Read the preflight report. Every line must be `PASS` or `WARN` before you start the demo.
 
-If a unit fails to start, the launcher stops at that unit, because later units depend on it. Run `journalctl -u <unit>` for the cause.
+If a unit fails to start, the launcher stops at that unit, because later units depend on it. It shows the exit code or unit state, never the command's own error output: run `journalctl -u <unit>` for the cause.
 
 ## How to run only the checks
 
@@ -33,7 +33,7 @@ The command exits `0` when nothing failed (warnings are allowed), `1` when a che
 
 ## How to reset the demo
 
-Run this on the admin machine before each take. It returns the agent device to enrolled, not revoked, with an empty `acl` record:
+Run this on the admin machine before each take. It returns the agent device to enrolled, not revoked, with an empty `acl` record (any non-empty record is cleared, even one that holds no digest):
 
 ```sh
 pnpm demo:reset --dry-run        # read the chain, list what would change, send nothing
@@ -53,7 +53,7 @@ The reset uses `admincli`'s importable functions (ETH-28), so it sends the same 
 | `worker`  | Worker node    | `[bramble-nat-box]`, `bramble-worker`                          |
 | `admin`   | Admin machine  | `bramble-approval`, `bramble-console-tunnel`                   |
 
-Unit names are **Read from source** (`deploy/REFERENCE.md`, unmerged ETH-49). The unit names for the relays machine's logging proxy, Caddy and coturn are **Open**: the launcher does not start them.
+Unit names are **Read from source** (`deploy/REFERENCE.md`, unmerged ETH-49). The relays machine also needs `rpc-proxy` (unit file from ETH-44, unmerged), `caddy` and `coturn`. The launcher does not start them, because the installer does not enable them yet. It prints `sudo systemctl enable --now rpc-proxy caddy coturn`, and the preflight check `services:relays` fails on the relays machine until all three are active. Whether those three units exist on a real machine is **needs human verification**.
 
 ### Connection settings
 
@@ -76,19 +76,20 @@ The sidecar (port 7890) and the node status API (port 7899) bind to loopback, so
 
 ### Preflight checks
 
-| Check id          | What it verifies                                                                                                                                                            | Status of the endpoint it reads                                         |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `env:<role>`      | Required variable **names** are set for each local role. Values are never printed. Admin also needs the granter key (env or Key Ring file) and a `HEDERA_SERVER_*` variable | Names: Read from source. The exact `HEDERA_SERVER_*` names are **Open** |
-| `sepolia-rpc`     | `SEPOLIA_RPC_URL` is set (value hidden) → `PASS`. Unset → `WARN` that reads may be stale                                                                                    | Verified (unit test)                                                    |
-| `sidecar:<node>`  | `GET /health` is `ok` and serves the expected tailnet                                                                                                                       | Read from source                                                        |
-| `tor:<node>`      | `GET /tor/status` reports `ready`                                                                                                                                           | Read from source (ETH-59, unmerged)                                     |
-| `stun:<node>`     | `GET /endpoint` on the status API reports `discovered`                                                                                                                      | Read from source (ETH-36, merged into `hackathon`)                      |
-| `registry:<node>` | `GET /devices` resolves and lists the agent device                                                                                                                          | Read from source                                                        |
-| `relay`           | Every relay in the registry accepts a TCP connection and answers `/health` on its payment sidecar                                                                           | Read from source                                                        |
-| `hedera:<id>`     | The payer account is associated with USDC `0.0.429274` and holds at least the minimum, from the mirror node                                                                 | Read from source                                                        |
+| Check id          | What it verifies                                                                                                                                                             | Status of the endpoint it reads                                         |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `env:<role>`      | Required variable **names** are set for each local role. Values are never printed. Admin also needs the granter key (env or Key Ring file) and a `HEDERA_SERVER_*` variable  | Names: Read from source. The exact `HEDERA_SERVER_*` names are **Open** |
+| `sepolia-rpc`     | `SEPOLIA_RPC_URL` is set (value hidden) → `PASS`. Unset → `WARN` that reads may be stale                                                                                     | Verified (unit test)                                                    |
+| `sidecar:<node>`  | `GET /health` is `ok` and serves the expected tailnet                                                                                                                        | Read from source                                                        |
+| `tor:<node>`      | `GET /tor/status` reports `ready`                                                                                                                                            | Read from source (ETH-59, unmerged)                                     |
+| `stun:<node>`     | `GET /endpoint` on the status API reports `discovered`                                                                                                                       | Read from source (ETH-36, merged into `hackathon`)                      |
+| `registry:<node>` | `GET /devices` resolves and lists the agent device                                                                                                                           | Read from source                                                        |
+| `relay`           | At least one rendezvous relay accepts a TCP connection **and** at least one payment sidecar answers `/health`, or it fails. A down redundant relay is a `WARN` that names it | Read from source                                                        |
+| `services:relays` | On the relays machine only: `rpc-proxy`, `caddy` and `coturn` are active (`systemctl is-active`)                                                                             | Read from source (ETH-49, ETH-44, unmerged)                             |
+| `hedera:<id>`     | The payer account is associated with USDC `0.0.429274` and holds at least the minimum, from the mirror node                                                                  | Read from source                                                        |
 
 `pnpm demo` and `pnpm demo:preflight` are **Verified** only as far as the unit tests and a local dry run: no real run has happened. A real run needs the machines, so it is **needs human verification**.
 
 ### Secrets
 
-The scripts never print an env value, an RPC URL, or a key. Error text from the chain client, `fetch` and ssh is scrubbed of URLs before it is shown.
+The scripts never print an env value, an RPC URL, or a key. Every check detail and every error is scrubbed before it is shown: URLs (to the end of the token), 32-byte hex and Hedera DER keys, and every value of a secret-named variable (`*KEY*`, `*TOKEN*`, `*SECRET*`, `*PASSWORD*`, `*RPC_URL*`, `*_PK`) in the process env, the repo `.env` and `/etc/bramble/*.env`. Text that a remote node reports (Tor, STUN and registry errors) is replaced by a fixed message. Output of the commands the launcher runs is read and dropped, not forwarded. The reset prints transaction hashes and ENS names only.

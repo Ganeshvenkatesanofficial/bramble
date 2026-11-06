@@ -28,6 +28,14 @@ describe('planLaunch', () => {
     expect(formatPlan(plan)).not.toContain('other machines')
   })
 
+  it('prints the relays support units the launcher does not start', () => {
+    const plan = planLaunch(['relays'], OPTS)
+    expect(plan.here[0].units.some((u) => u === 'caddy' || u === 'coturn' || u === 'rpc-proxy')).toBe(false)
+    const text = formatPlan(plan)
+    expect(text).toContain('sudo systemctl enable --now rpc-proxy caddy coturn')
+    expect(text).toContain('Not started by this command')
+  })
+
   it('the printed plan names the other machines', () => {
     const text = formatPlan(planLaunch(['gateway'], OPTS))
     expect(text).toContain('pnpm demo --role worker')
