@@ -23,6 +23,7 @@ Source of each port: `brambled/main.go` flags (`-listen-port` 51820, `-gateway-p
 | ---------------------------------------- | --------------------------------------------------------------- |
 | `README.md`                              | Runbook (how-to)                                                |
 | `TOPOLOGY.md`                            | Why the topology looks this way (explanation)                   |
+| `DRYRUN.md`                              | Manual dry-run of beats 1, 2, 3 and 5 (how-to)                  |
 | `env/node.env.example`                   | Names for `/etc/bramble/gateway.env` and `worker.env`           |
 | `env/relay.env.example`                  | Names for `/etc/bramble/relay-<instance>.env`                   |
 | `env/admin.env.example`                  | Names for `/etc/bramble/admin.env`                              |
