@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 import { x25519 } from '@noble/curves/ed25519'
 import { bytesToHex } from '@noble/hashes/utils'
 import {
+  clearAcl,
   computeGrantDigests,
   grantAcl,
   parseAclRecord,
@@ -152,6 +153,34 @@ describe('grantAcl then revokeAcl with an in-memory signer', () => {
     t.chain.revertNext()
     await expect(grantAcl(t.deps, t.params(['web']))).rejects.toThrow(/reverted/)
     expect(t.chain.records.has(`agent.${TAILNET}|acl`)).toBe(false)
+  })
+})
+
+describe('clearAcl', () => {
+  it('removes every digest in one write, whoever granted it', async () => {
+    const t = setup()
+    t.chain.records.set(`agent.${TAILNET}|acl`, 'abc123')
+    await grantAcl(t.deps, t.params(['web']))
+    const cleared = await clearAcl(t.deps, { deviceLabel: 'agent' })
+    expect(cleared.before).toBe(`abc123,${t.digest('web')}`)
+    expect(cleared.after).toBe('')
+    expect(cleared.txHash).toBeDefined()
+    expect(await t.chain.resolver.getText(`agent.${TAILNET}`, 'acl')).toBeNull()
+  })
+
+  it('sends no transaction when the record is already empty', async () => {
+    const t = setup()
+    const cleared = await clearAcl(t.deps, { deviceLabel: 'agent' })
+    expect(cleared.txHash).toBeUndefined()
+    expect(t.chain.writes).toEqual([])
+  })
+
+  it('does not report success when the transaction reverts', async () => {
+    const t = setup()
+    t.chain.records.set(`agent.${TAILNET}|acl`, 'abc123')
+    t.chain.revertNext()
+    await expect(clearAcl(t.deps, { deviceLabel: 'agent' })).rejects.toThrow(/reverted/)
+    expect(t.chain.records.get(`agent.${TAILNET}|acl`)).toBe('abc123')
   })
 })
 

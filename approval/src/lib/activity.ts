@@ -2,8 +2,18 @@
 // the approval service recorded, what the gateway node's statusapi reports and
 // what the Hedera mirror shows. It never writes and never forwards raw
 // gateway or resolver error text, which can carry RPC URLs.
-import { transactionUrl, type RequestView } from './console-api'
-import type { PaymentsFeed } from './payments'
+import type { ApprovalService } from './service'
+import { transactionUrl } from './explorer'
+
+type RequestView = ReturnType<ApprovalService['get']>
+
+/** The part of the payments feed this module reads. Declared here so the approval API does not import the mirror adapter. */
+export interface PaymentsFeed {
+  agents: {
+    agentLabel: string
+    payments: { consensusTimestamp: string; amountAtomic: string; hashscanUrl: string }[]
+  }[]
+}
 
 export type ActivityKind =
   | 'request-received'
@@ -318,7 +328,6 @@ export function createStatusSource(options: {
         return { state: 'unavailable', events: [] }
       }
       const response = await (options.fetchImpl ?? fetch)(new URL('/activity', base), {
-        cache: 'no-store',
         redirect: 'error',
         signal: AbortSignal.timeout(options.timeoutMs ?? 3_000),
       })

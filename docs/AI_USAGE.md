@@ -30,6 +30,45 @@ The team directed the architecture and scope, operated the physical Ledger and l
 
 Per-track attribution and involvement narrative for the submission dashboard is written separately by the team, not duplicated here.
 
+## Mumbai W8a: STUN endpoint discovery
+
+Net-Astra (OpenAI Codex) implemented and tested `brambled/stun/message.go`,
+`brambled/stun/bind.go`, `brambled/stun/bind_test.go`, `brambled/wgnode/node.go`,
+`brambled/wgnode/stun.go`, `brambled/main.go`, `brambled/statusapi/server.go`, and
+`brambled/statusapi/stun_test.go`. Documentation changes cover `README.md`,
+`brambled/README.md`, `docs/AI_USAGE.md`, and `docs/eth-36-stun-spec.md`.
+Commits use `Net-Astra (agent, Jay Kerkar)` with
+`133675904+jaykerkar0405@users.noreply.github.com` and the Paperclip co-author.
+The human-authored W8 task and Mumbai handoff set the scope and invariants.
+
+Net-Claude (Anthropic Claude) took over W8a after Net-Astra reached a provider limit. It reviewed and committed the opt-in bind wrapper in `brambled/stun/bind.go`, `brambled/stun/bind_test.go`, `brambled/wgnode/node.go`, `brambled/wgnode/stun.go`, `brambled/main.go`, `brambled/statusapi/stun_test.go`, `brambled/README.md` and `docs/eth-36-stun-spec.md`, and ran the checks. After review (ETH-89) it replaced the shared-endpoint `ClearSrc` call with a fresh endpoint per send and wrote `docs/adr/0017-stun-bind-wrapper-source-selection.md`.
+Net-Claude commits as `Net-Claude (agent, Chaitanya Kelkar)` with `chaitanyakelkar07@gmail.com` and the Paperclip co-author.
+
+## Mumbai agent-written paths
+
+Baseline: commit `28e2a8f`, tag `pre-mumbai`. Agents wrote the paths below after that commit. Each agent adds a row in the same pull request as the work. List paths, not prose. Humans approve every ADR and merge to `main`.
+
+### Accounts
+
+Each agent commits under the git identity shown here. Confirm yours with `git config user.name` before your first commit.
+
+| Agent | Lane | Commit author name | Status |
+| --- | --- | --- | --- |
+| Core-Claude | Core and console | `Core-Claude (agent, Jay Kerkar)` | Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026 |
+| Core-Sol | Core and console (cross-family reviewer) | to be added by Core-Sol | Open |
+| Net-Claude | Network (W8a STUN) | `Net-Claude (agent, Chaitanya Kelkar)` | Verified from commit authorship on `net-claude/eth-36-stun-binding` |
+| Infra-Claude | Demo and infra (took over ETH-30) | `Infra-Claude (agent, Aayush Nair)` | Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026 |
+| Other lane agents | Network, Tor, Hedera, Demo and infra | to be added by each agent | Open |
+
+### Paths
+
+| Path | Ticket | Agent | Kind |
+| --- | --- | --- | --- |
+| `README.md` ("Pre-existing vs new", "CROPS" skeleton) | ETH-27 | Core-Claude | Documentation |
+| `docs/AI_USAGE.md` (this section) | ETH-27 | Core-Claude | Documentation |
+| `brambled/stun/`, `brambled/wgnode/stun.go`, `brambled/statusapi/stun_test.go`, `docs/eth-36-stun-spec.md`, `docs/adr/0017-stun-bind-wrapper-source-selection.md` | ETH-36 | Net-Astra, Net-Claude | Code, tests, documentation |
+| `approval/src/lib/chain.ts`, `approval/src/lib/chain-env.ts`, `approval/src/lib/ens-reader.ts`, `approval/src/app/api/[...path]/route.ts`, `approval/test/chain.test.ts`, `approval/test/chain-env.test.ts`, `approval/src/lib/service.ts`, `approval/src/lib/api.ts`, `approval/src/lib/contracts.ts`, `approval/.env.example`, `approval/README.md` (real signer runbook), `approval/next.config.ts`, `approval/tsconfig.json`, `approval/package.json`, `pnpm-lock.yaml`, `admincli/src/lib.ts` (`clearAcl`, exported `deviceName`), `admincli/src/lib.test.ts` | ETH-30 | Infra-Claude | Code, tests, documentation |
+
 ## ETH-38: rootless NAT test harness
 
 QA-Sol (OpenAI Codex), committing as `QA-Sol (agent, Aayush Nair)`, writes
@@ -40,23 +79,24 @@ and updates `brambled/package.json` and this attribution file.
 The human-authored ETH-38 task and Mumbai handoff define the scope and invariants.
 The fixture supports W8 demo beat 4; it is not evidence of real NAT traversal.
 
-## Mumbai build: paths written by agents
+## Mumbai W10 audit module attribution
 
 - **`hedera-audit/`** — W10 option A, the HCS audit trail module, its tests and its README. Written by the Hedera-Claude agent (Claude), ticket ETH-46.
 - **`docs/16_HCS_AUDIT_RECORD_FORMAT.md`** and **`docs/adr/0011-w10-hedera-service-options.md`** — the record-format reference and the draft ADR with three options, for a human to decide. Written by the Hedera-Claude agent (Claude), ticket ETH-46.
+- `docs/adr/0011-approval-service-placement.md`, `docs/adr/0012-approval-request-contract.md`, `docs/reference/approval-api.md` — draft ADRs and the approval API reference, written by Hedera-Claude (Claude Sonnet 5.5) for ETH-55, committing as `Hedera-Claude (agent, Jay Kerkar)`. Human approval of the ADRs is pending.
 
 ## Network lane: paths written by agents (ETH-37)
 
 Agent: Net-Claude, committing as `Net-Claude (agent, Chaitanya Kelkar)` (Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026). Move these rows into the shared Paths table from ETH-27 when that lands.
 
-| Path | Kind |
-| --- | --- |
-| `brambled/rendezvous/endpoints.go` | Code |
-| `brambled/rendezvous/endpoints_test.go` | Test |
-| `brambled/rendezvous/endpoints_integration_test.go` | Test |
-| `brambled/endpoint_candidate_test.go` | Test |
-| `brambled/main.go` (`peerEndpointFromCandidate`) | Code |
-| `docs/reference/endpoint-exchange.md` | Documentation |
+| Path                                                | Kind          |
+| --------------------------------------------------- | ------------- |
+| `brambled/rendezvous/endpoints.go`                  | Code          |
+| `brambled/rendezvous/endpoints_test.go`             | Test          |
+| `brambled/rendezvous/endpoints_integration_test.go` | Test          |
+| `brambled/endpoint_candidate_test.go`               | Test          |
+| `brambled/main.go` (`peerEndpointFromCandidate`)    | Code          |
+| `docs/reference/endpoint-exchange.md`               | Documentation |
 
 ## Mumbai approval API (ETH-29)
 
@@ -86,7 +126,7 @@ The human-authored W8 task and Mumbai handoff set the scope and invariants.
 Net-Claude (Anthropic Claude) took over W8a after Net-Astra reached a provider limit. It reviewed and committed the opt-in bind wrapper in `brambled/stun/bind.go`, `brambled/stun/bind_test.go`, `brambled/wgnode/node.go`, `brambled/wgnode/stun.go`, `brambled/main.go`, `brambled/statusapi/stun_test.go`, `brambled/README.md` and `docs/eth-36-stun-spec.md`, and ran the checks. After review (ETH-89) it replaced the shared-endpoint `ClearSrc` call with a fresh endpoint per send and wrote `docs/adr/0017-stun-bind-wrapper-source-selection.md`.
 Net-Claude commits as `Net-Claude (agent, Chaitanya Kelkar)` with `chaitanyakelkar07@gmail.com` and the Paperclip co-author.
 
-## Mumbai agent-written paths
+## Mumbai build: agent-written paths
 
 Baseline: commit `28e2a8f`, tag `pre-mumbai`. Agents wrote the paths below after that commit. Each agent adds a row in the same pull request as the work. List paths, not prose. Humans approve every ADR and merge to `main`.
 
@@ -100,8 +140,11 @@ Each agent commits under the git identity shown here. Confirm yours with `git co
 | Core-Sol | Core and console (cross-family reviewer) | to be added by Core-Sol | Open |
 | Net-Claude | Network (W8a STUN) | `Net-Claude (agent, Chaitanya Kelkar)` | Verified from commit authorship on `net-claude/eth-36-stun-binding` |
 | Keystone | Tor (principal, W9-2 Tor client core) | `Keystone (agent, Yash Kolekar)` | Verified from commit authorship on `keystone/eth-59-tor-client` |
+| Tor-Claude | Tor (W9-1 audit, W9-3 ENS and payments; took over ETH-50 from Core-Claude) | `Tor-Claude (agent, Chaitanya Kelkar)` | Verified from commit authorship on `tor-claude/eth-60-tor-ens-pay` and the author of commit `06e52d9` |
 | Tor-Astra | Tor (W9-2 recovery) | `Tor-Astra (agent, Yash Kolekar)` | Verified from git author identity on 6 Nov 2026 |
 | Tor-Claude | Tor (took over ETH-50 from Core-Claude) | `Tor-Claude (agent, Chaitanya Kelkar)` | Verified from the author of commit `06e52d9` |
+| Hedera-Sol | Hedera | `Hedera-Sol (agent, Aayush Nair)` | Verified from `git var GIT_AUTHOR_IDENT` on 6 Nov 2026 |
+| Infra-Claude | Demo and infra (took over ETH-30) | `Infra-Claude (agent, Aayush Nair)` | Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026 |
 | Other lane agents | Network, Tor, Hedera, Demo and infra | to be added by each agent | Open |
 
 ### Paths
@@ -116,10 +159,18 @@ Each agent commits under the git identity shown here. Confirm yours with `git co
 | `scripts/demo/src/redact.ts`, `scripts/demo/src/run-command.ts`, and the review fixes in `scripts/demo/src/*.ts` and `scripts/demo/README.md` | ETH-50 | Tor-Claude (took over from Core-Claude, 5 Nov 2026) | Code, unit tests, documentation |
 | `package.json` (`demo`, `demo:preflight`, `demo:reset` scripts), `pnpm-workspace.yaml`, `pnpm-lock.yaml` | ETH-50 | Core-Claude | Configuration |
 | `brambled/stun/`, `brambled/wgnode/stun.go`, `brambled/statusapi/stun_test.go`, `docs/eth-36-stun-spec.md`, `docs/adr/0017-stun-bind-wrapper-source-selection.md` | ETH-36 | Net-Astra, Net-Claude | Code, tests, documentation |
+| `approval/src/lib/audit.ts`, `approval/src/lib/audit-runtime.ts`, `approval/src/lib/service.ts`, `approval/src/lib/api.ts`, `approval/src/lib/contracts.ts`, `approval/src/lib/validation.ts`, `approval/src/app/api/[...path]/route.ts`, `approval/next.config.ts`, `approval/tsconfig.json`, `approval/package.json` (HCS commitments) | ETH-48 | Hedera-Claude                                       | Code                                                    |
+| `approval/test/audit.test.ts`                                                                                                                                                                                                                                                                                                            | ETH-48 | Hedera-Claude                                       | Test                                                    |
+| `approval/src/lib/chain.ts`, `approval/src/lib/contracts.ts`, `approval/src/lib/service.ts`, `approval/src/lib/payments.ts`, `approval/src/lib/validation.ts`, `approval/src/lib/api.ts`, `approval/src/app/api/[...path]/route.ts` (grant digest through the real signer and late confirmation; mirror-node settlement observer), `approval/test/audit.test.ts`, `approval/test/chain.test.ts`, `approval/test/payments.test.ts`, `approval/test/fake-topic.ts` | ETH-48 | Infra-Claude | Code, tests (review fixes from ETH-148) |
+| `agent-mcp/tsconfig.json` (`allowImportingTsExtensions`, needed because the access-flow test now loads the approval service with the audit module) | ETH-48 | Infra-Claude | Configuration |
+| `approval/README.md` (audit feed, payment report, env), `docs/16_HCS_AUDIT_RECORD_FORMAT.md` (approval integration), `README.md` (W10 row)                                                                                                                                                                                               | ETH-48 | Hedera-Claude                                       | Documentation                                           |
+| `approval/src/lib/chain.ts`, `approval/src/lib/chain-env.ts`, `approval/src/lib/ens-reader.ts`, `approval/src/app/api/[...path]/route.ts`, `approval/test/chain.test.ts`, `approval/test/chain-env.test.ts`, `approval/src/lib/service.ts`, `approval/src/lib/api.ts`, `approval/src/lib/contracts.ts`, `approval/.env.example`, `approval/README.md` (real signer runbook), `approval/next.config.ts`, `approval/tsconfig.json`, `approval/package.json`, `pnpm-lock.yaml`, `admincli/src/lib.ts` (`clearAcl`, exported `deviceName`), `admincli/src/lib.test.ts` | ETH-30 | Infra-Claude | Code, tests, documentation |
 | `sidecar/src/tor/`, `sidecar/src/routes/tor.ts`, `sidecar/scripts/tor-smoke.ts`, `sidecar/test/tor*.test.ts`, Tor wiring in `sidecar/src/index.ts`, `sidecar/tsconfig.json`, tor-js in `sidecar/package.json` and `pnpm-lock.yaml` | ETH-59 | Keystone | Code, tests |
 | `brambled/sidecar/manager.go` (`waitTorReady`), `brambled/sidecar/manager_test.go` | ETH-59 | Keystone | Code, tests |
 | `docs/adr/0013-tor-transport.md`, Tor section of `sidecar/README.md` | ETH-59 | Keystone | Documentation |
+| `sidecar/src/ens/client.ts`, `sidecar/src/payments/client.ts`, `sidecar/src/payments/datarelay.ts`, `sidecar/test/ens-tor.test.ts`, `sidecar/test/helpers/fake-tor.ts`, Tor wiring in `sidecar/test/device.test.ts` and `sidecar/test/hedera-signer-network.test.ts`, `brambled/admission/tor_startup_test.go`, `brambled/sidecar/client.go` (per-operation budgets), `brambled/sidecar/client_budget_test.go`, `sidecar/src/ens/devices.ts` (required client), `sidecar/src/routes/devices.ts`, `admincli/src/enroll.ts`, `admincli/src/mesh-ip-scan.ts`, `admincli/src/mesh-ip-scan.test.ts`, `admincli/package.json`, `sidecar/src/serve.ts`, `sidecar/src/index.ts` (server timeout), `sidecar/test/serve.test.ts`, `sidecar/test/fixtures/slow-bun-server.ts` | ETH-60 | Tor-Claude | Code, tests |
 | `sidecar/src/tor/index.ts`, `sidecar/test/tor.test.ts`, `docs/adr/0013-tor-transport.md`, `docs/AI_USAGE.md` | ETH-59 | Tor-Astra | Shutdown cleanup races, regression tests, documentation |
+| `docs/adr/0014-hcs-audit-trail.md`, `docs/spikes/0014-hcs-audit-trail.md`, `hedera-audit/test/freeze-round-trip.ts`, `hedera-audit/test/sdk-freeze.test.ts`, `docs/AI_USAGE.md` | ETH-66 | Hedera-Sol (first draft), Infra-Claude (amendment, test) | Draft design, offline SDK check, documentation |
 
 ## Mumbai formatting gate correction (ETH-75)
 
@@ -139,10 +190,20 @@ No dedicated archive RPC is requested; ETH-86 owns deterministic scan fixtures
 and the relay failure investigation. This supersedes the historical endpoint
 and push-blocking notes in the ETH-75 evidence above for ETH-29.
 
+## ETH-33 rootless access lifecycle
+
+QA-Sol (OpenAI Codex) wrote `agent-mcp/test/access-flow.test.ts`,
+`brambled/gateway/access_flow_test.go`, and `docs/eth-33-rootless-access-flow.md`.
+The agent updated `agent-mcp/package.json`, root `package.json`, `pnpm-lock.yaml`,
+and this file. The test uses the reviewed ETH-30 approval/admincli adapters and
+ETH-32 MCP server; it does not change their production behavior.
+
+Commit identity: `QA-Sol (agent, Aayush Nair) <aayushnair@gmail.com>`.
+
 ### ETH-34 — agent payments panel (Core-Sol)
 
 - Agent: Core-Sol; committing as `Core-Sol (agent, Yash Kolekar)
-  <153986822+whyash-paperclip@users.noreply.github.com>`.
+<153986822+whyash-paperclip@users.noreply.github.com>`.
 - Task/spec: ETH-34 and `docs/14_MUMBAI_BUILD_BRIEF.md` W3, superseded where
   applicable by `docs/15_MUMBAI_HANDOFF.md`; demo beat 3.
 - Prompt: inspect real rendezvous/data-relay purchase timing, reuse the read-only
@@ -193,6 +254,7 @@ Findings and changes:
 - **Open:** `Exchange` still loses the peer's candidate if the peer's offer arrives within one relay round trip of the deadline. The window is now one round trip instead of up to one second.
 - **Open:** `sidecar/test/device.test.ts` still reads current Sepolia state live. Current state is not pruned, so it passes today, but it is not hermetic.
 
+
 ## Mumbai payment review corrections (ETH-34)
 
 Core-Sol (OpenAI Codex), using the existing Core-Sol git identity, integrated
@@ -242,7 +304,7 @@ variables remain in `approval/src/app/layout.tsx`. AI assistance also covers
 `approval/README.md` and this attribution file.
 
 ETH-35 (live activity feed) was written with AI assistance (Core-Claude). Paths:
-`approval/src/lib/activity.ts`, `approval/src/lib/payments-handler.ts`,
+`approval/src/lib/activity.ts`, `approval/src/lib/explorer.ts`, `approval/src/lib/payments-handler.ts`,
 `approval/src/hooks/use-activity.ts`, `approval/src/components/activity-feed.tsx`,
 `approval/src/components/approval-console.tsx`, `approval/src/lib/{api,service,contracts}.ts`,
 `approval/src/app/api/{[...path],payments}/route.ts`, `approval/src/app/globals.css`,

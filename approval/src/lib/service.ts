@@ -1,12 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import {
   ApiError,
+  UnresolvedWriteError,
   type AccessRequest,
+  type SettleOutcome,
   type Clock,
   type RequestInput,
   type GrantSigner,
   type IdentityResolver,
+  type PaymentInput,
 } from './contracts'
+import type { AuditRecorder } from './audit'
 
 export const systemClock: Clock = {
   now: () => Date.now(),
@@ -17,6 +21,14 @@ export const systemClock: Clock = {
   },
 }
 
+const SETTLE_POLL_MS = 5000
+
+interface UnresolvedEntry {
+  error: UnresolvedWriteError
+  recordId?: string
+  reason: 'manual' | 'duration'
+}
+
 export class ApprovalService {
   private readonly requests = new Map<string, AccessRequest>()
 
@@ -24,11 +36,20 @@ export class ApprovalService {
 
   private readonly busyAgents = new Set<string>()
 
+  // Submitted writes whose outcome is unknown, by agent. They are re-checked, never resubmitted.
+  private readonly unresolved = new Map<string, UnresolvedEntry>()
+
   constructor(
     private readonly signer?: GrantSigner,
     private readonly resolver?: IdentityResolver,
-    private readonly clock: Clock = systemClock
+    private readonly clock: Clock = systemClock,
+    private readonly audit?: AuditRecorder,
+    /** Parent ENS name of agent labels, for example `acme.eth`. Without it the label is the subject. */
+    private readonly ensParent?: string
   ) {}
+
+  /** ADR 0005 digests from the signer. Kept off the record so the HTTP view never carries them. */
+  private readonly digests = new Map<string, string>()
 
   private record(id: string) {
     const record = this.requests.get(id)
@@ -50,6 +71,76 @@ export class ApprovalService {
       return await action()
     } finally {
       this.busyAgents.delete(agentLabel)
+      this.audit?.flush(agentLabel)
+    }
+  }
+
+  private assertSettled(agentLabel: string) {
+    if (this.unresolved.has(agentLabel)) {
+      throw new ApiError(
+        409,
+        'write_unresolved',
+        'A submitted transaction for this agent is not confirmed yet; wait for it to settle.'
+      )
+    }
+  }
+
+  private trackUnresolved(agentLabel: string, entry: UnresolvedEntry) {
+    this.unresolved.set(agentLabel, entry)
+    this.clock.schedule(() => this.settleUnresolved(agentLabel), SETTLE_POLL_MS)
+  }
+
+  private async settleUnresolved(agentLabel: string) {
+    const entry = this.unresolved.get(agentLabel)
+    if (!entry) return
+    let outcome: Awaited<ReturnType<UnresolvedWriteError['settle']>>
+    try {
+      outcome = await entry.error.settle()
+    } catch {
+      outcome = 'unresolved'
+    }
+    if (outcome === 'unresolved') {
+      this.clock.schedule(() => this.settleUnresolved(agentLabel), SETTLE_POLL_MS)
+      return
+    }
+    this.unresolved.delete(agentLabel)
+    this.applySettled(entry, outcome)
+    this.audit?.flush(agentLabel)
+  }
+
+  private applySettled(entry: UnresolvedEntry, outcome: Exclude<SettleOutcome, 'unresolved'>) {
+    const record = entry.recordId ? this.requests.get(entry.recordId) : undefined
+    if (!record) return
+    delete record.unresolvedWrite
+    const transaction = { transactionHash: entry.error.transactionHash }
+    if (entry.error.operation === 'grant') {
+      if (outcome === 'confirmed') {
+        record.status = 'approved'
+        record.grantTransaction = transaction
+        const digest = entry.error.serviceDigest
+        if (digest) this.digests.set(record.id, digest)
+        this.submitGrantAudit(record, digest)
+        if (record.expiresAt) {
+          record.expiryStatus = 'scheduled'
+          this.scheduleExpiry(record, Math.max(0, Date.parse(record.expiresAt) - this.clock.now()))
+        }
+      } else {
+        record.status = 'pending'
+        delete record.decidedAt
+        delete record.expiresAt
+        record.expiryStatus = 'none'
+      }
+    } else if (outcome === 'confirmed') {
+      record.revokeTransaction = transaction
+      const audit = this.submitRevokeAudit(record.agentLabel, transaction.transactionHash, record)
+      if (audit) record.revokeAuditId = audit.id
+      this.markRevoked(record, entry.reason)
+    } else {
+      record.status = 'approved'
+      if (entry.reason === 'duration') {
+        record.expiryStatus = 'failed'
+        this.scheduleExpiry(record, SETTLE_POLL_MS)
+      }
     }
   }
 
@@ -64,6 +155,7 @@ export class ApprovalService {
     const record = this.pending(id)
     return this.exclusive(record.agentLabel, async () => {
       const { signer, resolver } = this.adapters()
+      this.assertSettled(record.agentLabel)
       if (await resolver.hasGrant(record.agentLabel)) {
         throw new ApiError(409, 'already_granted', 'Agent already has a grant; revoke it before approving another.')
       }
@@ -92,15 +184,29 @@ export class ApprovalService {
         )
       }
       record.status = 'approving'
+      let serviceDigest: string | undefined
       try {
-        record.grantTransaction = await signer.grant({
+        const { serviceDigest: digest, ...transaction } = await signer.grant({
           agentLabel: record.agentLabel,
           gatewayLabel: record.gatewayLabel,
           service: record.service,
         })
-      } catch {
-        record.status = 'pending'
-        throw new ApiError(502, 'grant_failed', 'The signer did not confirm the grant.')
+        record.grantTransaction = transaction
+        serviceDigest = digest
+      } catch (error) {
+        if (!(error instanceof UnresolvedWriteError)) {
+          record.status = 'pending'
+          throw new ApiError(502, 'grant_failed', 'The signer did not confirm the grant.')
+        }
+        // The grant may land later. Bound its duration from now, the earliest it could be live,
+        // and start the revoke timer when it is confirmed.
+        record.decidedAt = new Date(this.clock.now()).toISOString()
+        if (record.requestedDuration !== undefined) {
+          record.expiresAt = new Date(this.clock.now() + record.requestedDuration * 1000).toISOString()
+        }
+        record.unresolvedWrite = { operation: 'grant', transactionHash: error.transactionHash }
+        this.trackUnresolved(record.agentLabel, { error, recordId: record.id, reason: 'manual' })
+        return this.view(record)
       }
       record.status = 'approved'
       record.decidedAt = new Date(this.clock.now()).toISOString()
@@ -109,8 +215,77 @@ export class ApprovalService {
         record.expiryStatus = 'scheduled'
         this.scheduleExpiry(record, record.requestedDuration * 1000)
       }
+      if (serviceDigest) this.digests.set(record.id, serviceDigest)
+      this.submitGrantAudit(record, serviceDigest)
       return this.view(record)
     })
+  }
+
+  private submitGrantAudit(record: AccessRequest, serviceDigest?: string) {
+    const grantTransaction = record.grantTransaction
+    record.grantAuditId = this.audit?.submit(
+      record.agentLabel,
+      `grant:${record.id}`,
+      'grant',
+      () =>
+        serviceDigest && grantTransaction
+          ? {
+              kind: 'grant',
+              subject: this.subject(record.agentLabel),
+              serviceDigest,
+              expiresAt: record.expiresAt ? String(Math.floor(Date.parse(record.expiresAt) / 1000)) : '0',
+              txRef: grantTransaction.transactionHash,
+            }
+          : null,
+      record.id
+    ).id
+  }
+
+  private submitRevokeAudit(agentLabel: string, transactionHash: string, record?: AccessRequest) {
+    const digest = record ? this.digests.get(record.id) : undefined
+    return this.audit?.submit(
+      agentLabel,
+      `revoke:${record?.id ?? transactionHash}`,
+      'revoke',
+      () =>
+        digest
+          ? {
+              kind: 'revoke',
+              subject: this.subject(agentLabel),
+              serviceDigest: digest,
+              txRef: transactionHash,
+            }
+          : null,
+      record?.id
+    )
+  }
+
+  private subject(agentLabel: string) {
+    return this.ensParent ? `${agentLabel}.${this.ensParent}` : agentLabel
+  }
+
+  /** Posts one commitment for a settled payment. Reporting the same `txRef` again posts nothing. */
+  recordPayment(payment: PaymentInput) {
+    if (!this.audit) throw new ApiError(503, 'audit_not_configured', 'The audit trail is not configured.')
+    const group = `payment:${payment.txRef}`
+    const entry = this.audit.submit(group, `payment:${payment.txRef}`, 'payment', () => ({
+      kind: 'payment',
+      ...payment,
+    }))
+    this.audit.flush(group)
+    return entry
+  }
+
+  /** A payer transaction that is not a plain single-payee transfer is shown as a failed row and never committed. It shares the `txRef` key with `recordPayment`, so whichever report arrives first wins. */
+  recordUnsupportedPayment(txRef: string) {
+    if (!this.audit) return
+    const group = `payment:${txRef}`
+    this.audit.submit(group, `payment:${txRef}`, 'payment', () => null)
+    this.audit.flush(group)
+  }
+
+  auditFeed() {
+    return this.audit?.list() ?? []
   }
 
   private scheduleExpiry(record: AccessRequest, delayMs: number) {
@@ -155,6 +330,7 @@ export class ApprovalService {
   async revoke(agentLabel: string, reason: 'manual' | 'duration' = 'manual', expectedId?: string) {
     return this.exclusive(agentLabel, async () => {
       const { signer, resolver } = this.adapters()
+      this.assertSettled(agentLabel)
       const record = [...this.requests.values()].find(
         (item) => item.agentLabel === agentLabel && item.status === 'approved'
       )
@@ -175,15 +351,24 @@ export class ApprovalService {
       let transaction
       try {
         transaction = await signer.revoke(agentLabel)
-      } catch {
+      } catch (error) {
+        if (error instanceof UnresolvedWriteError) {
+          const unresolvedWrite = { operation: 'revoke' as const, transactionHash: error.transactionHash }
+          this.trackUnresolved(agentLabel, { error, recordId: record?.id, reason })
+          if (!record) return { agentLabel, status: 'revoking', unresolvedWrite }
+          record.unresolvedWrite = unresolvedWrite
+          return this.view(record)
+        }
         if (record) {
           record.status = 'approved'
           delete record.revokeRequestedAt
         }
         throw new ApiError(502, 'revoke_failed', 'The signer did not confirm the revoke.')
       }
+      const entry = this.submitRevokeAudit(agentLabel, transaction.transactionHash, record)
       if (!record) return { agentLabel, status: 'revoked', revokeTransaction: transaction }
       record.revokeTransaction = transaction
+      if (entry) record.revokeAuditId = entry.id
       this.markRevoked(record, reason)
       return this.view(record)
     })
