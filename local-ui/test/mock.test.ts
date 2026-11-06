@@ -49,3 +49,27 @@ describe('mock implements the local API contract', () => {
     expect((await send('GET', '/api/admin/joins')).status).toBe(401)
   })
 })
+
+describe('service links', () => {
+  test('a connected device lists its loopback service links', async () => {
+    await send('POST', '/__test/reset', { scenario: 'connected' })
+    expect(parseState((await send('GET', '/api/state')).body).services).toEqual([
+      { peer: 'gateway-1', service: 'task', url: 'http://127.0.0.1:41873/task' },
+    ])
+  })
+  test('the parser drops links that do not point at this machine', () => {
+    const state = parseState({
+      phase: 'connected',
+      services: [
+        { peer: 'gw', service: 'task', url: 'http://127.0.0.1:5000/task' },
+        { peer: 'gw', service: 'evil', url: 'https://example.com/' },
+        { peer: 'gw', service: 'js', url: 'javascript:alert(1)' },
+        { peer: 'gw', service: 'creds', url: 'http://user:pw@127.0.0.1:1/' },
+        { peer: 'gw', service: 'lan', url: 'http://192.168.1.2:80/' },
+        { service: 'nopeer', url: 'http://127.0.0.1:1/' },
+      ],
+    })
+    expect(state.services).toEqual([{ peer: 'gw', service: 'task', url: 'http://127.0.0.1:5000/task' }])
+    expect(parseState({ phase: 'ready' }).services).toEqual([])
+  })
+})

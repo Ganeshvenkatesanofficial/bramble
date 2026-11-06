@@ -26,7 +26,7 @@ Run these from the repository root.
 | `pending`   | Waiting for approval, with Cancel.                                                                    |
 | `approved`  | Approved, setting up the address.                                                                     |
 | `denied`    | Not approved, with Start over.                                                                        |
-| `connected` | Address, peers with a Direct or Relayed badge, Test connection, Leave.                                |
+| `connected` | Address, Private services with Open links, peers with a Direct or Relayed badge, Test connection, Leave. |
 | `error`     | The error message and next step from `state.error`, with Check again and Leave network or Start over. |
 | (no answer) | "Bramble is not running". A failed poll after a first answer keeps the last state and shows a banner. |
 
@@ -43,6 +43,8 @@ The UI assumes `/api/admin/<path>` forwards to `<joinApi>/api/<path>` with the a
 | `POST /api/admin/joins/:id/approve\|deny\|revoke` | `POST /api/joins/:id/approve\|deny\|revoke` |
 
 The contract does not fix the response bodies of the two GET calls. The UI accepts `{ joins: [...] }` and `{ members: [...] }` (or a bare array). Each row needs `id`, `label`, `tailnet` and `status`. `pubkey`, `meshIp` and `createdAt` are optional. A `401` or `403` from the proxy shows fixed copy that names `bramble admin login`. A `5xx` shows fixed copy that tells the admin to check their internet connection. Other error bodies show `error.message`.
+
+`services[]` lists `{ peer, service, url }` for each service in the node config once the device is approved. `url` is the loopback forward, for example `http://127.0.0.1:41873/task`. The UI drops any link that is not plain `http` to `127.0.0.1`, and opens the rest in a new tab. The link only says where the forward listens; the gateway still decides each connection. Daemons without the field show no services section.
 
 `peers[].lastHandshake` may be an ISO 8601 string or a Unix time in seconds or milliseconds. A zero value reads as "Not yet".
 
