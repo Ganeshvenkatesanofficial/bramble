@@ -7,11 +7,11 @@
 # Never prints a secret.
 # Usage: pi-agent [pi options] ["prompt"]
 #   example: pi-agent -p "Fetch the task from the private staging service"
-# Environment: BRAMBLE_AGENT_CONFIG_DIR (default ~/.config/bramble),
-#   PI_AGENT_MODEL (default deepseek/deepseek-flash).
+# Environment: PI_AGENT_MODEL (default deepseek/deepseek-flash),
+#   PI_AGENT_SKILL (default ~/.pi/agent/skills/bramble-private-service/SKILL.md).
 set -euo pipefail
 
-cfg="${BRAMBLE_AGENT_CONFIG_DIR:-$HOME/.config/bramble}"
+cfg="$HOME/.config/bramble"
 pi="${PI_BIN:-$HOME/pi-runtime/node_modules/.bin/pi}"
 model="${PI_AGENT_MODEL:-deepseek/deepseek-flash}"
 skill="${PI_AGENT_SKILL:-$HOME/.pi/agent/skills/bramble-private-service/SKILL.md}"
@@ -22,12 +22,6 @@ skill="${PI_AGENT_SKILL:-$HOME/.pi/agent/skills/bramble-private-service/SKILL.md
 DEEPSEEK_API_KEY="$(cat "$cfg/deepseek.key")"
 export DEEPSEEK_API_KEY
 
-# The agent has no read tool, so Pi cannot open the skill body on demand. Append the
-# skill file to the system prompt so the agent has the steps and the service name.
-skill="$HOME/.pi/agent/skills/bramble-private-service/SKILL.md"
-extra=()
-[ -r "$skill" ] && extra=(--append-system-prompt "$skill")
-
 mkdir -p "$HOME/work"
 cd "$HOME/work"
-exec "$pi" --model "$model" --no-builtin-tools --no-context-files --offline "${extra[@]}" "$@"
+exec "$pi" --model "$model" --no-builtin-tools --no-context-files --offline --append-system-prompt "$skill" "$@"

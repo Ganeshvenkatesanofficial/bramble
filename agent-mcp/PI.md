@@ -45,27 +45,16 @@ Demo beats served: 1 (denied), 2 (request), 3 (works after approval) and 5 (deni
    ~/bin/pi-agent -p "Fetch the task from the private staging service"
    ```
 
-## What you see
+## Expected sequence. Open
 
-The same sequence as the Claude Code path: `denied: no grant`, then the request waits
-for a human, then `granted`, then `task result: ...`, and `denied: no grant` again after Revoke.
+The agent first reports `denied: no grant`, then requests access to `task` and waits.
+Approve that request in the console. The agent retries and reports `task result: ...`.
+Revoke the request in the console, then send the same one-line task prompt in the
+same Pi session to check that the next call is denied. With `-p`, start a second
+invocation for this check.
 
-## How the setup limits the agent
+Open: two isolated full runs with the corrected launcher. The earlier runs used
+the same grant label as another driver and do not verify this sequence.
 
-- The launcher starts Pi with `--no-builtin-tools`. The model sees only the two Bramble
-  tools. It has no shell, so it cannot read the key files.
-- Pi normally loads a skill when the model reads `SKILL.md`. The agent has no read tool, so
-  the launcher passes the same file with `--append-system-prompt`. Without it the model
-  never sees the steps and guesses the service name (Verified: it asked for `staging` and
-  `staging-api` instead of `task`, 6 Nov 2026).
-- A command in `mcp.json` reads the token when Pi starts `agent-mcp`. The token is in
-  no config file and not in Pi's environment.
-- `mcp.json` sets the MCP request timeout to 180 s. Pi's default is 60 s, shorter than
-  the 120 s approval wait.
-- The shared demo token still authorizes approve and revoke (see [README.md](./README.md#know-the-limits)).
-  A process running as `agent` with a shell could read it. Keep the agent shell-less.
-
-## Model
-
-The launcher uses `deepseek/deepseek-flash` (override with `PI_AGENT_MODEL`). List the
-models Pi knows with `DEEPSEEK_API_KEY=... pi --list-models deepseek`.
+See [Pi security explanation](./PI_SECURITY.md) for the tool restrictions and
+[Pi runtime reference](./REFERENCE.md#pi-runtime) for model and launcher settings.

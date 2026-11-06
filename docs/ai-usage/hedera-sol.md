@@ -30,3 +30,22 @@ cloud gateway. PR #35 is still open and remains the merge dependency.
 Paths written:
 
 - `docs/ai-usage/hedera-sol.md`
+
+## ETH-243 Pi launcher continuation
+
+Demo beats: 1, 2, 3 and 5. Continued PR #42 from `7c0b8fe` in an isolated worktree.
+
+Paths written:
+
+- `deploy/scripts/pi-agent.sh`
+- `agent-mcp/test/pi-launcher.test.ts`
+- `agent-mcp/PI.md`
+- `agent-mcp/PI_SECURITY.md`
+- `agent-mcp/REFERENCE.md`
+- `deploy/README.md`
+- `docs/ai-usage/hedera-sol.md`
+
+The launcher check reproduced the overwritten skill-path failure before the fix.
+Verified on 6 November 2026: both focused launcher tests, shell syntax checks,
+`git diff --check`, and `pnpm verify` pass (34 agent-mcp tests).
+Clean worker sequence remains Open pending the ETH-244 node handoff.

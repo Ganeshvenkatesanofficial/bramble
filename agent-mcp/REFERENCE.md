@@ -39,3 +39,24 @@ undecided resumes polling that request. It does not create a duplicate card.
 | `BRAMBLE_FORWARD_TIMEOUT_MS`  | no       | `10000`                 | Timeout for one `call_private_service` request.                     |
 
 The server exits with a message on stderr when a required variable is missing or a value is invalid.
+
+## Pi runtime
+
+| Setting                            | Value                                                          |
+| ---------------------------------- | -------------------------------------------------------------- |
+| npm package                        | `@earendil-works/pi-coding-agent@1.5.0`                        |
+| Default model                      | `deepseek/deepseek-flash`                                      |
+| Model override                     | `PI_AGENT_MODEL`                                               |
+| Runtime binary override            | `PI_BIN`                                                       |
+| Workflow file override             | `PI_AGENT_SKILL`                                               |
+| Default workflow                   | `~/.pi/agent/skills/bramble-private-service/SKILL.md`          |
+| Credential directory               | `~/.config/bramble` (fixed; shared by launcher and MCP config) |
+| MCP timeout                        | 180 seconds                                                    |
+| Forward and approval wait timeouts | 120000 milliseconds                                            |
+
+The launcher passes the workflow file with `--append-system-prompt` and exits if
+it is unreadable. It disables built-in tools with `--no-builtin-tools`.
+The installer configures the Bramble MCP server with `request_private_access`
+and `call_private_service`. Pi supports MCP natively; this path uses the MCP
+server without a separate CLI wrapper. The Claude Code MCP path remains in
+[README.md](./README.md).
