@@ -133,6 +133,15 @@ export function buildConfig(env, version) {
     )
   }
   if (Object.keys(relays).length) config.dataRelays = relays
+  // A -meter relay rejects a hello without a token from its own sidecar, so a
+  // device with only `rendezvous` never exchanges endpoints (ETH-301). Use the
+  // explicit URL above, else the data relay on the rendezvous host (same-machine
+  // convention, docs/adr/0008). With neither, the relay must be unmetered.
+  if (config.rendezvous && !config.rendezvousPaymentUrl) {
+    const host = config.rendezvous.slice(0, config.rendezvous.lastIndexOf(':')).toLowerCase()
+    const paired = Object.values(relays).find((u) => new URL(u).hostname.toLowerCase() === host)
+    if (paired) config.rendezvousPaymentUrl = paired
+  }
   const relayPeers = list(env.BRAMBLE_RELAY_PEERS).map((v) => label(v, 'relayPeers entry'))
   if (relayPeers.length) config.relayPeers = relayPeers
 
