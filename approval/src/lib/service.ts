@@ -17,10 +17,11 @@ import type { AuditRecorder } from './audit'
 // endpoint, and that endpoint may carry a credential.
 function logSignerFailure(operation: 'grant' | 'revoke', error: unknown): void {
   const raw =
-    error instanceof Error
-      ? ((error as { shortMessage?: string }).shortMessage ?? error.message)
-      : String(error)
-  const message = raw.replace(/https?:\/\/\S+/g, '<url>').replace(/\s+/g, ' ').slice(0, 300)
+    error instanceof Error ? ((error as { shortMessage?: string }).shortMessage ?? error.message) : String(error)
+  const message = raw
+    .replace(/https?:\/\/\S+/g, '<url>')
+    .replace(/\s+/g, ' ')
+    .slice(0, 300)
   const name = error instanceof Error ? error.name : typeof error
   console.error(`approval: signer ${operation} failed (${name}): ${message}`)
 }
