@@ -883,7 +883,6 @@ const (
 	dataRelayAdoptMaxBackoff   = 30 * time.Second
 )
 
-//
 // pace is nil on the paid path. A sponsored node passes the shared limiter
 // from sponsor.PollLimiter, because the relay limits sponsored tokens per
 // label per hour: polling every few seconds would use the whole allowance
