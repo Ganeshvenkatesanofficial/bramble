@@ -41,7 +41,7 @@
  * form-control borders >= 3:1, primary button text >= 4.5:1.
  */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --background: #fafafa;
   --foreground: #09090b;
   --card: #ffffff;
@@ -70,30 +70,30 @@
   --on-primary: var(--primary-foreground);
   --focus: var(--ring);
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #09090b;
-    --foreground: #fafafa;
-    --card: #18181b;
-    --card-foreground: #fafafa;
-    --secondary: #27272a;
-    --secondary-foreground: #fafafa;
-    --muted: #27272a;
-    --muted-foreground: #a1a1aa;
-    --accent: #27272a;
-    --accent-foreground: #fafafa;
-    --border: #7c7c86;
-    --divider: #3f3f46;
-    --input: #7c7c86;
-    --ring: #fafafa;
-    --primary: #4ade80;
-    --primary-foreground: #052e16;
-    --destructive: #f87171;
-    --destructive-foreground: #450a0a;
-    --success: #4ade80;
-    --success-strong: #4ade80;
-    --warning: #fbbf24;
-  }
+/* Light is the default. Dark is opt-in through the header toggle. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #18181b;
+  --card-foreground: #fafafa;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --accent-foreground: #fafafa;
+  --border: #7c7c86;
+  --divider: #3f3f46;
+  --input: #7c7c86;
+  --ring: #fafafa;
+  --primary: #4ade80;
+  --primary-foreground: #052e16;
+  --destructive: #f87171;
+  --destructive-foreground: #450a0a;
+  --success: #4ade80;
+  --success-strong: #4ade80;
+  --warning: #fbbf24;
 }
 
 @layer base {

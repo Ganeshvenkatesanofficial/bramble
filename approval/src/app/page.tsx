@@ -1,5 +1,5 @@
-import { ApprovalConsole } from '../components/approval-console'
+import { RequestsView } from '../components/console/views'
 
 export default function Page() {
-  return <ApprovalConsole />
+  return <RequestsView />
 }

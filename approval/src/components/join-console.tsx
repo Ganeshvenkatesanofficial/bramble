@@ -5,7 +5,7 @@ import { JoinActivity, Members, PendingJoins, type JoinAction, type JoinRow } fr
 import { readJson } from '../lib/console-api'
 import { Button } from './ui/button'
 
-export function JoinConsole({ token }: { token: string }) {
+export function JoinConsole({ token, view }: { token: string; view: 'pending' | 'members' }) {
   const [joins, setJoins] = useState<JoinRow[]>([])
   const [members, setMembers] = useState<JoinRow[]>([])
   const [queueError, setQueueError] = useState<string | null>(null)
@@ -51,13 +51,13 @@ export function JoinConsole({ token }: { token: string }) {
       }
     }
     void poll('joins')
-    void poll('members')
+    if (view === 'members') void poll('members')
     return () => {
       controller.abort()
       clearTimeout(joinTimer)
       clearTimeout(memberTimer)
     }
-  }, [token, refresh])
+  }, [token, refresh, view])
 
   async function decide(id: string, action: JoinAction) {
     if (locked.current) return
@@ -87,22 +87,29 @@ export function JoinConsole({ token }: { token: string }) {
       </section>
     )
   const activity = [...joins, ...members.filter((member) => !joins.some((join) => join.id === member.id))]
+  const alert = (queueError || memberError || actionError) && (
+    <p role="alert" className="notice negative mb-4">
+      {actionError ?? queueError ?? memberError}
+    </p>
+  )
+  if (view === 'pending')
+    return (
+      <>
+        {alert}
+        {queueLoaded ? (
+          <PendingJoins {...props} rows={joins} />
+        ) : (
+          !queueError && (
+            <p role="status" className="empty">
+              Loading device joins…
+            </p>
+          )
+        )}
+      </>
+    )
   return (
     <>
-      {(queueError || memberError || actionError) && (
-        <p role="alert" className="notice negative">
-          {actionError ?? queueError ?? memberError}
-        </p>
-      )}
-      {queueLoaded ? (
-        <PendingJoins {...props} rows={joins} />
-      ) : (
-        !queueError && (
-          <p role="status" className="empty">
-            Loading device joins…
-          </p>
-        )
-      )}
+      {alert}
       {membersLoaded ? (
         <Members {...props} rows={members} />
       ) : (
