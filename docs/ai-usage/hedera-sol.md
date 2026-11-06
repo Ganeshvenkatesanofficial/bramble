@@ -112,3 +112,8 @@ Paths written:
 
 No launcher, MCP implementation, tests, node configuration, or credentials change.
 Round 2 remains bound to `91f7ca4`; merge-captain disposition covers later docs.
+
+Additional handoff paths:
+
+- `/home/anonjr/bramble-work/status/eth-243/artifact-helper/` (upload receipts)
+- `/home/anonjr/.cache/agent-tmp/eth-243-running-slot-handoff.md`
