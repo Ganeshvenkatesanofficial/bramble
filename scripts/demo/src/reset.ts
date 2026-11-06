@@ -2,8 +2,8 @@
 // revoked, and has an empty `acl` record. It uses admincli's importable lib
 // (ETH-28), so the same code paths that grant and revoke in the demo run here.
 //
-// It does not enrol a device. Enrollment needs the registrar role and, in the
-// real demo, a hardware-signed transaction, so a missing `pubkey` is an error.
+// It does not enrol a device: enrollment is a separate, software-signed step,
+// so a missing `pubkey` is an error.
 import { normalize } from 'viem/ens'
 import {
   parseAclRecord,

@@ -227,7 +227,7 @@ function nodeUnits(ctx: PreflightContext, role: NodeRole): CheckUnit[] {
         case 'unavailable':
           return fail(id, `${where}: STUN discovery failed; read the brambled log on that node`, true)
         default:
-          return fail(id, `${where}: STUN discovery state ${String(body.state)}`, true)
+          return fail(id, `${where}: STUN discovery reported an unrecognised state`, true)
       }
     },
   }
@@ -394,12 +394,14 @@ function minPayerAtomic(env: Env): bigint {
   return raw && /^\d+$/.test(raw) ? BigInt(raw) : DEFAULT_MIN_PAYER_ATOMIC
 }
 
-function payerUnit(ctx: PreflightContext, account: string): CheckUnit {
-  const id = `hedera:${account}`
+function payerUnit(ctx: PreflightContext, account: string, index: number): CheckUnit {
+  const valid = /^\d+\.\d+\.\d+$/.test(account)
+  // An unvalidated value can be a secret: it must not become a printed identifier.
+  const id = valid ? `hedera:${account}` : `hedera:invalid-${index + 1}`
   return {
     id,
     async run() {
-      if (!/^\d+\.\d+\.\d+$/.test(account)) return fail(id, 'not a Hedera account id (expected 0.0.N)')
+      if (!valid) return fail(id, 'not a Hedera account id (expected 0.0.N)')
       const mirror = ctx.env.HEDERA_MIRROR_URL || DEFAULT_MIRROR_URL
       const url = `${mirror.replace(/\/+$/, '')}/api/v1/accounts/${account}/tokens?token.id=${HEDERA_USDC_ASSET_ID}`
       const res = await ctx.http(url, 8000)
@@ -434,7 +436,7 @@ export function buildChecks(ctx: PreflightContext): CheckUnit[] {
       run: async () => fail('hedera', 'no payer account: set HEDERA_CLIENT_ACCOUNT_ID or DEMO_PAYER_ACCOUNT_IDS'),
     })
   }
-  for (const account of payers) units.push(payerUnit(ctx, account))
+  payers.forEach((account, index) => units.push(payerUnit(ctx, account, index)))
   return units.map((unit) => sanitized(ctx, unit))
 }
 
@@ -446,14 +448,15 @@ export function contextSecrets(ctx: PreflightContext): string[] {
 /** Scrubs a unit's detail and any error it throws, so no check can print a secret or a URL. */
 function sanitized(ctx: PreflightContext, unit: CheckUnit): CheckUnit {
   const secrets = contextSecrets(ctx)
+  const id = scrub(unit.id, secrets)
   return {
-    id: unit.id,
+    id,
     async run() {
       try {
         const result = await unit.run()
-        return { ...result, detail: scrub(result.detail, secrets) }
+        return { ...result, id, detail: scrub(result.detail, secrets) }
       } catch (err) {
-        return fail(unit.id, errorText(err, secrets), true)
+        return fail(id, errorText(err, secrets), true)
       }
     },
   }

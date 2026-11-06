@@ -248,12 +248,14 @@ describe('node checks', () => {
       [{ state: 'disabled' }, 'BRAMBLE_STUN_SERVERS'],
       [{ state: 'discovering' }, 'in progress'],
       [{ state: 'unavailable', error: 'no response' }, 'STUN discovery failed'],
+      [{ state: 'REMOTE_OPAQUE_CREDENTIAL' }, 'unrecognised state'],
     ]
     for (const [body, text] of states) {
       const node = probe({ ...HEALTHY, '7899/endpoint': { status: 200, body } })
       const r = byId(await run(context({ nodes: { gateway: node, worker: probe(HEALTHY) } })), 'stun:gateway')
       expect(r.status).toBe('fail')
       expect(r.detail).toContain(text)
+      expect(r.detail).not.toContain('REMOTE_OPAQUE_CREDENTIAL')
     }
   })
 
@@ -410,8 +412,28 @@ describe('hedera payer', () => {
   it('rejects a payer id that is not shaped like a Hedera account', async () => {
     const ctx = context()
     ctx.env = { ...ctx.env, DEMO_PAYER_ACCOUNT_IDS: '../../etc/passwd' }
-    const r = byId(await run(ctx), 'hedera:../../etc/passwd')
+    const r = byId(await run(ctx), 'hedera:invalid-1')
     expect(r.status).toBe('fail')
+  })
+
+  it('hides a short known secret that a throwing probe puts in its error', async () => {
+    const token = 'demo123'
+    const ctx = context({
+      nodes: { gateway: probe({ ...HEALTHY, '7890/health': new Error(`boom ${token}`) }), worker: probe(HEALTHY) },
+    })
+    ctx.env = { ...ctx.env, APPROVAL_DEMO_TOKEN: token }
+    const results = await run(ctx)
+    expect(formatReport(results)).not.toContain(token)
+    expect(results.some((r) => r.status === 'fail')).toBe(true)
+  })
+
+  it('never prints an invalid payer value, even one that is a known secret', async () => {
+    const token = 'demo123'
+    const ctx = context()
+    ctx.env = { ...ctx.env, APPROVAL_DEMO_TOKEN: token, DEMO_PAYER_ACCOUNT_IDS: token }
+    const results = await run(ctx)
+    expect(formatReport(results)).not.toContain(token)
+    expect(byId(results, 'hedera:invalid-1').status).toBe('fail')
   })
 })
 

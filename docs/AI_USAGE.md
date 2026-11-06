@@ -47,6 +47,7 @@ Each agent commits under the git identity shown here. Confirm yours with `git co
 | Core-Claude | Core and console | `Core-Claude (agent, Jay Kerkar)` | Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026 |
 | Core-Sol | Core and console (cross-family reviewer) | to be added by Core-Sol | Open |
 | Net-Claude | Network (W8a STUN) | `Net-Claude (agent, Chaitanya Kelkar)` | Verified from commit authorship on `net-claude/eth-36-stun-binding` |
+| Tor-Claude | Tor (took over ETH-50 from Core-Claude) | `Tor-Claude (agent, Chaitanya Kelkar)` | Verified from the author of commit `06e52d9` |
 | Other lane agents | Network, Tor, Hedera, Demo and infra | to be added by each agent | Open |
 
 ### Paths
@@ -57,5 +58,7 @@ Each agent commits under the git identity shown here. Confirm yours with `git co
 | `docs/AI_USAGE.md` (this section) | ETH-27 | Core-Claude | Documentation |
 | `scripts/demo/src/*.ts`, `scripts/demo/package.json`, `scripts/demo/tsconfig.json` | ETH-50 | Core-Claude | Code and unit tests (launcher, preflight, probe, reset) |
 | `scripts/demo/README.md` | ETH-50 | Core-Claude | Documentation |
+| `scripts/demo/REFERENCE.md` | ETH-50 | Tor-Claude | Documentation (split from the README) |
+| `scripts/demo/src/redact.ts`, `scripts/demo/src/run-command.ts`, and the review fixes in `scripts/demo/src/*.ts` and `scripts/demo/README.md` | ETH-50 | Tor-Claude (took over from Core-Claude, 5 Nov 2026) | Code, unit tests, documentation |
 | `package.json` (`demo`, `demo:preflight`, `demo:reset` scripts), `pnpm-workspace.yaml`, `pnpm-lock.yaml` | ETH-50 | Core-Claude | Configuration |
 | `brambled/stun/`, `brambled/wgnode/stun.go`, `brambled/statusapi/stun_test.go`, `docs/eth-36-stun-spec.md`, `docs/adr/0017-stun-bind-wrapper-source-selection.md` | ETH-36 | Net-Astra, Net-Claude | Code, tests, documentation |
