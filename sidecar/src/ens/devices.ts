@@ -67,7 +67,10 @@ const RESCAN_MARGIN = 8_000n
 // call retries the same blocks. Concurrent calls share one scan.
 // admincli's enroll.ts keeps using listDeviceLabels: it runs once and needs
 // no cache.
-export function incrementalDeviceLabels(client: PublicClient): () => Promise<string[]> {
+export function incrementalDeviceLabels(
+  client: PublicClient,
+  retryDelaysMs?: readonly number[]
+): () => Promise<string[]> {
   const seen = new Set<string>()
   let scannedThrough: bigint | undefined
   let pending: Promise<string[]> | undefined
@@ -81,12 +84,16 @@ export function incrementalDeviceLabels(client: PublicClient): () => Promise<str
       fromBlock = scannedThrough - RESCAN_MARGIN
     }
     if (fromBlock <= head) {
-      const logs = await scanLogsChunked(client, {
-        address: tailnetRegistry(),
-        event: labelRegisteredEvent,
-        fromBlock,
-        toBlock: head,
-      })
+      const logs = await scanLogsChunked(
+        client,
+        {
+          address: tailnetRegistry(),
+          event: labelRegisteredEvent,
+          fromBlock,
+          toBlock: head,
+        },
+        retryDelaysMs
+      )
       for (const label of labelsOf(logs)) seen.add(label)
     }
     // An RPC pool can answer from a node a block or two behind; never move

@@ -106,13 +106,14 @@ describe('incrementalDeviceLabels (fixture RPC)', () => {
   it('retries the same range after a failed scan instead of skipping it', async () => {
     const opts: Parameters<typeof fixtureClient>[0] = { head: HEAD, logs: [...logs] }
     const { client, calls } = fixtureClient(opts)
-    const list = incrementalDeviceLabels(client)
+    const list = incrementalDeviceLabels(client, [0])
     await list()
 
     opts.head = HEAD + 100n
     opts.logs.push(labelRegisteredLog(registry, 'late-device', HEAD + 50n))
-    opts.failWith = { code: -32000, message: 'rate limited' }
-    await expect(list()).rejects.toThrow(/rate limited/)
+    // 4444 is not retried by scanLogsChunked, so the failure surfaces at once.
+    opts.failWith = { code: 4444, message: 'pruned history unavailable' }
+    await expect(list()).rejects.toThrow(/pruned history/)
 
     opts.failWith = undefined
     calls.length = 0
