@@ -1,6 +1,6 @@
 # How to stand up the Bramble demo on cloud machines
 
-Goal: run the three cloud machines (gateway with `demo-service`, agent worker, relays) and the admin machine, so the demo beats run live and online (handoff section 4). This page is the runbook. For ports, files and variable names, see `REFERENCE.md`. For why the topology looks this way, see `TOPOLOGY.md`. For the two-NAT test, see `nat-lab/README.md`.
+Goal: run the three cloud machines (gateway with `demo-service`, agent worker, relays) and the admin machine, so the demo beats run live and online (handoff section 4). This page is the runbook. For ports, files and variable names, see `REFERENCE.md`. For why the topology looks this way, see `TOPOLOGY.md`. For the two-NAT test, see `nat-lab/README.md`. To run demo beats 1, 2, 3 and 5 by hand on the running cloud nodes, see `DRYRUN.md`.
 
 ## Evidence labels
 
