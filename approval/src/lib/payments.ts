@@ -72,25 +72,33 @@ export function createPaymentsApi(options: {
   const mirror = new URL(options.mirrorUrl ?? MIRROR_URL)
   const json = (body: unknown, status = 200) =>
     Response.json(body, { status, headers: { 'cache-control': 'no-store' } })
-  return async (): Promise<Response> => {
+  async function loadFeed(rawConfig: string | undefined, rawCap: string | undefined): Promise<Response> {
+    const observedAt = new Date().toISOString()
+    const until = `${Math.floor(Date.now() / 1000)}.999999999`
     let configs: AgentConfig[]
     let perPaymentCapAtomic: string
     try {
-      configs = parseConfig(options.config())
-      perPaymentCapAtomic = options.perPaymentCap() ?? '100000'
-      if (!positiveAtomic.test(perPaymentCapAtomic)) throw new Error('configuration')
+      configs = parseConfig(rawConfig)
+      perPaymentCapAtomic = rawCap ?? '100000'
+      // Match sidecar/src/payments/config.ts, including leading zeroes.
+      if (!/^\d+$/.test(perPaymentCapAtomic) || BigInt(perPaymentCapAtomic) <= BigInt(0))
+        throw new Error('configuration')
+      if (configs.some((config) => timestamp(config.since) > timestamp(until))) throw new Error('future window')
     } catch {
       return json(
-        { error: 'Configure APPROVAL_PAYMENT_AGENTS and HEDERA_MAX_PAYMENT_ATOMIC on the approval server.' },
+        {
+          error: {
+            code: 'payments_configuration',
+            message:
+              'Configure APPROVAL_PAYMENT_AGENTS with a window that has started. HEDERA_MAX_PAYMENT_ATOMIC is optional (default 100000) and must be a positive integer.',
+          },
+        },
         503
       )
     }
-    const observedAt = new Date().toISOString()
-    const until = `${Math.floor(Date.now() / 1000)}.999999999`
     try {
       const agents = await Promise.all(
         configs.map(async (config) => {
-          if (timestamp(config.since) > timestamp(until)) throw new Error('future window')
           let next: URL | null = new URL('/api/v1/transactions', mirror)
           next.searchParams.set('account.id', config.payerAccountId)
           next.searchParams.set('order', 'asc')
@@ -133,7 +141,9 @@ export function createPaymentsApi(options: {
                 timestamp(tx.consensus_timestamp) >= timestamp(config.since) &&
                 timestamp(tx.consensus_timestamp) <= timestamp(until)
               )
-                transactions.set(tx.transaction_id, tx)
+                // Page overlap repeats the same consensus record. Retries and
+                // child records can share a transaction ID at different times.
+                transactions.set(timestamp(tx.consensus_timestamp).toString(), tx)
             }
             next = body.links.next ? new URL(body.links.next, mirror) : null
           }
@@ -174,9 +184,31 @@ export function createPaymentsApi(options: {
       return json({ agents, observedAt } satisfies PaymentsFeed)
     } catch {
       return json(
-        { error: 'Mirror feed unavailable or incomplete. Spend and remaining are unknown; retry shortly.' },
+        {
+          error: {
+            code: 'payments_feed_unavailable',
+            message: 'Mirror feed unavailable or incomplete. Spend and remaining are unknown; retry shortly.',
+          },
+        },
         502
       )
     }
+  }
+
+  // Coalesce tabs/polls and keep each result (including failures) for one
+  // second. One entry bounds memory; a config change immediately invalidates it.
+  let cached: { key: string; expiresAt: number; response: Promise<Response> } | undefined
+  return async (): Promise<Response> => {
+    const config = options.config()
+    const cap = options.perPaymentCap()
+    const key = JSON.stringify([config, cap])
+    if (!cached || cached.key !== key || cached.expiresAt <= Date.now()) {
+      const entry = { key, expiresAt: Infinity, response: loadFeed(config, cap) }
+      cached = entry
+      void entry.response.then(() => {
+        entry.expiresAt = Date.now() + 1_000
+      })
+    }
+    return (await cached.response).clone()
   }
 }

@@ -22,9 +22,12 @@ public mirror node. It never signs or forwards a payment. The standalone
    period, nine nanosecond digits). Use a fresh window for each reset, before
    starting the worker's relay connection. An empty or duplicate payer mapping
    fails closed. ENS does not attest this mapping; the operator owns attribution.
+   The gateway pays from its own sidecar too. Add a separate gateway label and
+   dedicated payer entry to show its spend; the worker's entry excludes it.
 3. Set `HEDERA_MAX_PAYMENT_ATOMIC` on approval to the same value used by the
    worker's sidecar. Its default is `100000` (0.100000 USDC per payment). This is
-   displayed configuration, not an independent read of the worker's policy.
+   displayed configuration, not an independent read of the worker's policy;
+   the panel labels it as configured and asks the operator to confirm the match.
    `budgetAtomic` is an advisory cumulative reporting budget. It does not stop
    payments. Data-relay price/session limits remain separate node flags.
 4. Start the approval server with `pnpm --filter @bramble/approval dev`. Open
@@ -38,21 +41,40 @@ public mirror node. It never signs or forwards a payment. The standalone
    the relay-sidecar must actually challenge with HTTP 402. A bare `-rendezvous`
    TCP address without a payment-sidecar URL does not prove a paid connection.
 2. Reset the reporting window, then start the worker's normal `brambled serve`
-   connection during the demo. Each metered relay attempt automatically calls the
-   local sidecar's `/payments/rendezvous-token`, buys a relay-specific token over
-   x402, and presents it in the rendezvous hello. This can happen before ACL
-   approval. Retrying the private service call alone does not buy another token.
+   connection during the demo. Once the peer's ENS device record is authorized
+   (pubkey present, unexpired and not revoked), endpoint resolution calls
+   `exchangeAnyMetered`. Each attempt contacts every configured relay concurrently.
+   For each metered relay it calls the local sidecar's `/rendezvous-token`, buys
+   a fresh relay-specific token over x402 **before dialing**, and presents it in
+   the rendezvous hello. Both nodes exchange, each using its own sidecar/payer.
+   This device admission is separate from service-ACL approval, so payment can
+   precede Approve. A failed exchange leaves the endpoint unresolved and buys
+   tokens again on the next admission sync (`-ttl`, default 30 seconds). A
+   successful endpoint resolution is remembered for that pubkey. Retrying the
+   private service call alone does not buy another token.
 3. Run the denied → request → human approve → successful private call flow with
    the same running worker. At beat 3 show `/payments`, including the payer,
-   per-payment cap, spent, remaining advisory budget, and HashScan settlement.
+   configured per-payment cap, spent, remaining advisory budget, and HashScan settlement.
    The settlement belongs to the relay connection made inside this demo window;
    it is not a fee charged by the gateway for the successful service call.
 4. For the explicit data-relay variant, configure the existing `-data-relay
    <label>=<relay-sidecar-url>` and `-relay-peer <peer-label>` flags before starting
    the worker. The node quotes candidates and applies `-max-relay-price-per-byte`
    and `-max-relay-session-cost`, then buys a session before routing that peer.
+   The session cost must also fit under the sidecar's `HEDERA_MAX_PAYMENT_ATOMIC`.
    This may buy both a session and rendezvous tokens. Failover buys another
-   session; an idle relay stall may also cause a purchase. Keep the demo finite.
+   session; an idle relay stall may also cause a purchase.
+
+   With a data-relay pool and rendezvous configured, each tracked peer not in
+   this node's `-relay-peer` set also runs `watchDataRelayAdopt`. It buys a fresh
+   token from **every metered rendezvous relay on every cycle**, even when the
+   candidate does not change. The exchange usually gives a roughly 3-second
+   cycle, rather than a guaranteed purchase interval. Backoff starts only after
+   two minutes without a change and adds a delay that doubles up to 30 seconds.
+   At the ADR 0007 default of 10000 atomic USDC per token, the example advisory
+   budget of 100000 covers only ten tokens: roughly 30 seconds for one relay in
+   that loop, sooner with multiple relays or other purchases. Stop the demo nodes
+   at the end of the take; reaching the displayed budget does not stop the loop.
 5. Compare the worker's logged settlement ID with the panel's HashScan record.
    Measure settlement-to-panel latency; the two-second poll interval is not a
    guarantee of mirror indexing or Tor payment latency. If no new outgoing USDC

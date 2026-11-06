@@ -18,8 +18,10 @@ export function PaymentsPanel() {
     async function refresh() {
       try {
         const response = await fetch('/api/payments', { cache: 'no-store', signal: controller.signal })
-        const body = await response.json()
-        if (!response.ok) throw new Error(body.error ?? 'Payments unavailable.')
+        const body = await response.json().catch(() => {
+          throw new Error('Payments unavailable. Retry shortly.')
+        })
+        if (!response.ok) throw new Error(body.error?.message ?? 'Payments unavailable. Retry shortly.')
         if (active) {
           setFeed(body)
           setError(null)
@@ -69,7 +71,7 @@ export function PaymentsPanel() {
               </dd>
             </div>
             <div>
-              <dt>Per-payment cap</dt>
+              <dt>Configured per-payment cap</dt>
               <dd>{usdc(agent.perPaymentCapAtomic)}</dd>
             </div>
             <div>
@@ -86,8 +88,8 @@ export function PaymentsPanel() {
             </div>
           </dl>
           <p>
-            Window starts at Hedera consensus time <code>{agent.since}</code>. The sidecar enforces the per-payment cap;
-            the demo budget does not stop payments.
+            Window starts at Hedera consensus time <code>{agent.since}</code>. The cap is approval-server configuration,
+            not read from the sidecar. Confirm it matches the deployed sidecar. The demo budget does not stop payments.
           </p>
           {BigInt(agent.spentAtomic) > BigInt(agent.budgetAtomic) && <p role="status">Demo budget exceeded.</p>}
           {agent.payments.length === 0 ? (
@@ -95,7 +97,7 @@ export function PaymentsPanel() {
           ) : (
             <ul aria-label={`${agent.agentLabel} settlements`}>
               {agent.payments.map((payment) => (
-                <li key={payment.transactionId}>
+                <li key={payment.consensusTimestamp}>
                   <span>{usdc(payment.amountAtomic)}</span>
                   {' · '}
                   <a href={payment.hashscanUrl} target="_blank" rel="noreferrer">

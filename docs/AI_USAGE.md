@@ -145,3 +145,26 @@ Findings and changes:
 - **Verified:** With both changes, the failover test passed 20 of 20 runs, in 4 parallel processes. With only the fake relay fixed, it failed 4 of 15.
 - **Open:** `Exchange` still loses the peer's candidate if the peer's offer arrives within one relay round trip of the deadline. The window is now one round trip instead of up to one second.
 - **Open:** `sidecar/test/device.test.ts` still reads current Sepolia state live. Current state is not pruned, so it passes today, but it is not hermetic.
+
+## Mumbai payment review corrections (ETH-34)
+
+Core-Sol (OpenAI Codex), using the existing Core-Sol git identity, integrated
+`origin/hackathon` without rewriting history and preserved both attribution
+sections in this file. Review corrections cover `approval/src/lib/payments.ts`,
+`approval/src/components/payments-panel.tsx`, `approval/test/payments.test.ts`,
+`docs/16_AGENT_PAYMENTS_FLOW.md`, `docs/17_AGENT_PAYMENTS_REFERENCE.md`, and
+`docs/AI_USAGE.md`. After integration, Core-Sol also added an explicit type for
+the patched runtime globals in `sidecar/test/helpers/network-guard.ts`; the
+uncached verify run found six TS7017 errors in the incoming audit helper.
+
+- **Verified:** the approval suite passes 21 tests, including successful spend
+  alongside duplicate/child records sharing a transaction ID, page overlap,
+  both window bounds, multiple payers, duplicate mappings, cap defaults and
+  validation, concurrent polls and cache invalidation/expiry.
+- **Read from source:** Core-Claude's review identified the consensus-record
+  deduplication bug and gaps in the trigger documentation. Core-Sol checked
+  `exchangeAnyMetered`, admission endpoint resolution, `watchDataRelayAdopt`,
+  the local sidecar route and cap validation before correcting those claims.
+- **Open:** funded settlement, deployed cap agreement, public tester screenshots
+  and human H4 remain required. These corrections authorize no funded payment or
+  deployment and change no handoff invariant.
