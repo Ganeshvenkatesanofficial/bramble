@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
+import { writeFile } from 'node:fs/promises'
 
 const headers = { authorization: 'Bearer browser-test-only' }
 
@@ -95,8 +96,10 @@ for (const theme of ['light', 'dark'] as const) {
         expect(contrast(palette[control], palette[background]), `${control} on ${background}`).toBeGreaterThanOrEqual(3)
     }
     const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze()
+    const reportPath = info.outputPath(`axe-${theme}-${info.project.name}.json`)
+    await writeFile(reportPath, JSON.stringify(results, null, 2))
     await info.attach(`axe-${theme}-${info.project.name}.json`, {
-      body: JSON.stringify(results, null, 2),
+      path: reportPath,
       contentType: 'application/json',
     })
     expect(results.violations).toEqual([])
