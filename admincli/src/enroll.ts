@@ -18,38 +18,12 @@
 // device brambled tracks.
 //
 // Usage: bun run enroll.ts <device-label> <pubkey> [expiry-years=10]
-import {
-  createWalletClient,
-  http,
-  encodeAbiParameters,
-  encodeFunctionData,
-  parseEventLogs,
-  parseAbi,
-  keccak256,
-  stringToHex,
-  toHex,
-} from 'viem'
-import { normalize, packetToBytes } from 'viem/ens'
-import {
-  RPC_URL,
-  tailnetName,
-  tailnetRegistry,
-  VERIFIABLE_FACTORY,
-  PERMISSIONED_RESOLVER_IMPL,
-  ALL_ROLES,
-  REGISTRATION_ROLE_BITMAP,
-} from '../../sidecar/src/ens/config'
+import { RPC_URL, tailnetName } from '../../sidecar/src/ens/config'
 import { accountFromEnv, hackathonSepolia, publicClient } from './setup'
-import { registryWriteAbi, resolverWriteAbi } from './roles'
 import { connectLedgerAccount } from './ledger-eth-sign'
-import { allocateMeshIP } from './mesh-ip'
-import { usedMeshIPs } from './mesh-ip-scan'
-
-const verifiableFactoryAbi = parseAbi([
-  'function deployProxy(address implementation, uint256 salt, bytes data) returns (address proxy)',
-  'event ProxyDeployed(address indexed sender, address indexed proxyAddress, uint256 salt, address implementation)',
-])
-const resolverInitAbi = parseAbi(['function initialize((address account, uint256 roleBitmap)[] grants, bytes[] calls)'])
+import { createViemEnrollChain } from './enroll-chain-viem'
+import { enrollDevice } from './lib'
+import { viemResolver } from './lib-viem'
 
 async function main() {
   const [deviceLabel, pubkey, expiryYearsArg] = process.argv.slice(2)
@@ -69,95 +43,22 @@ async function main() {
   const ledger = useLedger ? await connectLedgerAccount() : null
   const account = ledger ? ledger.account : accountFromEnv()
   if (useLedger) console.log(`signing as Ledger account ${account.address} -- confirm each transaction on-device`)
-  const wallet = createWalletClient({ account, chain: hackathonSepolia, transport: http(RPC_URL) })
-
-  async function writeAndWait(label: string, args: Parameters<typeof wallet.writeContract>[0]) {
-    const hash = await wallet.writeContract(args)
-    console.log(`   tx (${label}): ${hash}`)
-    const receipt = await publicClient.waitForTransactionReceipt({ hash })
-    if (receipt.status !== 'success') throw new Error(`${label} reverted on-chain`)
-    return receipt
-  }
-
-  // A load-balanced RPC can serve the read from a node that has not seen the
-  // block yet (found live, 6 Nov 2026), so poll briefly before declaring a mismatch.
-  async function readTextEventually(name: string, key: string, expected: string) {
-    let value: string | null = null
-    for (let attempt = 0; attempt < 10; attempt++) {
-      value = await publicClient.getEnsText({ name, key })
-      if (value === expected) break
-      await new Promise((resolve) => setTimeout(resolve, 3000))
-    }
-    return value
-  }
 
   try {
-    console.log(`[1/4] Deploying a dedicated resolver for ${deviceLabel}...`)
-    const version = BigInt(Date.now()) * 1000n + BigInt(Math.floor(Math.random() * 1000))
-    const salt = BigInt(
-      keccak256(
-        encodeAbiParameters(
-          [{ type: 'bytes32' }, { type: 'address' }, { type: 'uint256' }],
-          [keccak256(stringToHex('OwnedResolver')), account.address, version]
-        )
-      )
-    )
-    const initData = encodeFunctionData({
-      abi: resolverInitAbi,
-      functionName: 'initialize',
-      args: [[{ account: account.address, roleBitmap: ALL_ROLES }], []],
-    })
-    const deployReceipt = await writeAndWait('deploy resolver proxy', {
-      address: VERIFIABLE_FACTORY,
-      abi: verifiableFactoryAbi,
-      functionName: 'deployProxy',
-      args: [PERMISSIONED_RESOLVER_IMPL, salt, initData],
-    })
-    const [deployLog] = parseEventLogs({
-      abi: verifiableFactoryAbi,
-      eventName: 'ProxyDeployed',
-      logs: deployReceipt.logs,
-    })
-    const resolverAddress = deployLog.args.proxyAddress
-    console.log(`   resolver: ${resolverAddress}`)
-
-    console.log(`\n[2/4] Registering ${deviceLabel}.${tailnetName()} (requires ROLE_REGISTRAR)...`)
-    const farExpiry = BigInt(Math.floor(Date.now() / 1000) + expiryYears * 365 * 24 * 60 * 60)
-    const zeroAddress = '0x0000000000000000000000000000000000000000' as const
-    await writeAndWait('register', {
-      address: tailnetRegistry(),
-      abi: registryWriteAbi,
-      functionName: 'register',
-      args: [deviceLabel, account.address, zeroAddress, resolverAddress, REGISTRATION_ROLE_BITMAP, farExpiry],
-    })
-
-    console.log('\n[3/4] Writing initial pubkey...')
-    const fullname = normalize(`${deviceLabel}.${tailnetName()}`)
-    const dnsName = toHex(packetToBytes(fullname))
-    await writeAndWait('setText(pubkey)', {
-      address: resolverAddress,
-      abi: resolverWriteAbi,
-      functionName: 'setText',
-      args: [dnsName, 'pubkey', pubkey],
-    })
-
-    const readBack = await readTextEventually(fullname, 'pubkey', pubkey)
-    if (readBack !== pubkey) throw new Error(`pubkey did not round-trip: got ${JSON.stringify(readBack)}`)
-
-    console.log('\n[4/4] Allocating mesh-ip...')
-    const meshIP = allocateMeshIP(await usedMeshIPs(publicClient, deviceLabel))
-    await writeAndWait('setText(mesh-ip)', {
-      address: resolverAddress,
-      abi: resolverWriteAbi,
-      functionName: 'setText',
-      args: [dnsName, 'mesh-ip', meshIP],
-    })
-
-    const meshIPReadBack = await readTextEventually(fullname, 'mesh-ip', meshIP)
-    if (meshIPReadBack !== meshIP) throw new Error(`mesh-ip did not round-trip: got ${JSON.stringify(meshIPReadBack)}`)
-
-    console.log(
-      `\ndone. ${fullname} enrolled, resolver ${resolverAddress}, pubkey ${readBack}, mesh-ip ${meshIPReadBack}.`
+    await enrollDevice(
+      {
+        resolver: viemResolver,
+        chain: createViemEnrollChain({
+          account,
+          publicClient,
+          chain: hackathonSepolia,
+          rpcUrl: RPC_URL,
+          log: console.log,
+        }),
+        tailnetName: tailnetName(),
+        log: console.log,
+      },
+      { deviceLabel, pubkey, expiryYears }
     )
   } finally {
     if (ledger) await ledger.close()

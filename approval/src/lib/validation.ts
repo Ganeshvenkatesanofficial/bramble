@@ -1,4 +1,5 @@
-import { ApiError, type PaymentInput, type RequestInput } from './contracts'
+import { ApiError, type JoinInput, type PaymentInput, type RequestInput } from './contracts'
+import { normalize } from 'viem/ens'
 
 export function label(value: unknown, name: string): string {
   if (typeof value !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value)) {
@@ -7,7 +8,7 @@ export function label(value: unknown, name: string): string {
   return value
 }
 
-async function readObject(request: Request): Promise<Record<string, unknown>> {
+export async function readObject(request: Request): Promise<Record<string, unknown>> {
   if (request.headers.get('content-type')?.split(';')[0].trim() !== 'application/json') {
     throw new ApiError(415, 'unsupported_media_type', 'Use application/json.')
   }
@@ -98,4 +99,24 @@ export function parsePayment(value: Record<string, unknown>): PaymentInput {
     amountAtomic: text('amountAtomic', /^(?:0|[1-9]\d{0,38})$/, 'a decimal string of atomic units'),
     txRef: text('txRef', HEDERA_TX_ID, 'a Hedera transaction ID such as 0.0.1234@1700000000.123456789'),
   }
+}
+
+export async function readJoin(request: Request): Promise<JoinInput> {
+  const value = await readObject(request)
+  if (Object.keys(value).some((key) => !['label', 'pubkey', 'tailnet'].includes(key))) {
+    throw new ApiError(400, 'invalid_request', 'Request body contains unknown fields.')
+  }
+  const name = label(value.label, 'label')
+  if (typeof value.pubkey !== 'string' || !/^[0-9a-fA-F]{64}$/.test(value.pubkey)) {
+    throw new ApiError(400, 'invalid_request', 'pubkey must be a 32-byte WireGuard public key as 64 hex characters.')
+  }
+  if (typeof value.tailnet !== 'string' || !/^[a-z0-9.-]{1,253}$/i.test(value.tailnet)) {
+    throw new ApiError(400, 'invalid_request', 'tailnet must be an ENS name such as mesh.eth.')
+  }
+  try {
+    normalize(`${name}.${value.tailnet.toLowerCase()}`)
+  } catch {
+    throw new ApiError(400, 'invalid_request', 'label and tailnet must form a valid ENS name.')
+  }
+  return { label: name, pubkey: value.pubkey.toLowerCase(), tailnet: value.tailnet.toLowerCase() }
 }

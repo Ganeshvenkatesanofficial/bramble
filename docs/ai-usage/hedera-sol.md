@@ -117,3 +117,23 @@ Additional handoff paths:
 
 - `/home/anonjr/bramble-work/status/eth-243/artifact-helper/` (upload receipts)
 - `/home/anonjr/.cache/agent-tmp/eth-243-running-slot-handoff.md`
+
+
+## ETH-308 PR 42 documentation conflict resolution
+
+Demo beats: 1, 2, 3 and 5. Merge `origin/hackathon` at `70fbfb7` into
+PR 42 with a merge commit. Preserve the Pi runtime, lifecycle measurements,
+Claude Code token isolation guidance and approval authority limits. Resolve
+conflicts only in the two agent MCP documentation files.
+
+Paths written:
+
+- `agent-mcp/README.md`
+- `agent-mcp/REFERENCE.md`
+- `docs/ai-usage/hedera-sol.md`
+
+Read from source: the incoming branch changes `deploy/scripts/gen-node-key.sh`
+and adds `gen-node-key.test.sh`, `join-test.py` and `rehearse.py`. These inherited
+changes make the requested whole-directory diff against `91f7ca4` nonempty.
+The conflict resolution does not edit scripts, tests, launchers or SKILL files.
+The approved Pi files remain byte-identical to `91f7ca4`.

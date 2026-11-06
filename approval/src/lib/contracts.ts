@@ -1,3 +1,5 @@
+import type { EnrollProgress } from '../../../admincli/src/lib'
+
 export interface RequestInput {
   agentLabel: string
   gatewayLabel: string
@@ -101,8 +103,67 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
-    message: string
+    message: string,
+    readonly headers?: Record<string, string>
   ) {
     super(message)
   }
+}
+
+/** The body of `POST /api/joins`: a device asking to be enrolled in the tailnet. */
+export interface JoinInput {
+  label: string
+  /** 32-byte WireGuard public key, 64 lowercase hex characters. */
+  pubkey: string
+  tailnet: string
+}
+
+export type JoinStatus = 'pending' | 'approved' | 'denied' | 'revoked'
+
+export interface JoinRecord extends JoinInput {
+  id: string
+  status: JoinStatus
+  createdAt: string
+  decidedAt?: string
+  revokedAt?: string
+  /** Plain address, for example `10.77.0.2`. */
+  meshIp?: string
+  /** The `mesh-ip` record value, for example `10.77.0.2/24`. */
+  meshCidr?: string
+  enrollTransactions?: { deploy?: string; register?: string; pubkey?: string; meshIp?: string }
+  revokeTransaction?: TransactionReceipt
+  /** An approve or revoke is running. The record keeps its status until it confirms. */
+  inProgress?: 'approving' | 'revoking'
+  /** A fixed message about the last failed approve or revoke. Never carries an adapter diagnostic. */
+  failure?: string
+}
+
+/** What the chain says about one enrolled device. */
+export interface MemberFacts {
+  label: string
+  pubkey?: string | null
+  meshIp: string | null
+  revoked: boolean
+  /** Unix seconds. */
+  expiry: number
+}
+
+export interface EnrollOutcome {
+  meshIp: string
+  meshCidr: string
+  txHashes: NonNullable<JoinRecord['enrollTransactions']>
+}
+
+/**
+ * Device enrollment and removal. Implementations return only after confirmation and throw any
+ * failure; `LabelRegisteredError` means the name is already taken.
+ */
+export interface JoinChain {
+  /** True when the label already has an identity on the tailnet. */
+  labelTaken(label: string): Promise<boolean>
+  /** Resumable: `progress` records each confirmed step and is passed back on retry. */
+  enroll(input: { label: string; pubkey: string }, progress: EnrollProgress): Promise<EnrollOutcome>
+  /** Sets the device's `revoked` record. */
+  revokeDevice(label: string): Promise<TransactionReceipt>
+  members(): Promise<MemberFacts[]>
 }
