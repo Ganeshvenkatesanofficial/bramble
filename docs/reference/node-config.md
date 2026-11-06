@@ -4,7 +4,7 @@ Reference for the public config a device fetches before it joins a tailnet. `bra
 
 Code: `node-daemon/internal/daemon/config.go` (parse and validate), `node-daemon/internal/daemon/node.go` (turns it into the `brambled serve` command line and environment).
 
-Unknown fields are ignored. Wrong values make `bramble up` stop with an error and a next step, not a crash.
+Unknown fields are ignored. Wrong values do not stop `bramble up`: it keeps serving the local UI, and the first step that needs the config (Join, or starting the node) shows an error with a next step. `bramble` fetches the file again at each of those steps, so fixing it on the install host is enough.
 
 ## Required
 

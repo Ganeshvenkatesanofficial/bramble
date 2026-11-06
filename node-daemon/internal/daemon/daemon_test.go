@@ -22,6 +22,11 @@ type fakeJoinAPI struct {
 	joins   map[string]*Join
 	pubkeys map[string]string
 	seen    []string // "METHOD path auth"
+	// hold, when set, makes POST /api/joins signal arrived and wait for
+	// release before it answers.
+	hold    bool
+	arrived chan struct{}
+	release chan struct{}
 }
 
 func newFakeJoinAPI() *fakeJoinAPI {
@@ -49,6 +54,13 @@ func (f *fakeJoinAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && r.URL.Path == "/api/joins":
 		var body struct{ Label, Pubkey, Tailnet string }
 		_ = json.NewDecoder(r.Body).Decode(&body)
+		if f.hold {
+			f.hold = false
+			f.mu.Unlock()
+			f.arrived <- struct{}{}
+			<-f.release
+			f.mu.Lock()
+		}
 		if !LabelRE.MatchString(body.Label) {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = io.WriteString(w, `{"error":"invalid label"}`)
@@ -449,5 +461,74 @@ func TestAdminProxyAddsSavedToken(t *testing.T) {
 	}
 	if rec := hs.do("DELETE", "/api/admin/joins", "", nil); rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("DELETE through admin proxy: HTTP %d", rec.Code)
+	}
+}
+
+// holdNextJoin makes the next POST /api/joins wait until the returned
+// function is called; arrived is signalled when the request reaches the API.
+func (hs *harness) holdNextJoin() (arrived <-chan struct{}, release func()) {
+	hs.api.mu.Lock()
+	defer hs.api.mu.Unlock()
+	hs.api.hold = true
+	hs.api.arrived = make(chan struct{}, 1)
+	hs.api.release = make(chan struct{})
+	return hs.api.arrived, func() { close(hs.api.release) }
+}
+
+func TestLeaveDuringJoinDiscardsTheLateResponse(t *testing.T) {
+	hs := newHarness(t)
+	hs.waitPhase(PhaseSetup)
+	hs.do("POST", "/api/setup", `{"name":"laptop"}`, nil)
+	hs.waitPhase(PhaseReady)
+
+	arrived, release := hs.holdNextJoin()
+	joined := make(chan int, 1)
+	go func() { joined <- hs.do("POST", "/api/join", `{"tailnet":"demo.eth"}`, nil).Code }()
+	select {
+	case <-arrived:
+	case <-time.After(3 * time.Second):
+		t.Fatal("join request never reached the API")
+	}
+	if rec := hs.do("POST", "/api/leave", "", nil); rec.Code != http.StatusOK {
+		t.Fatalf("leave: HTTP %d %s", rec.Code, rec.Body)
+	}
+	release()
+	if code := <-joined; code == http.StatusOK {
+		t.Fatalf("a join that Leave overtook answered 200")
+	}
+	st := hs.state()
+	if st.Phase != PhaseReady || st.JoinID != "" || st.Error != nil {
+		t.Fatalf("late response changed the state after Leave: %+v", st)
+	}
+	if j, _ := hs.d.Store.LoadJoin(); j != nil {
+		t.Fatalf("late response saved a join id after Leave: %+v", j)
+	}
+
+	// Joining again after the cancelled attempt works.
+	if rec := hs.do("POST", "/api/join", `{"tailnet":"demo.eth"}`, nil); rec.Code != http.StatusOK {
+		t.Fatalf("rejoin: HTTP %d %s", rec.Code, rec.Body)
+	}
+	hs.waitPhase(PhasePending)
+}
+
+func TestConcurrentJoinIsRejected(t *testing.T) {
+	hs := newHarness(t)
+	hs.waitPhase(PhaseSetup)
+	hs.do("POST", "/api/setup", `{"name":"laptop"}`, nil)
+	hs.waitPhase(PhaseReady)
+
+	arrived, release := hs.holdNextJoin()
+	first := make(chan int, 1)
+	go func() { first <- hs.do("POST", "/api/join", `{"tailnet":"demo.eth"}`, nil).Code }()
+	<-arrived
+	if rec := hs.do("POST", "/api/join", `{"tailnet":"demo.eth"}`, nil); rec.Code != http.StatusConflict {
+		t.Fatalf("second join while one is in flight: HTTP %d %s, want 409", rec.Code, rec.Body)
+	}
+	release()
+	if code := <-first; code != http.StatusOK {
+		t.Fatalf("first join: HTTP %d", code)
+	}
+	if st := hs.waitPhase(PhasePending); st.JoinID != "join-laptop" {
+		t.Fatalf("state = %+v", st)
 	}
 }

@@ -112,6 +112,11 @@ type Server struct {
 	PeerTable PeerTable
 	// EndpointSource supplies the node's in-memory STUN observation.
 	EndpointSource interface{ EndpointStatus() wgnode.EndpointStatus }
+	// DataRelays is the data-relay pool this node uses, label to relay
+	// sidecar URL, from -data-relay flags and ENS discovery alike. A caller
+	// that sees a peer's WireGuard endpoint on one of these hosts knows the
+	// path is relayed. Set once at startup; not modified afterwards.
+	DataRelays map[string]string
 
 	admission admissionCache
 	activity  activityBuffer
@@ -280,7 +285,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// Handler returns the mux mounting /peers, /activity, /ping, /endpoint.
+// Handler returns the mux mounting /peers, /activity, /ping, /endpoint, /relays.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /endpoint", func(w http.ResponseWriter, _ *http.Request) {
@@ -289,6 +294,9 @@ func (s *Server) Handler() http.Handler {
 			state = s.EndpointSource.EndpointStatus()
 		}
 		writeJSON(w, state)
+	})
+	mux.HandleFunc("GET /relays", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, map[string]map[string]string{"dataRelays": s.DataRelays})
 	})
 	mux.HandleFunc("/peers", s.handlePeers)
 	mux.HandleFunc("/activity", s.handleActivity)

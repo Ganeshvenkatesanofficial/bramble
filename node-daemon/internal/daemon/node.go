@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -31,7 +30,6 @@ type NodeSpec struct {
 	// privilege; local programs then reach the mesh through loopback
 	// forwards only (spec D10).
 	TUN bool
-	Log io.Writer
 }
 
 // NodePorts are the local ports this node uses.
@@ -232,14 +230,18 @@ func AllocatePorts(cfg *NodeConfig, ownLabel string) (NodePorts, error) {
 
 // RunningNode is one brambled serve child process.
 type RunningNode struct {
-	Ports      NodePorts
-	relayHosts map[string]bool
-	cmd        *exec.Cmd
-	done       chan struct{}
-	tail       *lineTail
+	Ports NodePorts
+	cmd   *exec.Cmd
+	done  chan struct{}
+	tail  *lineTail
 
 	mu      sync.Mutex
 	exitErr error
+	// relayHosts holds the hosts and IPs of every data relay the node uses:
+	// the configured ones at start, plus the pool brambled reports once it
+	// has finished its own ENS relay discovery (relaysLoaded).
+	relayHosts   map[string]bool
+	relaysLoaded bool
 }
 
 // StartNode starts brambled serve. It returns once the process has started;
@@ -252,13 +254,13 @@ func StartNode(spec NodeSpec) (*RunningNode, error) {
 	cmd := exec.Command(spec.Brambled, ServeArgs(spec, ports)...)
 	cmd.Env = append(os.Environ(), ServeEnv(spec, ports)...)
 	cmd.SysProcAttr = childProcAttr()
+	// brambled's output names peers and says whether each is authorized.
+	// That is authorization state, so it is kept in memory only (invariant:
+	// nothing about who may talk to whom touches disk). The tail also drops
+	// those lines, so a crash summary never repeats them into bramble.log.
 	tail := &lineTail{max: 30}
-	var out io.Writer = tail
-	if spec.Log != nil {
-		out = io.MultiWriter(spec.Log, tail)
-	}
-	cmd.Stdout = out
-	cmd.Stderr = out
+	cmd.Stdout = tail
+	cmd.Stderr = tail
 	// brambled's sidecar inherits the output pipe. If the sidecar outlives
 	// brambled, Wait must not block on that pipe forever.
 	cmd.WaitDelay = 3 * time.Second
@@ -354,7 +356,54 @@ func (n *RunningNode) FetchPeers(ctx context.Context, now time.Time) ([]Peer, er
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&raw); err != nil {
 		return nil, err
 	}
-	return ConvertPeers(raw, n.relayHosts, now), nil
+	n.loadRelays(ctx)
+	n.mu.Lock()
+	hosts := n.relayHosts
+	n.mu.Unlock()
+	return ConvertPeers(raw, hosts, now), nil
+}
+
+// loadRelays asks brambled for its data-relay pool, which includes relays
+// it discovered in ENS and the config never named, and adds their hosts. It
+// retries on later calls until brambled answers; a brambled without the
+// /relays route keeps the configured relays only.
+func (n *RunningNode) loadRelays(ctx context.Context) {
+	n.mu.Lock()
+	done := n.relaysLoaded
+	n.mu.Unlock()
+	if done {
+		return
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/relays", n.Ports.Status), nil)
+	if err != nil {
+		return
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+	var body struct {
+		DataRelays map[string]string `json:"dataRelays"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&body); err != nil {
+		return
+	}
+	found := hostsOf(body.DataRelays)
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	merged := make(map[string]bool, len(n.relayHosts)+len(found))
+	for h := range n.relayHosts {
+		merged[h] = true
+	}
+	for h := range found {
+		merged[h] = true
+	}
+	n.relayHosts = merged
+	n.relaysLoaded = true
 }
 
 // handshakeFresh is how recent a handshake must be for a path to count as
@@ -408,9 +457,12 @@ func endpointHost(endpoint string) string {
 
 // relayHosts resolves every data relay's host to its IP addresses: a peer
 // whose WireGuard endpoint is one of them is reached through the relay.
-func relayHosts(cfg *NodeConfig) map[string]bool {
+func relayHosts(cfg *NodeConfig) map[string]bool { return hostsOf(cfg.DataRelays) }
+
+// hostsOf returns the host and resolved IPs of each relay sidecar URL.
+func hostsOf(relays map[string]string) map[string]bool {
 	hosts := map[string]bool{}
-	for _, raw := range cfg.DataRelays {
+	for _, raw := range relays {
 		u, err := url.Parse(raw)
 		if err != nil || u.Hostname() == "" {
 			continue
@@ -439,17 +491,17 @@ type lineTail struct {
 func (t *lineTail) Write(p []byte) (int, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	s := bufio.NewScanner(strings.NewReader(t.partial + string(p)))
+	text := t.partial + string(p)
 	t.partial = ""
-	var lines []string
-	for s.Scan() {
-		lines = append(lines, s.Text())
+	parts := strings.Split(text, "\n")
+	// The last element is an unfinished line (or "" after a final newline).
+	t.partial = parts[len(parts)-1]
+	for _, line := range parts[:len(parts)-1] {
+		line = strings.TrimRight(line, "\r")
+		if !peerLine(line) {
+			t.lines = append(t.lines, line)
+		}
 	}
-	if len(p) > 0 && p[len(p)-1] != '\n' && len(lines) > 0 {
-		t.partial = lines[len(lines)-1]
-		lines = lines[:len(lines)-1]
-	}
-	t.lines = append(t.lines, lines...)
 	if len(t.lines) > t.max {
 		t.lines = t.lines[len(t.lines)-t.max:]
 	}
@@ -466,4 +518,22 @@ func (t *lineTail) lastMatching(substr string) string {
 		}
 	}
 	return ""
+}
+
+// peerLine reports whether a brambled output line is about a peer or an
+// authorization decision (admission and gateway events, ENS grants). Those
+// lines are never kept, not even in memory.
+func peerLine(line string) bool {
+	l := strings.ToLower(line)
+	for _, p := range []string{"admission:", "gateway:", "gateway ", "data-relay:", "peer "} {
+		if strings.HasPrefix(l, p) {
+			return true
+		}
+	}
+	for _, sub := range []string{"authorized", "pubkey", "acl", "grant"} {
+		if strings.Contains(l, sub) {
+			return true
+		}
+	}
+	return false
 }

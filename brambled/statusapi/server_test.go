@@ -128,3 +128,18 @@ func TestPingRealLoopback(t *testing.T) {
 		t.Fatalf("expected loopback to be reachable, got %+v", got)
 	}
 }
+
+func TestRelaysReportsTheDataRelayPool(t *testing.T) {
+	s := &Server{DataRelays: map[string]string{"relay-eu": "http://203.0.113.9:8080"}}
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/relays", nil))
+	var got struct {
+		DataRelays map[string]string `json:"dataRelays"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if got.DataRelays["relay-eu"] != "http://203.0.113.9:8080" {
+		t.Fatalf("expected the relay pool, got %+v", got)
+	}
+}

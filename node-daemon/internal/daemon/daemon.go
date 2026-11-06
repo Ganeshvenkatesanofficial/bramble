@@ -30,7 +30,12 @@ type Daemon struct {
 	// startNode is replaced in tests.
 	startNode func(NodeSpec) (nodeHandle, error)
 
-	mu        sync.Mutex
+	mu sync.Mutex
+	// joinEpoch counts Leave calls; joining is set while a join request is
+	// in flight. Together they stop a slow request from changing the state
+	// after the person has left, and stop two requests overlapping.
+	joinEpoch uint64
+	joining   bool
 	m         *Machine
 	id        Identity
 	pubkey    string
@@ -228,19 +233,36 @@ func (d *Daemon) config(ctx context.Context, refresh bool) (*NodeConfig, error) 
 	return fresh, nil
 }
 
+// errJoinCancelled is returned to a Join whose request was overtaken by Leave.
+var errJoinCancelled = &ErrorInfo{
+	Message:  "The join request was cancelled because this device left the tailnet.",
+	NextStep: "Press Join again if you still want to join.",
+}
+
 // Join sends a join request for tailnet.
 func (d *Daemon) Join(ctx context.Context, tailnet string) error {
 	tailnet = strings.ToLower(strings.TrimSpace(tailnet))
 	d.mu.Lock()
 	err := d.m.CanJoin()
-	name := d.m.Name()
+	if err == nil && d.joining {
+		err = busy("A join request is already being sent.", "Wait a moment, then check the status.")
+	}
+	name, epoch := d.m.Name(), d.joinEpoch
+	if err == nil {
+		d.joining = true
+	}
 	d.mu.Unlock()
 	if err != nil {
 		return err
 	}
+	defer func() {
+		d.mu.Lock()
+		d.joining = false
+		d.mu.Unlock()
+	}()
 	cfg, err := d.config(ctx, true)
 	if err != nil {
-		return d.fail(err)
+		return d.failIf(epoch, err)
 	}
 	if tailnet == "" {
 		tailnet = cfg.Tailnet
@@ -257,15 +279,20 @@ func (d *Daemon) Join(ctx context.Context, tailnet string) error {
 		var apiErr *JoinAPIError
 		switch {
 		case errors.As(err, &apiErr) && apiErr.Status == 429:
-			return d.fail(&ErrorInfo{Message: "The approval service is getting too many requests.", NextStep: "Wait a minute, then press Join again."})
+			return d.failIf(epoch, &ErrorInfo{Message: "The approval service is getting too many requests.", NextStep: "Wait a minute, then press Join again."})
 		case errors.As(err, &apiErr) && apiErr.Status >= 400 && apiErr.Status < 500:
-			return d.fail(&ErrorInfo{Message: "The approval service refused the request: " + apiErr.Message, NextStep: "Check the device name, or ask the tailnet admin."})
+			return d.failIf(epoch, &ErrorInfo{Message: "The approval service refused the request: " + apiErr.Message, NextStep: "Check the device name, or ask the tailnet admin."})
 		default:
-			return d.fail(&ErrorInfo{Message: "Bramble could not reach the approval service at " + cfg.JoinAPI + ".", NextStep: "Check the internet connection, then press Join again."})
+			return d.failIf(epoch, &ErrorInfo{Message: "Bramble could not reach the approval service at " + cfg.JoinAPI + ".", NextStep: "Check the internet connection, then press Join again."})
 		}
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.joinEpoch != epoch {
+		// Leave ran while the request was in flight. The approval service
+		// may still hold a pending request; the admin can deny it.
+		return errJoinCancelled
+	}
 	if err := d.Store.SaveJoin(JoinRecord{Tailnet: tailnet, JoinID: j.ID}); err != nil {
 		d.logf("saving join id: %v", err)
 	}
@@ -274,6 +301,21 @@ func (d *Daemon) Join(ctx context.Context, tailnet string) error {
 	d.lastPoll = time.Now()
 	d.poke()
 	return nil
+}
+
+// failIf records err as the current problem, unless Leave has run since
+// epoch (the failure then belongs to a request nobody is waiting on), and
+// returns it.
+func (d *Daemon) failIf(epoch uint64, err error) error {
+	var info *ErrorInfo
+	if errors.As(err, &info) {
+		d.mu.Lock()
+		if d.joinEpoch == epoch {
+			d.m.SetProblem(*info)
+		}
+		d.mu.Unlock()
+	}
+	return err
 }
 
 // fail records err as the current problem and returns it.
@@ -290,6 +332,7 @@ func (d *Daemon) fail(err error) error {
 // Leave stops the node and forgets the tailnet.
 func (d *Daemon) Leave() {
 	d.mu.Lock()
+	d.joinEpoch++
 	d.m.Leave()
 	node := d.node
 	d.node = nil
@@ -336,6 +379,8 @@ func (d *Daemon) pollLoop(ctx context.Context) {
 		d.mu.Lock()
 		d.lastPoll = time.Now()
 		switch {
+		case d.m.JoinID() != id:
+			// Left, or joined again, while the request was in flight.
 		case errors.Is(err, ErrJoinNotFound):
 			d.m.JoinLost()
 		case err != nil:
@@ -397,7 +442,7 @@ func (d *Daemon) reconcileNode(ctx context.Context) {
 		case <-node.Done():
 			d.nodeFailed(ErrorInfo{
 				Message:  "The connection stopped: " + node.ExitSummary(),
-				NextStep: "Bramble restarts it on its own. If this keeps happening, see " + d.Store.Dir + "/logs/brambled.log.",
+				NextStep: "Bramble restarts it on its own. If this keeps happening, run `bramble down`, then `bramble up`, and tell the tailnet admin.",
 			})
 			return
 		default:
@@ -444,20 +489,10 @@ func (d *Daemon) launch(ctx context.Context) {
 	d.mu.Lock()
 	spec := NodeSpec{Brambled: d.Brambled, Label: d.id.Name, PrivateKeyHex: d.id.PrivateKeyHex, Config: cfg, TUN: d.TUN}
 	d.mu.Unlock()
-	logFile, err := d.Store.OpenLog("brambled.log")
-	if err == nil {
-		spec.Log = logFile
-	}
 	node, err := d.startNode(spec)
 	if err != nil {
-		if logFile != nil {
-			logFile.Close()
-		}
 		d.nodeFailed(ErrorInfo{Message: "Bramble could not start the connection: " + err.Error(), NextStep: "Reinstall Bramble, then run `bramble up` again."})
 		return
-	}
-	if logFile != nil {
-		go func() { <-node.Done(); logFile.Close() }()
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
