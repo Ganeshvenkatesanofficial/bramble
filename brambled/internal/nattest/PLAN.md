@@ -25,7 +25,7 @@ Implementation slices:
 3. Two-NAT discovery/probe scenarios, peer blocking and relay recovery, socket
    deadlines, concurrent use, and cleanup checks.
 4. Usage instructions, AI attribution, required repository checks, PR, and
-   Net-Astra review issue. Merge remains outside this implementation run.
+   cross-family review issue (Net-Claude per Atlas's continuation direction). Merge remains outside this implementation run.
 
 Tests assert behavior through the public packet interface, including observed
 source addresses. They do not inspect mapping tables. A local address-reflection
