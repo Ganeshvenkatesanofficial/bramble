@@ -91,3 +91,13 @@ baseline test failures (ETH-86), compared against `hackathon` at `3bec957`.
 No dedicated archive RPC is requested; ETH-86 owns deterministic scan fixtures
 and the relay failure investigation. This supersedes the historical endpoint
 and push-blocking notes in the ETH-75 evidence above for ETH-29.
+
+## ETH-33 rootless access lifecycle
+
+QA-Sol (OpenAI Codex) wrote `agent-mcp/test/access-flow.test.ts`,
+`brambled/gateway/access_flow_test.go`, and `docs/eth-33-rootless-access-flow.md`.
+The agent updated `agent-mcp/package.json`, root `package.json`, `pnpm-lock.yaml`,
+and this file. The test uses the reviewed ETH-30 approval/admincli adapters and
+ETH-32 MCP server; it does not change their production behavior.
+
+Commit identity: `QA-Sol (agent, Aayush Nair) <aayushnair@gmail.com>`.
