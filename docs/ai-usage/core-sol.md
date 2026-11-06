@@ -15,6 +15,11 @@ chain suite passes 33 tests with 130 assertions, including reverted and unresolv
 writes, late grant confirmation, and duplicate-write blocking. Tests inject ENS and signer
 boundaries; live RPC propagation and gateway cut-off remain Open.
 
+Verified on 6 November 2026: `pnpm verify` passes, including both invariant checks,
+formatting, deployment tests, typechecking, lint, production builds, and workspace
+tests. Approval passes 120 tests with 628 assertions. No cloud unit operations or
+chain writes run for this fix.
+
 ## ETH-293: concurrent rendezvous exchanges (demo beats 3 and 4)
 
 Paths written: `relay/main.go`, `relay/concurrent_exchange_test.go`, `brambled/rendezvous/client.go`, `brambled/rendezvous/client_test.go`, `brambled/concurrent_sponsored_relay_test.go`, `docs/reference/endpoint-exchange.md`, and this file.
