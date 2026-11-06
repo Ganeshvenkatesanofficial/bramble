@@ -1,5 +1,15 @@
+import Link from 'next/link'
 import { PaymentsPanel } from '../../components/payments-panel'
 
 export default function PaymentsPage() {
-  return <PaymentsPanel />
+  return (
+    <div className="payments-page">
+      <header>
+        <Link href="/">bramble / approval</Link>
+      </header>
+      <main>
+        <PaymentsPanel />
+      </main>
+    </div>
+  )
 }

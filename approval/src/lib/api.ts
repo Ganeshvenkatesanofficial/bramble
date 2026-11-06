@@ -36,6 +36,28 @@ export function createApprovalApi(options: ApiOptions) {
           return json(service.create(await readInput(request)), 201)
         }
         if (path === '/api/requests' && request.method === 'GET') return json({ requests: service.list() })
+        const identity = /^\/api\/identities\/([^/]+)$/.exec(path)
+        if (identity && request.method === 'GET') {
+          const name = label(identity[1], 'agentLabel')
+          if (!options.resolver) {
+            throw new ApiError(503, 'resolver_not_configured', 'Identity resolution is not configured.')
+          }
+          try {
+            const facts = await options.resolver.resolveIdentity(name)
+            return json({
+              identity: facts
+                ? {
+                    label: facts.label,
+                    pubkeyPublished: facts.pubkeyPublished,
+                    revoked: facts.revoked,
+                    expiry: facts.expiry,
+                  }
+                : null,
+            })
+          } catch {
+            throw new ApiError(502, 'identity_unavailable', 'ENS identity facts are temporarily unavailable.')
+          }
+        }
         const decision = /^\/api\/requests\/([^/]+)\/(approve|deny)$/.exec(path)
         if (decision && request.method === 'POST') {
           if (decision[2] === 'deny') return json(service.deny(decision[1]))
