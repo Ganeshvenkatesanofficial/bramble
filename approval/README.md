@@ -6,11 +6,11 @@ It runs in one long-lived Node.js process on the admin machine. The development 
 address is loopback, port 3001. The production commands are `build` and `start`
 in the same package. External access is limited to the approved tunnel topology.
 
-The root page is the approval console. ETH-30 supplies the real signer and ENS
-resolver; ETH-31 supplies the UI. The default runtime accepts requests and deny
-decisions, and rejects grant/revoke operations with `503 signer_not_configured`
-until the real signer is configured on the admin machine (see "Real signer
-runbook"). Test-only in-memory adapters never enter the runtime path.
+The root page is the approval console (ETH-31). The runtime accepts
+requests and deny decisions. Grant and revoke operations answer
+`503 signer_not_configured` until the real signer is configured on the admin
+machine (see "Real signer runbook"). Test-only in-memory adapters never enter the
+runtime path.
 
 All POST requests require `Authorization: Bearer` with the shared token configured
 in `APPROVAL_DEMO_TOKEN`. The API never returns the token. Reads are public and use

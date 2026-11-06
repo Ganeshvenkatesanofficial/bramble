@@ -6,9 +6,9 @@ import { packetToBytes } from 'viem/ens'
 import { resolverWriteAbi } from '../../../admincli/src/roles'
 import { ringDecrypt } from '../../../admincli/src/ledger-ring'
 import type { LoadGranterKey, Signer } from '../../../admincli/src/lib'
-import { publicClient, resolveDevice } from '../../../sidecar/src/ens/client'
 import { RPC_URL, tailnetName, tailnetRegistry } from '../../../sidecar/src/ens/config'
 import { createChainAdapters, type ChainAdapters } from './chain'
+import { publicClient, readDevice } from './ens-reader'
 
 type Env = Record<string, string | undefined>
 
@@ -108,7 +108,7 @@ export function realAdaptersFromEnv(env: Env = process.env): ChainAdapters | und
   return createChainAdapters({
     resolver: { getText: (name, key) => publicClient.getEnsText({ name, key }) },
     signer: viemSigner(account),
-    readDevice: resolveDevice,
+    readDevice,
     getReceiptStatus: receiptStatus,
     tailnetName: tailnet,
     granterLabel,

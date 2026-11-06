@@ -18,7 +18,7 @@ import {
   type TransactionReceipt,
 } from './contracts'
 
-/** What a device read must report; `resolveDevice` in sidecar/src/ens/client.ts satisfies it. */
+/** What a device read must report; `readDevice` in ens-reader.ts satisfies it. */
 export interface DeviceFacts {
   pubkey: string | null
   revoked: boolean
