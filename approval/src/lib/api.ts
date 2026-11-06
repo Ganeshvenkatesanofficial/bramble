@@ -13,8 +13,10 @@ import { AuditRecorder, type AuditTrail } from './audit'
 import { parsePayment, readInput, readPayment, readJoin, label } from './validation'
 import { createAuditVerificationApi, type AuditSource } from './audit-verification'
 import { loadActivity, type PaymentsSource, type StatusSource } from './activity'
+import { addNetworkFacts, createNetworkSource, type NetworkSource } from './network'
 
 interface ApiOptions {
+  network?: NetworkSource
   auditSource?: AuditSource
   joinChain?: JoinChain
   signer?: GrantSigner
@@ -37,6 +39,13 @@ interface ApiOptions {
 }
 
 export function createApprovalApi(options: ApiOptions) {
+  const network =
+    options.network ??
+    createNetworkSource({
+      baseUrl: () => undefined,
+      dataRelays: () => process.env.BRAMBLE_DATA_RELAYS,
+      rendezvousUrl: () => process.env.BRAMBLE_RENDEZVOUS_PAYMENT_URL,
+    })
   const clock = options.clock ?? systemClock
   const audit = new AuditRecorder(options.auditTrail, clock)
   const verifyAudit = createAuditVerificationApi({ token: options.token, source: () => options.auditSource ?? audit })
@@ -84,7 +93,7 @@ export function createApprovalApi(options: ApiOptions) {
         const openJoin = path === '/api/joins' && request.method === 'POST'
         if (
           (!openJoin && request.method === 'POST') ||
-          (request.method === 'GET' && (path === '/api/joins' || path === '/api/members'))
+          (request.method === 'GET' && (path === '/api/joins' || path === '/api/members' || path === '/api/network'))
         ) {
           const token = options.token()
           if (!token) throw new ApiError(503, 'token_not_configured', 'APPROVAL_DEMO_TOKEN is required for writes.')
@@ -95,6 +104,42 @@ export function createApprovalApi(options: ApiOptions) {
           }
         }
         if (path === '/api/audit/verification' && request.method === 'GET') return verifyAudit(request)
+        if (path === '/api/network' && request.method === 'GET') {
+          const view = await network.read()
+          let members: Awaited<ReturnType<JoinService['members']>> = []
+          let membershipState: 'ok' | 'not_configured' | 'unavailable' = options.joinChain ? 'ok' : 'not_configured'
+          if (options.joinChain) {
+            try {
+              members = await joins.members()
+            } catch {
+              membershipState = 'unavailable'
+            }
+          }
+          const knownDevices = [
+            ...members,
+            ...joins.list().filter((join) => !members.some((member) => member.label === join.label)),
+          ]
+          return json({ ...addNetworkFacts(view, service.list(), knownDevices, options.ensParent), membershipState })
+        }
+        if (path === '/api/network/ping' && request.method === 'POST') {
+          const text = await request.text()
+          if (text.length > 1024) throw new ApiError(400, 'invalid_node', 'A known node identifier is required.')
+          let body: unknown
+          try {
+            body = JSON.parse(text)
+          } catch {
+            throw new ApiError(400, 'invalid_node', 'A known node identifier is required.')
+          }
+          if (
+            !body ||
+            typeof body !== 'object' ||
+            !('id' in body) ||
+            typeof body.id !== 'string' ||
+            !/^(gateway|(?:peer|relay|member):[a-zA-Z0-9][a-zA-Z0-9.-]{0,252})$/.test(body.id)
+          )
+            throw new ApiError(400, 'invalid_node', 'A known node identifier is required.')
+          return json(await network.ping(body.id))
+        }
         if (openJoin) {
           joins.limit()
           return json(joins.create(await readJoin(request)), 201)

@@ -348,7 +348,7 @@ export function buildActivity(input: {
 
 // Reads a body chunk by chunk and cancels it once it passes `limit` bytes, so an
 // oversized response is never buffered whole. Returns undefined past the limit.
-async function readLimited(response: Response, limit: number): Promise<string | undefined> {
+export async function readLimited(response: Response, limit: number): Promise<string | undefined> {
   const declared = Number(response.headers.get('content-length'))
   if (Number.isFinite(declared) && declared > limit) {
     await response.body?.cancel().catch(() => {})

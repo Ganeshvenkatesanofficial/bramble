@@ -18,6 +18,11 @@
 
 Reads send `Cache-Control: no-store`.
 
+`GET /api/network` requires the operator token and returns redacted approval-derived
+topology, joins, members and service request states, with optional gateway observations. `POST /api/network/ping`
+requires the token and probes a server-known relay/rendezvous HTTP target or an optionally observed device. See the
+[console network reference](approval-network.md) for fields and observation limits.
+
 ## Request body
 
 `POST /api/requests` takes `application/json`.

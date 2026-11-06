@@ -8,6 +8,7 @@ import { RequestCard } from './request-card'
 import { HcsPanel } from './hcs-panel'
 import { JoinConsole } from './join-console'
 import { Button } from './ui/button'
+import { NetworkPanel } from './network-panel'
 
 export function ApprovalConsole() {
   const { requests, error, updatedAt } = useRequests()
@@ -25,10 +26,13 @@ export function ApprovalConsole() {
             bramble
           </Link>
           <span className="nav-active">Approvals</span>
+          <a href="#network" className="nav-link">
+            Network
+          </a>
           <span className="network mono">Sepolia</span>
         </div>
       </header>
-      <main>
+      <main id="main-content">
         <div className="page-heading">
           <div>
             <p className="eyebrow">Operator console</p>
@@ -43,7 +47,7 @@ export function ApprovalConsole() {
             {error ? 'Disconnected' : updatedAt ? 'Live queue · 1s refresh' : 'Connecting…'}
           </span>
         </div>
-        <div className="summary" aria-label="Access summary">
+        <section className="summary" aria-label="Access summary">
           <div>
             <span className="eyebrow">Awaiting decision</span>
             <strong>{requests ? pending.length : '—'}</strong>
@@ -56,7 +60,7 @@ export function ApprovalConsole() {
             <span className="eyebrow">Closed requests</span>
             <strong>{requests ? history.length : '—'}</strong>
           </div>
-        </div>
+        </section>
         <div className="console-layout">
           <div className="console-main">
             <section className="authorization" aria-label="Operator authorization">
@@ -86,17 +90,17 @@ export function ApprovalConsole() {
                     setDraft('')
                   }}
                 >
-                  <label className="sr-only" htmlFor="demo-token">
-                    Demo token
-                  </label>
-                  <input
-                    id="demo-token"
-                    type="password"
-                    autoComplete="off"
-                    placeholder="Demo token"
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                  />
+                  <div className="token-field">
+                    <label htmlFor="demo-token">Demo token</label>
+                    <input
+                      id="demo-token"
+                      type="password"
+                      autoComplete="off"
+                      placeholder="Demo token"
+                      value={draft}
+                      onChange={(event) => setDraft(event.target.value)}
+                    />
+                  </div>
                   <Button variant="outline" type="submit" disabled={!draft.trim()}>
                     Unlock
                   </Button>
@@ -104,7 +108,7 @@ export function ApprovalConsole() {
               )}
             </section>
             {error && (
-              <p role="alert" className="notice negative">
+              <p role="alert" aria-label="Request queue error" className="notice negative">
                 {error}
               </p>
             )}
@@ -145,11 +149,12 @@ export function ApprovalConsole() {
                 ))}
               </section>
             )}
-            <JoinConsole token={token} />
+            <JoinConsole key={`joins:${token}`} token={token} />
             <HcsPanel key={token} token={token} />
           </div>
           <ActivityFeed />
         </div>
+        <NetworkPanel key={token} token={token} />
         <footer className="page-footer">
           <span>Requests are suggestions. ENS identity is rechecked before every grant.</span>
           <span>{updatedAt ? `Last received ${updatedAt}` : 'Waiting for API'}</span>
