@@ -5,6 +5,14 @@ import { createApprovalApi } from '../src/lib/api'
 const token = randomUUID()
 const input = { agentLabel: 'agent-1', gatewayLabel: 'gateway-1', service: 'web' }
 
+test('network topology is available only to the authenticated operator', async () => {
+  const api = createApprovalApi({ token: () => token })
+  expect((await api.handle(request('/network', 'GET', undefined, false))).status).toBe(401)
+  const response = await api.handle(request('/network'))
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({ state: 'not_configured', nodes: [], links: [] })
+})
+
 function request(path = '/requests', method = 'GET', body?: unknown, authorized = true) {
   return new Request(`http://localhost/api${path}`, {
     method,

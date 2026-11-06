@@ -1,0 +1,139 @@
+import { expect, test } from 'bun:test'
+import { createApprovalApi } from '../src/lib/api'
+import { createNetworkSource } from '../src/lib/network'
+import { MemoryChain } from './memory-chain'
+
+const headers = { authorization: 'Bearer network-test-only' }
+const peer = {
+  label: 'laptop.bramble.eth',
+  authorized: true,
+  handshaked: true,
+  lastHandshakeUnixNs: 1793984400000000000,
+  endpoint: '192.0.2.10:5000',
+  allowedIPs: ['10.77.0.2/32'],
+  publicKeyHex: 'ab'.repeat(32),
+}
+const apiRequest = (path: string, data?: unknown, authorized = true) =>
+  new Request(`http://console.test/api${path}`, {
+    method: data ? 'POST' : 'GET',
+    headers: { ...(authorized ? headers : {}), ...(data ? { 'content-type': 'application/json' } : {}) },
+    ...(data ? { body: JSON.stringify(data) } : {}),
+  })
+
+test('the operator sees observed paths and handshakes without endpoints, IPs or public keys', async () => {
+  const source = createNetworkSource({
+    baseUrl: () => 'http://status.test',
+    fetchImpl: async (url) => {
+      return Response.json(
+        new URL(String(url)).pathname === '/peers'
+          ? [peer, { ...peer, label: 'phone.bramble.eth', endpoint: '192.0.2.20:6000' }]
+          : { dataRelays: { 'relay-eu': 'http://192.0.2.20:8080' } }
+      )
+    },
+  })
+  const api = createApprovalApi({ token: () => 'network-test-only', network: source, ensParent: 'bramble.eth' })
+  const response = await api.handle(apiRequest('/network'))
+  expect(response.status).toBe(200)
+  const body = await response.json()
+  expect(body.nodes).toContainEqual(
+    expect.objectContaining({
+      id: 'peer:laptop.bramble.eth',
+      kind: 'device',
+      lastHandshake: '2026-11-06T17:00:00.000Z',
+      path: 'direct',
+      admission: 'authorized',
+    })
+  )
+  expect(body.links).toContainEqual({ from: 'peer:phone.bramble.eth', to: 'relay:relay-eu', path: 'relayed' })
+  expect(body.nodes).toContainEqual(expect.objectContaining({ id: 'relay:relay-eu', kind: 'relay' }))
+  expect(JSON.stringify(body)).not.toMatch(/192\.0\.2\.|10\.77\.|publicKey|allowedIPs|endpoint/)
+})
+
+test('device and relay probes report their actual measurement, reject arbitrary targets and withhold diagnostics', async () => {
+  let failed = false
+  const source = createNetworkSource({
+    baseUrl: () => 'http://status.test',
+    fetchImpl: async (url) => {
+      const path = new URL(String(url)).pathname
+      if (path === '/peers') return Response.json([peer])
+      if (path === '/relays') return Response.json({ dataRelays: { 'relay-eu': 'http://relay.test:8080' } })
+      if (failed) throw new Error('private diagnostics must be withheld')
+      return Response.json(
+        path === '/ping'
+          ? { reachable: true, rtt: '12.34ms', detail: 'private diagnostics must be withheld' }
+          : { ok: true }
+      )
+    },
+  })
+  const api = createApprovalApi({ token: () => 'network-test-only', network: source })
+  expect((await api.handle(apiRequest('/network/ping', { id: 'peer:laptop.bramble.eth' }, false))).status).toBe(401)
+  const device = await (await api.handle(apiRequest('/network/ping', { id: 'peer:laptop.bramble.eth' }))).json()
+  expect(device).toMatchObject({ reachable: true, rttMs: 12.34, method: 'icmp' })
+  expect(Number.isNaN(Date.parse(device.measuredAt))).toBe(false)
+  expect(JSON.stringify(device)).not.toContain('private diagnostics')
+  const relay = await (await api.handle(apiRequest('/network/ping', { id: 'relay:relay-eu' }))).json()
+  expect(relay).toMatchObject({ reachable: true, method: 'http' })
+  expect(relay.rttMs).toBeGreaterThanOrEqual(0)
+  expect((await api.handle(apiRequest('/network/ping', { id: 'peer:unknown' }))).status).toBe(404)
+  expect((await api.handle(apiRequest('/network/ping', { id: 'http://arbitrary.test' }))).status).toBe(400)
+  failed = true
+  const failure = await (await api.handle(apiRequest('/network/ping', { id: 'peer:laptop.bramble.eth' }))).json()
+  expect(failure).toMatchObject({ reachable: false, rttMs: null })
+  expect(JSON.stringify(failure)).not.toContain('private diagnostics')
+})
+
+test('unavailable or malformed upstream data cannot invent a live path', async () => {
+  let malformedPeers = false
+  const api = createApprovalApi({
+    token: () => 'network-test-only',
+    network: createNetworkSource({
+      baseUrl: () => 'http://status.test',
+      fetchImpl: async (url) => {
+        if (new URL(String(url)).pathname === '/relays') throw new Error('withheld')
+        return Response.json(malformedPeers ? {} : [peer])
+      },
+    }),
+  })
+  const partial = await (await api.handle(apiRequest('/network'))).json()
+  expect(partial).toMatchObject({ state: 'ok', relayState: 'unavailable' })
+  expect(partial.nodes.find((node: { kind: string }) => node.kind === 'device').path).toBe('unknown')
+  malformedPeers = true
+  expect(await (await api.handle(apiRequest('/network'))).json()).toMatchObject({
+    state: 'unavailable',
+    nodes: [],
+    links: [],
+  })
+})
+
+test('a new pending request cannot hide an existing grant, and another namespace cannot inherit it', async () => {
+  const chain = new MemoryChain()
+  const api = createApprovalApi({
+    token: () => 'network-test-only',
+    signer: chain,
+    resolver: chain,
+    ensParent: 'bramble.eth',
+    network: createNetworkSource({
+      baseUrl: () => 'http://status.test',
+      fetchImpl: async (url) =>
+        Response.json(
+          new URL(String(url)).pathname === '/peers'
+            ? [
+                { ...peer, label: 'agent-1.bramble.eth' },
+                { ...peer, label: 'agent-1.other.eth' },
+              ]
+            : { dataRelays: {} }
+        ),
+    }),
+  })
+  const input = { agentLabel: 'agent-1', gatewayLabel: 'gateway-1', service: 'staging-tasks' }
+  const first = await (await api.handle(apiRequest('/requests', input))).json()
+  await api.handle(apiRequest(`/requests/${first.id}/approve`, {}))
+  await api.handle(apiRequest('/requests', input))
+  const view = await (await api.handle(apiRequest('/network'))).json()
+  expect(
+    view.nodes
+      .find((node: { label: string }) => node.label === 'agent-1.bramble.eth')
+      .grants.map((grant: { state: string }) => grant.state)
+  ).toEqual(['approved', 'pending'])
+  expect(view.nodes.find((node: { label: string }) => node.label === 'agent-1.other.eth').grants).toEqual([])
+})

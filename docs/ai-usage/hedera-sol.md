@@ -157,3 +157,22 @@ Paths written:
 - `docs/DEMO_SCRIPT.md`
 - `docs/measurements/2026-11-06-onboarding-acceptance.md`
 - `docs/ai-usage/hedera-sol.md`
+
+## 2026-11-06 — ETH-317 admin console overhaul
+
+Demo beats: 2, 4 and 5. Adds an authenticated, redacted network view and
+tracked-device and configured-relay diagnostics. Preserves the decision services.
+
+Paths written in the API slice:
+
+- `approval/src/lib/network.ts`
+- `approval/src/lib/api.ts`
+- `approval/src/lib/activity.ts`
+- `approval/src/app/api/[...path]/route.ts`
+- `approval/test/network.test.ts`
+- `approval/test/api.test.ts`
+- `docs/ai-usage/hedera-sol.md`
+
+Verified: API authentication, topology redaction and grant-state tests fail before
+implementation and pass after implementation. Browser and repository validation
+follow in the UI slice.
