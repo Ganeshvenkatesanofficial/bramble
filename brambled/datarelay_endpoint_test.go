@@ -531,6 +531,29 @@ func startFakeENSSidecarMulti(t *testing.T, relayByURL map[string]*fakeDataRelay
 // peer-endpoint at the backup relay — proven by a real WireGuard handshake
 // succeeding again afterward, not just a state flag flipping.
 func TestDataRelayFailover_SwitchesToBackupRelayWhenPrimaryStalls(t *testing.T) {
+	testDataRelayFailover(t, staticRendezvous)
+}
+
+// The start-up relay discovery failed and a later query recovered the rendezvous set: both
+// watchers must read the recovered set, so failover still works after the primary relay dies.
+func TestDataRelayFailover_UsesRendezvousSetRecoveredAfterDiscoveryFailure(t *testing.T) {
+	testDataRelayFailover(t, func(relays []sidecar.RendezvousRelay) rendezvousSource {
+		var mu sync.Mutex
+		calls := 0
+		fetch := func() (*sidecar.RelaysResponse, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			calls++
+			if calls <= 2 {
+				return nil, fmt.Errorf("sidecar returned 502: Invalid parameters")
+			}
+			return &sidecar.RelaysResponse{Rendezvous: relays}, nil
+		}
+		return newRendezvousPool(nil, fetch, 0).Get
+	})
+}
+
+func testDataRelayFailover(t *testing.T, watcherSource func([]sidecar.RendezvousRelay) rendezvousSource) {
 	primaryRelayAddr, stopPrimaryRelay := startTestRendezvousRelay(t, "primary-secret")
 	backupRelayAddr, _ := startTestRendezvousRelay(t, "backup-secret")
 
@@ -677,8 +700,8 @@ func TestDataRelayFailover_SwitchesToBackupRelayWhenPrimaryStalls(t *testing.T) 
 	// adopting side) gets watchDataRelayAdopt — the asymmetric pairing
 	// runServe now wires for real (main.go's non-relay-peer watcher loop),
 	// not two independent buyers racing for the same lucky port.
-	go watchDataRelayFailover(ctx, alice, aliceM, aliceState, "bob", bobIP, pool, 1_000_000, unrestrictedDataRelayPurchasePolicy, relays, alicePub, 15*time.Second)
-	go watchDataRelayAdopt(ctx, bob, bobM, "alice", bobPub, alicePub, "", aliceIP, relays)
+	go watchDataRelayFailover(ctx, alice, aliceM, aliceState, "bob", bobIP, pool, 1_000_000, unrestrictedDataRelayPurchasePolicy, watcherSource(relays), alicePub, 15*time.Second)
+	go watchDataRelayAdopt(ctx, bob, bobM, "alice", bobPub, alicePub, "", aliceIP, watcherSource(relays))
 
 	// Kill "the primary relay process": both its data relay and its
 	// rendezvous listener together, matching a real relay/main.go process

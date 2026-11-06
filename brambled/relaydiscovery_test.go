@@ -1,7 +1,11 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"net"
+	"net/netip"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -86,4 +90,53 @@ func TestExchangeBackoffDoublesAndResets(t *testing.T) {
 	if got := b.Wait("peer"); got != 30*time.Second {
 		t.Fatalf("after reset the first failure waits %s, want 30s", got)
 	}
+}
+
+// A rendezvous set recovered after a start-up discovery failure must reach the
+// data-relay adoption watcher: the watcher keeps polling its source, and once
+// the source returns the relay it exchanges with that relay.
+func TestWatchDataRelayAdoptUsesRelaySetRecoveredAfterStartupFailure(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	accepted := make(chan struct{}, 1)
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			select {
+			case accepted <- struct{}{}:
+			default:
+			}
+			c.Close()
+		}
+	}()
+
+	var calls atomic.Int32
+	source := func() ([]sidecar.RendezvousRelay, error) {
+		if calls.Add(1) == 1 {
+			return nil, errors.New("discovery failed at start-up")
+		}
+		return []sidecar.RendezvousRelay{{Label: "recovered", Address: ln.Addr().String()}}, nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		watchDataRelayAdopt(ctx, nil, nil, "peer", "ownkey", "peerkey", "", netip.Prefix{}, source)
+	}()
+
+	select {
+	case <-accepted:
+	case <-time.After(3*dataRelayAdoptExchangeTimeout + 2*time.Second):
+		t.Fatalf("adopt watcher never exchanged with the recovered relay (source calls: %d)", calls.Load())
+	}
+	cancel()
+	<-done
 }

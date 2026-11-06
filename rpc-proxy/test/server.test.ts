@@ -95,26 +95,38 @@ describe('rpc-proxy', () => {
     await close(upstream.server)
   })
 
-  it('retries an eth_getLogs the upstream rejects as invalid params, once, and logs the call once', async () => {
+  it('retries an eth_getLogs the upstream rejects as invalid params with the identical body, and logs it once', async () => {
     await boot({ upstreamRetryDelayMs: 1 })
     upstream.invalidParamsTimes = 1
     const call = { jsonrpc: '2.0', id: 1, method: 'eth_getLogs', params: [{ fromBlock: '0x1', toBlock: '0x2' }] }
     const res = await post(base, call)
     expect(await res.json()).toEqual({ jsonrpc: '2.0', id: 1, result: 'ok:eth_getLogs' })
     expect(upstream.received).toHaveLength(2)
-    // The retry asks for "latest" instead of the head the client named.
-    expect(JSON.parse(upstream.received[0]!.body).params[0].toBlock).toBe('0x2')
-    expect(JSON.parse(upstream.received[1]!.body).params[0]).toEqual({ fromBlock: '0x1', toBlock: 'latest' })
+    expect(upstream.received[1]!.body).toBe(upstream.received[0]!.body)
     const view = (await (await fetch(base + '/log')).json()) as { entries: unknown[] }
     expect(view.entries).toHaveLength(1)
   })
 
-  it('returns the error when the retry is rejected too', async () => {
+  it.each([
+    ['a pinned historical chunk (blocks 1 to 9000)', { fromBlock: '0x1', toBlock: '0x2328' }],
+    ['a pinned head bound', { fromBlock: '0xb83e68', toBlock: '0xb842ed' }],
+    ['a block hash filter', { blockHash: '0xabc' }],
+  ])('never changes the block bounds of the caller on retry: %s', async (_name, filter) => {
     await boot({ upstreamRetryDelayMs: 1 })
-    upstream.invalidParamsTimes = 5
+    upstream.invalidParamsTimes = 2
+    const call = { jsonrpc: '2.0', id: 1, method: 'eth_getLogs', params: [filter] }
+    const res = await post(base, call)
+    expect(await res.json()).toEqual({ jsonrpc: '2.0', id: 1, result: 'ok:eth_getLogs' })
+    expect(upstream.received).toHaveLength(3)
+    for (const r of upstream.received) expect(JSON.parse(r.body).params[0]).toEqual(filter)
+  })
+
+  it('returns the error when every retry is rejected too', async () => {
+    await boot({ upstreamRetryDelayMs: 1 })
+    upstream.invalidParamsTimes = 9
     const res = await post(base, { jsonrpc: '2.0', id: 1, method: 'eth_getLogs', params: [{}] })
     expect(((await res.json()) as { error: { code: number } }).error.code).toBe(-32602)
-    expect(upstream.received).toHaveLength(2)
+    expect(upstream.received).toHaveLength(3)
   })
 
   it('does not retry other methods or when the retry is disabled', async () => {

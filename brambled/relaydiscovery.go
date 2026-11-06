@@ -25,6 +25,16 @@ type rendezvousPool struct {
 	lastTry    time.Time
 }
 
+// rendezvousSource returns the rendezvous relays known right now, or an error
+// when there are none yet. It is a function, not a slice, so a set recovered
+// after a start-up discovery failure reaches every consumer.
+type rendezvousSource func() ([]sidecar.RendezvousRelay, error)
+
+// staticRendezvous is a rendezvousSource over a fixed set.
+func staticRendezvous(relays []sidecar.RendezvousRelay) rendezvousSource {
+	return func() ([]sidecar.RendezvousRelay, error) { return relays, nil }
+}
+
 func newRendezvousPool(initial []sidecar.RendezvousRelay, fetch func() (*sidecar.RelaysResponse, error), retryAfter time.Duration) *rendezvousPool {
 	return &rendezvousPool{relays: initial, fetch: fetch, now: time.Now, retryAfter: retryAfter}
 }
