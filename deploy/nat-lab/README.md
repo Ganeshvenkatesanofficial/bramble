@@ -1,6 +1,6 @@
 # Test hole punching behind two NATs
 
-Use this guide to put two Bramble nodes behind two different NATs and to force the relay fallback. It serves W8 and demo beat 4. All steps need root. None has run yet: the development machine has no user namespaces and no `sudo`, so every step is **Open** unless marked otherwise.
+Use this guide to put two Bramble nodes behind two different NATs and to force the relay fallback. It serves W8 and demo beat 4. All steps need root. The development machine has no user namespaces and no `sudo`, so every step below is **Open** unless marked otherwise. The one exception is the Docker route in "Run the sponsored-relay check without root", which is Verified.
 
 Labels: Verified, Read from source, Open (see `../README.md`).
 
@@ -23,6 +23,21 @@ Needs `iproute2`, `nftables` and `python3`. The lab has an uplink by default: th
 4. Check the NAT type from `nodeA` with the probe in the "Check the NAT type" section, using `192.0.2.10:3478` and `192.0.2.20:3478`. Both sit behind the node's NAT only, so the host's masquerading cannot change the result. Run the STUN server in the `server` namespace listening on each address separately (for `coturn`: two `listening-ip` lines with `stun-only`), so each reply comes from the address that was queried. Do not use a public server here: it adds the host's own NAT to the path and can show a false symmetric result. Open.
 5. Repeat from step 1 with `symmetric` to see the relay fallback. Open.
 6. Remove everything: `sudo deploy/nat-lab/netns-lab.sh down`. Open.
+
+## Run the sponsored-relay check without root (Docker)
+
+`docker-lab.sh` builds the same six namespaces inside a short-lived Docker container, so the host network is untouched and the host needs no `sudo`. It needs `docker`, `go` and `bun` on the host. Verified on 6 Nov 2026 on the development machine (ETH-189): the container needs `NET_ADMIN`, `SYS_ADMIN` and `systempaths=unconfined` (so `ip_forward` is writable inside its own namespaces).
+
+```sh
+deploy/nat-lab/docker-lab.sh
+```
+
+It runs `netns-lab.sh up symmetric` with `NETLAB_UPLINK=0`, starts the real `relay` binary with `-meter -data-relay -sponsor-enrolled` in the `server` namespace, and runs two nodes:
+
+1. Control: `nodeA` and `nodeB` point WireGuard at each other's NAT address. The handshake must fail.
+2. Relay run: direct UDP between the NATs is also dropped (`block-direct`). `nodeA` (the device, no Hedera key) and `nodeB` (the cloud node) take sponsored tokens, the device takes a sponsored session, and the device must get HTTP 200 from a server on the cloud node.
+
+The relay's sidecar is the test harness `relay-sidecar/test/e2e-harness`. It mounts the real sponsor routes, token minting and allocation. Its registry read is a fixture, because the lab has no route to a chain. The script exits non-zero unless the device prints `NETLAB_RESULT relay: HTTP 200`.
 
 ## Cloud NAT box
 

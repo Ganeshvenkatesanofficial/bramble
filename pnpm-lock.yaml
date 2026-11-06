@@ -262,6 +262,9 @@ importers:
       hono:
         specifier: ^4.13.7
         version: 4.13.7
+      viem:
+        specifier: ^2.56.3
+        version: 2.56.3(typescript@6.0.3)(zod@3.25.76)
     devDependencies:
       '@types/bun':
         specifier: ^1.4.1

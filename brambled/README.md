@@ -73,6 +73,14 @@ WireGuard device's peer table from it.
     `-relay-peer <peer-label>` (repeatable) — select an explicit paid
     data-relay pool for peers that cannot use the direct candidate. Each
     purchase requests `-relay-session-bytes` (default `10000`).
+  - `-sponsored-relay` — get the rendezvous token and the data-relay session
+    from each relay's operator-sponsored routes instead of paying on Hedera,
+    for a device with no Hedera key. The relay must run `-sponsor-enrolled`;
+    it checks `-label` is enrolled, grants a capped free session and sees the
+    device's source IP (`../docs/adr/0018-sponsored-relay-sessions.md`).
+  - `-relay-first` — treat every tracked peer as a `-relay-peer`. Opens one
+    session per peer; on a large tailnet name the cloud labels with
+    `-relay-peer` instead.
   - `-max-relay-price-per-byte` (default `10` atomic USDC) and
     `-max-relay-session-cost` (default `100000`, or 0.10 USDC) — reject an
     otherwise-discovered relay quote before purchase if either budget is
