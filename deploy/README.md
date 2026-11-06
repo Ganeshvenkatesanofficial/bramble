@@ -64,7 +64,7 @@ git clone https://github.com/WhyAsh5114/bramble.git /opt/bramble
 cd /opt/bramble && git checkout <commit>
 ```
 
-Use the same commit on every machine. Record the commit in the demo log. Deploy only a commit on `hackathon` that `pnpm verify` accepted. Run git as root on the machines (`sudo git -C /opt/bramble ...`): the checkout is owned by `bramble` after A5, and git refuses other users.
+Use the same commit on every machine. Record the commit in the demo log. Deploy only a commit on `hackathon` that `pnpm verify` accepted. The checkout is owned by `bramble` after A5, and git refuses other users. Read it as root with the directory marked safe: `sudo git -c safe.directory=/opt/bramble -C /opt/bramble rev-parse --short HEAD`.
 
 Run on 6 Nov 2026: all three machines at `92dd04e` (merge of PR #25). The public clone worked with no deploy key.
 
@@ -207,7 +207,7 @@ sudo systemctl enable --now bramble-demo-service bramble-gateway
 deploy/scripts/smoke.sh gateway
 ```
 
-Cloud evidence: `bramble-demo-service` is active on the gateway machine and `GET http://127.0.0.1:9100/task` returns the JSON task. `bramble-gateway` has not started (it needs the tailnet variables and the Hedera payer). Earlier evidence: `demo-service -port 19100` started and `GET /task` returned the JSON task on the development machine on 6 Nov 2026. `brambled serve` accepted every flag the unit passes (it stopped at the missing tailnet variables, as expected). The September runbook ran the same processes by hand on an EC2 machine (`brambled/README.md`, 8 to 10 Sept 2026). The units have not run.
+Cloud evidence: `bramble-demo-service` is active on the gateway machine and `GET http://127.0.0.1:9100/task` returns the JSON task. `bramble-gateway` has not started (it needs the tailnet variables and the Hedera payer). Earlier evidence: `demo-service -port 19100` started and `GET /task` returned the JSON task on the development machine on 6 Nov 2026. `brambled serve` accepted every flag the unit passes (it stopped at the missing tailnet variables, as expected). The September runbook ran the same processes by hand on an EC2 machine (`brambled/README.md`, 8 to 10 Sept 2026). The node units (`bramble-gateway`, `bramble-worker`) have not run. Verification of the gateway node stays Open.
 
 ## Part F: worker machine
 
