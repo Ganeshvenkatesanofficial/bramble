@@ -6,8 +6,24 @@ rpc.example.com {
 	reverse_proxy 127.0.0.1:8545
 }
 
-# Public approval console. The admin machine's loopback :3001 arrives here through
-# the reverse SSH tunnel (bramble-console-tunnel.service). Writes need the demo token.
+# Public approval console and installer. The admin machine's loopback :3001 arrives
+# here through the reverse SSH tunnel (bramble-console-tunnel.service). Writes need
+# the demo token. The installer paths are static files that
+# deploy/scripts/publish-release.sh uploads; Caddy only reads them. Everything else
+# keeps going to the console.
 console.example.com {
-	reverse_proxy 127.0.0.1:3001
+	@dist path /install.sh /uninstall.sh /dl/* /tailnets/*
+	handle @dist {
+		root * /var/lib/bramble-dist
+		header {
+			Cache-Control "no-cache"
+			X-Content-Type-Options "nosniff"
+		}
+		@scripts path /install.sh /uninstall.sh
+		header @scripts Content-Type "text/x-shellscript; charset=utf-8"
+		file_server
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3001
+	}
 }
