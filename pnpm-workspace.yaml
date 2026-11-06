@@ -7,3 +7,4 @@ packages:
   - scripts/demo
   - admincli
   - dashboard
+  - approval
