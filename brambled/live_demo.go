@@ -285,7 +285,7 @@ func runDemoDataRelay(args []string) error {
 	aliceState.set("bob", bobPub, aliceLabel)
 
 	go watchDataRelayFailover(ctx, alice, aliceM, aliceState, "bob", bobIP, pool, *sessionBytes, policy, staticRendezvous(relays), alicePub, 15*time.Second)
-	go watchDataRelayAdopt(ctx, bob, bobM, "alice", bobPub, alicePub, "", aliceIP, staticRendezvous(relays))
+	go watchDataRelayAdopt(ctx, bob, bobM, "alice", bobPub, alicePub, "", aliceIP, staticRendezvous(relays), nil)
 
 	fmt.Fprintln(os.Stderr, ">>> kill the primary relay process now to trigger failover <<<")
 

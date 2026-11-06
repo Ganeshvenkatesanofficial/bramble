@@ -129,7 +129,7 @@ func TestWatchDataRelayAdoptUsesRelaySetRecoveredAfterStartupFailure(t *testing.
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		watchDataRelayAdopt(ctx, nil, nil, "peer", "ownkey", "peerkey", "", netip.Prefix{}, source)
+		watchDataRelayAdopt(ctx, nil, nil, "peer", "ownkey", "peerkey", "", netip.Prefix{}, source, nil)
 	}()
 
 	select {
