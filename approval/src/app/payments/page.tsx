@@ -1,19 +1,13 @@
-import Link from 'next/link'
-import Image from 'next/image'
+import { PageHeader } from '../../components/console/page-header'
 import { PaymentsPanel } from '../../components/payments-panel'
 
 export default function PaymentsPage() {
   return (
-    <div className="payments-page">
-      <header>
-        <Link href="/" className="brand">
-          <Image className="brand-mark" src="/bramble-logo.png" alt="" width={28} height={28} unoptimized />
-          bramble / approval
-        </Link>
-      </header>
-      <main id="main-content">
+    <>
+      <PageHeader title="Payments" description="Settled x402 USDC payments on Hedera testnet, from the mirror node." />
+      <div className="payments-page">
         <PaymentsPanel />
-      </main>
-    </div>
+      </div>
+    </>
   )
 }
