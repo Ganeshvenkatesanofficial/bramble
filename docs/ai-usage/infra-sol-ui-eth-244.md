@@ -27,3 +27,10 @@ ETH-270 publisher fix paths:
 - `deploy/scripts/gen-node-config.mjs`
 - `deploy/scripts/gen-node-config.test.mjs`
 - `deploy/env/public.env.example`
+
+Additional recovery paths and checks:
+
+- Updated the public `BRAMBLE_EXTRA_ARGS` line in `/etc/bramble/gateway.env` on the existing gateway to restore automatic discovery. Final value retains its public direct candidate; removed temporary gateway relay-first routing before the metered retry.
+- Added `w2-accept.py` and further `sol-w2-*` evidence under the existing status directory.
+- ETH-274 extends the same generator/example/test paths with the existing daemon's public metered-rendezvous payment URL.
+- Internal review ran twice. The second round accepted the installer TUN correction. The later metered-rendezvous manifest addition has passing generator tests and `pnpm verify`; other-family GitHub review remains pending.
