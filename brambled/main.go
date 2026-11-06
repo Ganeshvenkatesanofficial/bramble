@@ -693,6 +693,18 @@ func (s *relayState) getPubkey(peerLabel string) (string, bool) {
 	return pubkey, ok
 }
 
+// staticRendezvousRelays is the rendezvous set for an explicit -rendezvous
+// address. paymentURL (BRAMBLE_RENDEZVOUS_PAYMENT_URL) is that relay's own
+// token sidecar (docs/adr/0007). Empty means the relay is unmetered:
+// exchangeAnyMetered then sends no token, and a -meter relay rejects the
+// hello (ETH-301).
+func staticRendezvousRelays(addr, paymentURL string) []sidecar.RendezvousRelay {
+	if addr == "" {
+		return []sidecar.RendezvousRelay{}
+	}
+	return []sidecar.RendezvousRelay{{Label: "static", Address: addr, SidecarURL: paymentURL}}
+}
+
 // exchangeAnyMetered is the rendezvous-set failover docs/adr/0003 requires,
 // fixed to pair each relay with a token bought from *that relay's own*
 // sidecar rather than one token tried everywhere (docs/adr/0008): a relay
@@ -1244,16 +1256,9 @@ func runServe(args []string) error {
 	// just yields empty lists here (m.Relays()'s own documented behavior),
 	// which is indistinguishable from "no relays available" — non-fatal,
 	// same fail-open-on-discovery posture the rest of this file already has.
-	rendezvousRelays := []sidecar.RendezvousRelay{}
-	if *rendezvousAddr != "" {
-		// BRAMBLE_RENDEZVOUS_PAYMENT_URL is this one static relay's own
-		// payment sidecar (docs/adr/0007) — empty is fine, meaning this
-		// relay is unmetered (exchangeAnyMetered skips buying a token).
-		rendezvousRelays = []sidecar.RendezvousRelay{{
-			Label:      "static",
-			Address:    *rendezvousAddr,
-			SidecarURL: os.Getenv("BRAMBLE_RENDEZVOUS_PAYMENT_URL"),
-		}}
+	rendezvousRelays := staticRendezvousRelays(*rendezvousAddr, os.Getenv("BRAMBLE_RENDEZVOUS_PAYMENT_URL"))
+	if *rendezvousAddr != "" && os.Getenv("BRAMBLE_RENDEZVOUS_PAYMENT_URL") == "" {
+		fmt.Fprintf(os.Stderr, "rendezvous: %s has no BRAMBLE_RENDEZVOUS_PAYMENT_URL; a -meter relay rejects every exchange without a token (ETH-301)\n", *rendezvousAddr)
 	}
 	// discoveryFailed: the registry scan errored (not merely found nothing).
 	// The resolver below then retries it lazily; without that, one transient

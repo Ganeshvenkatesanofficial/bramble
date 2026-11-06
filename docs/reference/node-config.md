@@ -31,7 +31,7 @@ Unknown fields are ignored. Wrong values do not stop `bramble up`: it keeps serv
 | `services` | list of `{peer, service, path?}` | | Services the daemon forwards to loopback so `POST /api/test` can reach them through the mesh. `path` defaults to `/`. |
 | `sponsoredRelay` | bool | `true` | Pass `-sponsored-relay`: the relays grant operator-sponsored sessions, so a device with no Hedera key pays nothing (ADR 0018). |
 | `relayFirst` | bool | `true` when `dataRelays` is not empty | Pass `-relay-first`: every peer goes through the data relay pool, so the device works with no direct path. Hole punching (ETH-39) upgrades it later. |
-| `rendezvousPaymentUrl` | http(s) URL | | Payment sidecar paired with `rendezvous`. Becomes env `BRAMBLE_RENDEZVOUS_PAYMENT_URL`. |
+| `rendezvousPaymentUrl` | http(s) URL | | Payment sidecar paired with `rendezvous`. Becomes env `BRAMBLE_RENDEZVOUS_PAYMENT_URL`. Required when the relay runs `-meter`: without it the relay rejects every rendezvous hello and no peer gets an endpoint. `gen-node-config.mjs` sets it from `BRAMBLE_RENDEZVOUS_PAYMENT_URL`, or else from the data relay on the rendezvous host. |
 
 ## What the daemon passes to `brambled serve`
 
