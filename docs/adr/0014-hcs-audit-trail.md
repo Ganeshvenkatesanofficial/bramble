@@ -1,56 +1,60 @@
-# ADR 0014 — HCS audit trail reconciliation
+# ADR 0014 — HCS audit trail: approval-service integration
 
-**Kind:** Explanation. **Status:** Draft, 6 November 2026; format decision pending. **Human approver:** Mumbai project human operator, pending; record their name before accepting this ADR. **Task:** ETH-66, workstream W10 (new Hedera service). **Demo beat:** 3.
+**Kind:** Explanation. **Status:** Draft, 6 November 2026. **Human approver:** Mumbai project human operator, pending; record their name before accepting this ADR. **Task:** ETH-66 (workstream W10, demo beat 3). **Amends:** [ADR 0011, option A](0011-w10-hedera-service-options.md).
+
+Evidence labels: **Verified** (ran it), **Read from source** (read code or docs, did not run it), **Open** (not tested).
 
 ## Context
 
-The [handoff, section 5.2](../15_MUMBAI_HANDOFF.md#52-w10-a-new-hedera-service-hedera-continuity) makes a Hedera Consensus Service (HCS) audit trail the default new service. The approval service posts salted commitments after confirmed grant, revoke and payment events. Nodes enforce access independently from Ethereum Name Service (ENS) state. The audit trail must not become an enforcement dependency.
+[Handoff section 5.2](../15_MUMBAI_HANDOFF.md#52-w10-a-new-hedera-service-hedera-continuity) makes a Hedera Consensus Service (HCS) audit trail the default new service. Each grant, revoke and payment posts a salted hash commitment to an HCS topic, and the console verifies entries through the mirror node.
 
-**Read from source:** PR #3 merged `hedera-audit/`, [the record format](../16_HCS_AUDIT_RECORD_FORMAT.md) and [ADR 0011's service options](0011-w10-hedera-service-options.md) into `hackathon`. ADR 0011 remains a draft. The original version of this ADR proposed a different format without accounting for that module. PR #18's review identified the incompatibility. A merged implementation is evidence of current behavior; it is not human approval of either draft.
+The record format is already merged. **Read from source:** `hedera-audit/` (writer, reader and tests), [the record format reference](../16_HCS_AUDIT_RECORD_FORMAT.md) and ADR 0011 landed on `hackathon` in PR #3. The format is `{"v":1,"kind":…,"c":…}`, where `c` is an HMAC-SHA256 (hash-based message authentication code) keyed by a fresh per-entry salt. The message publishes the event kind on purpose.
 
-## Decision pending
+The first version of this ADR (commit `90db05d`) proposed a second, incompatible format without citing that work. The review in ETH-122 found the collision, and Atlas decided on 6 November 2026 that the merged format stands. This ADR is now an amendment. It adds no envelope, commitment or event-field format.
 
-**Open:** choose one format before changing the writer, reader or console contract. Neither option is accepted by this ADR. Retain the merged implementation while this decision is pending; the offline alternative is an experiment, not a second supported format.
+## Decision
 
-| Aspect          | Retain merged format (recommended)                                    | Replace with the original alternate                                          |
-| --------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Public message  | `v`, `kind`, `c`                                                      | `v`, `commitment`; hides kind                                                |
-| Commitment      | HMAC-SHA256 keyed by a fresh salt; sorted fields with length prefixes | SHA-256 over domain, salt and positional event array                         |
-| Private event   | Named fields per kind, including ENS subject or payment parties       | Random event identifier, subject digest, source reference and payment fields |
-| Existing parser | Retained                                                              | Rejects alternate messages; migration required                               |
-| Topic           | Existing memo, payer submit key, no admin key                         | Policy must be settled before topic creation                                 |
-| Mirror reader   | Existing ordered list reader                                          | Exact topic/sequence lookup experiment                                       |
+1. **Keep the merged format unchanged.** Version 1 stays `{"v":1,"kind":…,"c":…}` with the topic policy in `docs/16`: memo `bramble audit trail v1`, payer submit key, no admin key.
+2. **The approval service posts.** It posts after it confirms the source transaction, using `HcsAuditTrail.record()` or the build-then-submit sequence in "Retry and delivery". Nodes never post and never read the topic. Peers keep enforcing access from Ethereum Name Service (ENS) state (handoff invariant 1).
+3. **The approval service holds the openings.** It delivers an opening only to the authenticated operator console. Never post an opening, a plaintext service name, a host or a port, including in a topic memo or a public response.
+4. **The console verifies through the mirror node.** It lists entries with `MirrorTopicReader`, matches them to openings with `verifyEntries`, and shows the HashScan link. Each entry is `verified`, `unopened` or `malformed`.
+5. **Audit failure is non-blocking.** A failed post never undoes a grant, delays a revoke or blocks peer enforcement. The approval service reports the audit status and leaves the grant or revoke result unchanged.
 
-HMAC means hash-based message authentication code; SHA-256 means Secure Hash Algorithm with a 256-bit output. The byte-level alternate is preserved in [a separate reference](../reference/hcs-audit-alternative.md). The merged byte format remains documented in `docs/16_HCS_AUDIT_RECORD_FORMAT.md`.
+## What this adds beyond ADR 0011
 
-### Retain: amend the merged format
+- **Post trigger.** Post only after a confirmed source transaction: the Sepolia transaction for a grant or revoke, the Hedera settlement for a payment. A payment attempt or a successful service response is not settlement evidence. **Open:** the payment settlement hook does not exist yet.
+- **Opening retention.** An opening held only in memory is lost on restart, and its entry then stays `unopened` forever. Durable retention is a human decision. **Open.**
+- **Trust limits of a mirror match.** A match means the configured mirror node returned bytes whose commitment the opening reproduces. It does not prove consensus on its own, that the source event happened (check `txRef` on its own chain), or that the log is complete (the submit-key holder can omit events).
 
-Recommend retaining the merged format because it keeps the existing writer, reader and event contract compatible. Rewrite this ADR as an amendment explaining approval-service posting, authenticated opening delivery, salt leakage, audit failure status and retry limitations. Rework the SDK (software development kit) experiment to use the merged message. It must not define a second version-1 format.
+## Salt leakage
 
-The trade-off is public event kind. Timing, counts, topic and payer metadata already allow correlation; publishing kind adds information. The original alternate was intended to hide that field. Human approval must explicitly consider that privacy difference.
+The salt is the HMAC key. A leaked salt does not decrypt anything, because the message holds no ciphertext. It lets the holder test candidate events: the holder recomputes `c` for a guessed event and compares it with the posted value.
 
-### Replace: supersede the merged format
+**Read from source:** the preimage contains only the event fields (`hedera-audit/src/commitment.ts`). There is no extra random identifier, so the attacker needs no second secret. Most fields are guessable from public data: the ENS subject, the service digest, the expiry and the `txRef` can all be read from Sepolia or Hedera. In practice a leaked salt confirms, and effectively reveals, that one entry's event. Each entry has its own salt, so one leak affects one entry.
 
-The alternate hides event kind in the public message. It requires an approved replacement specification, an explicit supersession note in `docs/16` and ADR 0011, and changes to `hedera-audit/` plus its consumers and tests. Use a distinct version or a separately configured topic so two incompatible version-1 messages cannot be confused. The human decision must settle that migration choice before implementation.
+A full opening reveals its event and ties it to the public entry. Kind, timing, counts and payer account stay public regardless of the salt.
 
-The private event schema also changes. Payment parties and grant expiry cannot silently disappear from a consumer contract. Reconcile each field, topic policy and opening format before migrating. No live topic or deployment inventory has been checked in this task; do not assume there are no records to preserve.
+## Retry and delivery
 
-## Consequences shared by both options
+**Read from source:** `HcsAuditTrail.record()` draws a new salt on every call, so calling it again after an ambiguous failure posts a different commitment. If the first post did land but the call threw, the caller never received its opening, and that entry stays `unopened`.
 
-The approval service posts only after a confirmed source transaction. A payment attempt or a successful service response is insufficient settlement evidence. The payment hook remains Open. Audit failure never undoes a grant, delays revocation or blocks peer enforcement.
+`buildAudit()` and `encodeMessage()` are exported. A caller can build the message and opening, persist the opening, and then submit the same bytes through the `TopicClient`. **Open:** `HcsAuditTrail` does not offer this as one operation, and no code resolves an ambiguous submission by looking up its transaction identifier on the mirror node. Neither is implemented or tested. The design promises no exactly-once delivery.
 
-A private opening contains the event and salt. Only the authenticated operator console receives it. Never post plaintext service names, hosts, ports or openings, including in memos or public responses. Losing an in-memory opening makes its entry unavailable for verification after restart. Durable retention remains a human decision.
+## Rejected alternative: hide the event kind
 
-A mirror match means that the configured mirror reports matching commitment bytes. It does not prove consensus independently, source-event truth or log completeness. Verify the source transaction separately. The merged reader lists entries; the alternative experiment looks up a receipt sequence. Those are different read strategies and have not been integrated.
+The first version of this ADR hid the kind inside the commitment. It was rejected because handoff section 5.2, `docs/16` and ADR 0011 publish the kind deliberately, and replacing the format would break the merged writer and reader and require a migration. The privacy difference is real but small: topic activity, payer account and timing already allow correlation. If a human wants to hide the kind, that needs a new ADR that supersedes `docs/16` and ADR 0011, a distinct version or topic, and changes to `hedera-audit/` and its tests.
 
-Salt leakage permits checking candidate events when every other field is known or guessable. In the alternate, the random event identifier must also be known or guessed; it is not an additional security key. A full opening reveals its event and links it to the public entry. Topic activity, payer metadata and timing remain public under either format.
+The first version's byte-level draft, its single-message mirror lookup (`/messages/{sequenceNumber}`) and its offline script remain in git history at `90db05d`. They are not a supported format.
 
-**Read from source:** `HcsAuditTrail.record()` creates a new salt on each call. Calling it again does not resubmit the same commitment. An interface for resubmitting existing bytes and resolving ambiguous submissions by transaction identifier remains Open. Neither design guarantees exactly-once delivery.
+## What the spike newly proves
 
-The HashScan transaction link differs between the merged reader and the experiment's cited explorer source. Keep both interpretations labelled Read from source; a browser check of a real submitted entry remains Open. Do not call either route verified from these offline results.
+[The spike note](../spikes/0014-hcs-audit-trail.md) records the evidence. **Verified:** the Hedera SDK (software development kit) `TopicMessageSubmitTransaction` freezes and round-trips a merged-format message under Node and Bun with no network. **Open:** live submission, the receipt, mirror ingestion delay, and how HashScan renders the entry.
 
-## Approval and verification gates
+## Open items and gates
 
-**Open:** human format selection and named ADR approval; H1 (judge preference); H3 (payer, topic and signing setup); payment settlement hook; live submission, receipt, mirror ingestion and HashScan rendering. This offline task does not require a payer. Selecting a format does not approve testnet writes or accept the final ADR.
+- Named human acceptance of this ADR.
+- H1: the Hedera judge's preference among the section 5.2 options.
+- H3: payer account, topic creation and signing setup. This offline task needs none of them.
+- The payment settlement hook, durable opening retention, the retry operation, and the HashScan message route (see the spike note).
 
-The [spike evidence](../spikes/0014-hcs-audit-trail.md) records what ran. Merge of the draft and spike note remains gated on cross-family re-review after reconciliation. All changes serve demo beat 3 and preserve the handoff's section 3 invariants.
+Merging this draft into `hackathon` does not accept it. Every change here serves demo beat 3 and keeps the handoff section 3 invariants.
