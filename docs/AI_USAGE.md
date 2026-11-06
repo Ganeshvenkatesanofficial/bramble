@@ -7,6 +7,7 @@ This project was built with AI assistance (Claude Code and OpenAI Codex) through
 - **`docs/11_SOURCE_NOTES.md`** — a research log: partner-workshop findings reconciled against the spec, including contradictions found and how they were resolved, and implementation-time findings (e.g. a docs-vs-deployed-bytecode mismatch caught while validating Gate 0.3).
 - **`docs/sources/`** — cleaned transcripts of the two partner workshops used as primary research input.
 - **`scripts/gate0.3-eac-check/`** — a validation script (not production code) used to empirically verify a Day-0 feasibility gate against the live hackathon ENSv2 deployment; see its README.
+- **`AGENTS.md`** — operating rules for AI agents, including how agents read the Sepolia key (`${SEPOLIA_PRIVATE_KEY:-$SEPOLIA_PK}`) without exposing it.
 
 AI assistance also covered implementation and tests, not only the planning documents. In particular, it was used to draft, revise, and review code in:
 
