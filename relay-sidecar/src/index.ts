@@ -11,9 +11,15 @@ import {
   PRICE_ATOMIC,
   BLOCKY402_FACILITATOR_URL,
   dataRelayEnabled,
+  internalAPIURL,
+  sponsorEnabled,
+  sponsorBytes,
+  sponsorMaxPerHour,
 } from './config'
 import { mintToken } from './token'
 import { dataRelayRoute, dataRelayPrice } from './routes/datarelay'
+import { allocateViaInternalAPI, createSponsorRoute } from './sponsor'
+import { createEnrollmentReader } from './ens'
 
 const facilitatorClient = new HTTPFacilitatorClient({ url: BLOCKY402_FACILITATOR_URL })
 const resourceServer = new x402ResourceServer(facilitatorClient).register(
@@ -63,6 +69,29 @@ app.post('/rendezvous-token', (c) => {
 
 if (dataRelayEnabled()) {
   app.route('/', dataRelayRoute)
+}
+
+// Operator-sponsored sessions for enrolled devices with no Hedera key
+// (docs/adr/0018). Mounted after paymentMiddleware and absent from `routes`
+// above, so the paid routes behave exactly as before.
+if (sponsorEnabled()) {
+  if (!dataRelayEnabled()) throw new Error('SPONSOR_ENROLLED=1 requires DATA_RELAY_ENABLED=1')
+  const rpcUrl = process.env.SEPOLIA_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com'
+  const tailnetName = process.env.BRAMBLE_TAILNET_NAME
+  const registry = process.env.BRAMBLE_TAILNET_REGISTRY
+  if (!tailnetName || !registry) {
+    throw new Error('SPONSOR_ENROLLED=1 requires BRAMBLE_TAILNET_NAME and BRAMBLE_TAILNET_REGISTRY')
+  }
+  app.route(
+    '/',
+    createSponsorRoute({
+      readEnrollment: createEnrollmentReader({ rpcUrl, tailnetName, registry }),
+      mintToken: () => mintToken(tokenSecret()),
+      allocate: allocateViaInternalAPI(internalAPIURL),
+      bytes: sponsorBytes(),
+      maxPerHour: sponsorMaxPerHour(),
+    })
+  )
 }
 
 export default {

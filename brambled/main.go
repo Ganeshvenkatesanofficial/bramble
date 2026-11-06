@@ -48,8 +48,10 @@ import (
 	"github.com/WhyAsh5114/bramble/brambled/gateway"
 	"github.com/WhyAsh5114/bramble/brambled/rendezvous"
 	"github.com/WhyAsh5114/bramble/brambled/sidecar"
+	"github.com/WhyAsh5114/bramble/brambled/sponsor"
 	"github.com/WhyAsh5114/bramble/brambled/statusapi"
 	"github.com/WhyAsh5114/bramble/brambled/wgnode"
+	"golang.org/x/time/rate"
 )
 
 func main() {
@@ -341,6 +343,14 @@ func (f *forwardFlag) Set(value string) error {
 	return nil
 }
 
+// relayPayer is how brambled gets a rendezvous token and a data-relay
+// session. *sidecar.Manager pays through x402 on Hedera; *sponsor.Payer asks
+// the relay for an operator-sponsored one (docs/adr/0018).
+type relayPayer interface {
+	RendezvousToken(sidecarURL string) (*sidecar.RendezvousTokenResponse, error)
+	DataRelaySession(sidecarURL string, sessionBytes int64) (*sidecar.DataRelaySessionResponse, error)
+}
+
 // dataRelayFlag accumulates repeated -data-relay label=sidecar-url flags —
 // the pool of candidate data relays brambled picks between for any peer
 // flagged with -relay-peer (docs/adr/0008, "Relay selection").
@@ -464,6 +474,7 @@ type dataRelaySession struct {
 	relayLabel     string
 	candidate      string
 	settlementTxID string
+	grantedBytes   int64
 }
 
 // buyDataRelaySession queries every candidate in pool for a price quote,
@@ -473,7 +484,7 @@ type dataRelaySession struct {
 // co-location between a relay-sidecar and its Go relay is an assumed,
 // documented deployment convention (docs/adr/0008), not something
 // discovered dynamically.
-func buyDataRelaySession(m *sidecar.Manager, pool dataRelayFlag, bytes int64, policy dataRelayPurchasePolicy) (*dataRelaySession, error) {
+func buyDataRelaySession(m relayPayer, pool dataRelayFlag, bytes int64, policy dataRelayPurchasePolicy) (*dataRelaySession, error) {
 	if bytes <= 0 {
 		return nil, fmt.Errorf("data-relay session bytes must be positive")
 	}
@@ -510,6 +521,7 @@ func buyDataRelaySession(m *sidecar.Manager, pool dataRelayFlag, bytes int64, po
 		relayLabel:     winner.Label,
 		candidate:      net.JoinHostPort(relayURL.Hostname(), strconv.Itoa(resp.Port)),
 		settlementTxID: resp.SettlementTxID,
+		grantedBytes:   resp.Bytes,
 	}, nil
 }
 
@@ -550,7 +562,7 @@ type keepaliveSetter interface {
 // D's failover watcher (below) needs to know which relay a peer is
 // currently routed through, so it can exclude that one when picking a
 // replacement.
-func relayRoutedEndpoint(node keepaliveSetter, m *sidecar.Manager, pool dataRelayFlag, sessionBytes int64, policy dataRelayPurchasePolicy, relays []sidecar.RendezvousRelay, own, peerPubkey string, ttl time.Duration) (*netip.AddrPort, string, error) {
+func relayRoutedEndpoint(node keepaliveSetter, m relayPayer, pool dataRelayFlag, sessionBytes int64, policy dataRelayPurchasePolicy, relays []sidecar.RendezvousRelay, own, peerPubkey string, ttl time.Duration) (*netip.AddrPort, string, error) {
 	session, err := buyDataRelaySession(m, pool, sessionBytes, policy)
 	if err != nil {
 		return nil, "", fmt.Errorf("buying data-relay session: %w", err)
@@ -562,8 +574,13 @@ func relayRoutedEndpoint(node keepaliveSetter, m *sidecar.Manager, pool dataRela
 	if err := node.SetPersistentKeepalive(peerPubkey, dataRelayKeepaliveSeconds); err != nil {
 		return nil, "", fmt.Errorf("arming persistent keepalive for %s: %w", peerPubkey, err)
 	}
-	fmt.Fprintf(os.Stderr, "data-relay: bought session %s from %s (tx %s), routing %s via %s\n",
-		session.id, session.relayLabel, session.settlementTxID, peerPubkey, session.candidate)
+	if session.settlementTxID == "" {
+		fmt.Fprintf(os.Stderr, "data-relay: got sponsored session %s from %s (%d bytes, no payment), routing %s via %s\n",
+			session.id, session.relayLabel, session.grantedBytes, peerPubkey, session.candidate)
+	} else {
+		fmt.Fprintf(os.Stderr, "data-relay: bought session %s from %s (tx %s), routing %s via %s\n",
+			session.id, session.relayLabel, session.settlementTxID, peerPubkey, session.candidate)
+	}
 	if u := hashscanTestnetTxURL(session.settlementTxID); u != "" {
 		fmt.Fprintf(os.Stderr, "  %s\n", u)
 	}
@@ -665,7 +682,7 @@ func (s *relayState) getPubkey(peerLabel string) (string, bool) {
 // per Exchange call" (docs/adr/0007) — reuse isn't an optimization here,
 // it's a guaranteed failure the second time. If a caller needs to spend
 // less, the fix is a slower loop cycle, not a cached token.
-func exchangeAnyMetered(relays []sidecar.RendezvousRelay, m *sidecar.Manager, ownPubkey, peerPubkey, myCandidate string, exchangeTimeout time.Duration) (candidate, usedLabel string, err error) {
+func exchangeAnyMetered(relays []sidecar.RendezvousRelay, m relayPayer, ownPubkey, peerPubkey, myCandidate string, exchangeTimeout time.Duration) (candidate, usedLabel string, err error) {
 	if len(relays) == 0 {
 		return "", "", fmt.Errorf("no rendezvous relays to try")
 	}
@@ -714,10 +731,16 @@ func exchangeAnyMetered(relays []sidecar.RendezvousRelay, m *sidecar.Manager, ow
 // node's own peer-endpoint directly (admission.Loop won't — its
 // EndpointResolver only fires once per pubkey for the life of the Loop),
 // and updates state so the next round excludes the new relay too if it
-// also fails. Gives up (logs and returns) if the pool is exhausted or a
-// reconnect attempt itself fails — matches this file's existing "log and
-// move on" posture for discovery/pricing failures elsewhere.
-func watchDataRelayFailover(ctx context.Context, node *wgnode.Node, m *sidecar.Manager, state *relayState, peerLabel string, allowedIP netip.Prefix, pool dataRelayFlag, sessionBytes int64, policy dataRelayPurchasePolicy, relays []sidecar.RendezvousRelay, ownPubkey string, ttl time.Duration) {
+// also fails.
+//
+// A stall is also what a session looks like once it reaches its byte cap or
+// its TTL (docs/adr/0018): the relay stops forwarding. So when every relay
+// in the pool has stalled since the last reset, the watcher starts a new
+// round over the whole pool instead of giving up. With one relay, that is
+// how a capped sponsored session is renewed. Failed attempts back off
+// (failoverBackoff), so a peer that is gone does not spend a token and a
+// session every few seconds.
+func watchDataRelayFailover(ctx context.Context, node *wgnode.Node, m relayPayer, state *relayState, peerLabel string, allowedIP netip.Prefix, pool dataRelayFlag, sessionBytes int64, policy dataRelayPurchasePolicy, relays []sidecar.RendezvousRelay, ownPubkey string, ttl time.Duration) {
 	// Every relay ever excluded, not just the one currently in use —
 	// without this, a second stall (e.g. the just-adopted backup relay
 	// also looking dead because the *other* side hasn't picked it up yet)
@@ -726,6 +749,7 @@ func watchDataRelayFailover(ctx context.Context, node *wgnode.Node, m *sidecar.M
 	// changed. Found by a live run and a test whose fake relay didn't stay
 	// dead across retries (docs/adr/0008).
 	excluded := map[string]bool{}
+	failures := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -750,8 +774,19 @@ func watchDataRelayFailover(ctx context.Context, node *wgnode.Node, m *sidecar.M
 			}
 		}
 		if len(remaining) == 0 {
-			fmt.Fprintf(os.Stderr, "data-relay: %s: no relay left to fail over to (excluded %s), giving up\n", peerLabel, usedLabel)
-			return
+			fmt.Fprintf(os.Stderr, "data-relay: %s: every relay in the pool has stalled since the last round; asking the whole pool again for a new session\n", peerLabel)
+			excluded = map[string]bool{}
+			for label, url := range pool {
+				remaining[label] = url
+			}
+		}
+		if wait := failoverBackoff(failures); wait > 0 {
+			fmt.Fprintf(os.Stderr, "data-relay: %s: %d failed attempts in a row, waiting %s before the next\n", peerLabel, failures, wait)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(wait):
+			}
 		}
 
 		// A failed attempt here is very often just timing skew, not a dead
@@ -760,22 +795,44 @@ func watchDataRelayFailover(ctx context.Context, node *wgnode.Node, m *sidecar.M
 		// peer concurrently exchanging too) can time out even though the
 		// pool still has a perfectly good relay left. Log and retry rather
 		// than giving up — WaitForStall's own stallTimeout below is what
-		// rate-limits the retry, since usedLabel is unchanged and RxBytes
-		// still isn't moving. Only pool exhaustion above is a real reason
-		// to stop.
+		// rate-limits the first retry, since usedLabel is unchanged and
+		// RxBytes still isn't moving; failoverBackoff spaces out the rest.
 		endpoint, newLabel, err := relayRoutedEndpoint(node, m, remaining, sessionBytes, policy, relays, ownPubkey, pubkey, ttl)
 		if err != nil {
+			failures++
 			fmt.Fprintf(os.Stderr, "data-relay: %s: failover attempt failed, will retry: %v\n", peerLabel, err)
 			continue
 		}
 		if err := node.AddPeer(pubkey, allowedIP, endpoint); err != nil {
+			failures++
 			fmt.Fprintf(os.Stderr, "data-relay: %s: re-pointing peer at %s failed, will retry: %v\n", peerLabel, newLabel, err)
 			continue
 		}
+		failures = 0
 		state.set(peerLabel, pubkey, newLabel)
 		fmt.Fprintf(os.Stderr, "data-relay: %s failed over to %s\n", peerLabel, newLabel)
 	}
 }
+
+// failoverBackoff is the extra wait before a failover attempt after
+// failures attempts in a row have failed. The first retry gets none (a
+// failure is often timing skew: the peer has not noticed the stall yet).
+// After that it doubles from 5 s up to 3 minutes. Each attempt costs a
+// session and a token per relay, paid or sponsored; with the 30-second
+// exchange timeout an unreachable peer costs about 20 attempts an hour,
+// under the relay's default sponsored limit of 30 (docs/adr/0018).
+func failoverBackoff(failures int) time.Duration {
+	if failures < 2 {
+		return 0
+	}
+	wait := 5 * time.Second
+	for i := 2; i < failures && wait < failoverMaxBackoff; i++ {
+		wait *= 2
+	}
+	return min(wait, failoverMaxBackoff)
+}
+
+const failoverMaxBackoff = 3 * time.Minute
 
 // watchDataRelayAdopt is the non-buying side's half of Section D failover
 // (docs/adr/0008): this node never buys a data-relay session for
@@ -802,8 +859,8 @@ func watchDataRelayFailover(ctx context.Context, node *wgnode.Node, m *sidecar.M
 // ports were coincidentally identical across calls — see docs/adr/0008).
 const dataRelayAdoptExchangeTimeout = 3 * time.Second
 
-// watchDataRelayAdopt does not gate on WaitForStall the way
-// watchDataRelayFailover does: it stays continuously present at the relay
+// On the paid path (pace nil), watchDataRelayAdopt does not gate on
+// WaitForStall the way watchDataRelayFailover does: it stays continuously present at the relay
 // instead, cycling a short Exchange every few seconds for as long as ctx
 // lives. Tested this way, not gated on its own stall detection — Exchange
 // is one-shot rendezvous, not a subscription, so this side has to keep
@@ -828,7 +885,19 @@ const (
 	dataRelayAdoptMaxBackoff   = 30 * time.Second
 )
 
-func watchDataRelayAdopt(ctx context.Context, node *wgnode.Node, m *sidecar.Manager, peerLabel, ownPubkey, peerPubkey, ownCandidate string, allowedIP netip.Prefix, relays []sidecar.RendezvousRelay) {
+// watchDataRelayAdopt's pace is nil on the paid path. A sponsored node passes the shared limiter
+// from sponsor.PollLimiter, because the relay limits sponsored tokens per
+// label per hour: polling every few seconds would use the whole allowance
+// in about 90 seconds. With pace set, the loop polls only while the peer's
+// traffic has stalled (the same RxBytes signal the buying side's
+// watchDataRelayFailover acts on; keepalives move it every
+// dataRelayKeepaliveSeconds on a healthy link), and each cycle waits for
+// the limiter. If it had to wait for a token, it checks for the stall again
+// before polling (datarelay.WaitForStallWithToken).
+//
+// A cycle that fails fast (a refused token, an unreachable sidecar) still
+// takes dataRelayAdoptExchangeTimeout, so a failing relay is not hammered.
+func watchDataRelayAdopt(ctx context.Context, node *wgnode.Node, m relayPayer, peerLabel, ownPubkey, peerPubkey, ownCandidate string, allowedIP netip.Prefix, relays []sidecar.RendezvousRelay, pace *rate.Limiter) {
 	var current string
 	lastChange := time.Now()
 	backoff := dataRelayAdoptExchangeTimeout
@@ -838,9 +907,22 @@ func watchDataRelayAdopt(ctx context.Context, node *wgnode.Node, m *sidecar.Mana
 			return
 		default:
 		}
+		if pace != nil {
+			if err := datarelay.WaitForStallWithToken(ctx, node, peerPubkey, dataRelayPollInterval, dataRelayStallTimeout, pace); err != nil {
+				return
+			}
+		}
+		started := time.Now()
 		candidate, _, err := exchangeAnyMetered(relays, m, ownPubkey, peerPubkey, ownCandidate, dataRelayAdoptExchangeTimeout)
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(dataRelayAdoptExchangeTimeout - time.Since(started)):
+			}
+		}
 		if err != nil || candidate == "" || candidate == current {
-			if time.Since(lastChange) > dataRelayAdoptBackoffGrace {
+			if pace == nil && time.Since(lastChange) > dataRelayAdoptBackoffGrace {
 				// Long-idle connection — sleep extra before the next paid
 				// attempt, doubling up to dataRelayAdoptMaxBackoff. Reset
 				// the instant a real change is adopted below.
@@ -926,6 +1008,9 @@ func runServe(args []string) error {
 	relayPeers := relayPeerFlag{}
 	fs.Var(relayPeers, "relay-peer", "tracked -peer label that should use the data-relay pool instead of a direct candidate (repeatable) — an explicit substitute for hole-punch-failure detection, which this project doesn't implement (docs/adr/0008)")
 	relaySessionBytes := fs.Int64("relay-session-bytes", 10_000, "byte allotment to buy per data-relay session (docs/adr/0008) — size this to the transfer you're about to demo; running out mid-transfer needs a fresh session, not an automatic top-up. At the -price-per-byte default (1 atomic USDC/byte), the default here is 0.01 USDC per session — raise deliberately, since cost scales linearly with this")
+	sponsoredRelay := fs.Bool("sponsored-relay", false, "get rendezvous tokens and data-relay sessions from each relay's operator-sponsored routes instead of paying on Hedera — for a device with no Hedera key (docs/adr/0018). The relay must run -sponsor-enrolled; it checks -label is enrolled, grants a capped free session and sees this device's source IP")
+	sponsoredTokensPerHour := fs.Int("sponsored-tokens-per-hour", 30, "with -sponsored-relay: the relay's -sponsor-max-per-hour. brambled paces its rendezvous polling to stay a fifth under it, leaving the rest for connects and session renewals (docs/adr/0018)")
+	relayFirst := fs.Bool("relay-first", false, "treat every tracked peer as a -relay-peer: route all of them through the data-relay pool instead of a direct candidate — for a device with no direct path to the mesh (docs/adr/0018)")
 	maxRelayPricePerByte := fs.Int64("max-relay-price-per-byte", 10, "maximum acceptable data-relay price in atomic USDC per byte")
 	maxRelaySessionCost := fs.Int64("max-relay-session-cost", 100_000, "maximum acceptable data-relay session cost in atomic USDC (0.10 USDC by default)")
 	if err := fs.Parse(args); err != nil {
@@ -974,6 +1059,16 @@ func runServe(args []string) error {
 	}
 	defer m.Stop()
 
+	var payer relayPayer = m
+	var adoptPace *rate.Limiter
+	if *sponsoredRelay {
+		if adoptPace, err = sponsor.PollLimiter(*sponsoredTokensPerHour); err != nil {
+			return fmt.Errorf("-sponsored-tokens-per-hour: %w", err)
+		}
+		payer = &sponsor.Payer{Label: *ownLabel}
+		fmt.Fprintf(os.Stderr, "relay: sponsored mode — nothing is paid on-chain; each relay checks %q is enrolled, grants a capped session and sees this device's source IP\n", *ownLabel)
+	}
+
 	// No -peer flags at all: auto-discover every other device on the
 	// tailnet instead of requiring each one typed out by hand
 	// (docs/adr/0010) — full-mesh-by-default, matching what a real
@@ -1013,6 +1108,11 @@ func runServe(args []string) error {
 	for _, fwd := range forwards {
 		if !trackedPeerLabels[fwd.GatewayLabel] {
 			return fmt.Errorf("-forward %d=%s:%s: %q is not a tracked -peer — a forward target must be a peer this node admits", fwd.LocalPort, fwd.GatewayLabel, fwd.Service, fwd.GatewayLabel)
+		}
+	}
+	if *relayFirst {
+		for label := range trackedPeerLabels {
+			relayPeers[label] = true
 		}
 	}
 	for label := range relayPeers {
@@ -1130,7 +1230,7 @@ func runServe(args []string) error {
 		relays, own, defaultCandidate := rendezvousRelays, ownPubkey, *myCandidate
 		loop.EndpointResolver = func(p admission.Peer, peerPubkey string) (*netip.AddrPort, error) {
 			if relayPeers[p.Label] {
-				endpoint, label, err := relayRoutedEndpoint(node, m, dataRelays, *relaySessionBytes, relayPurchasePolicy, relays, own, peerPubkey, *ttl)
+				endpoint, label, err := relayRoutedEndpoint(node, payer, dataRelays, *relaySessionBytes, relayPurchasePolicy, relays, own, peerPubkey, *ttl)
 				if err == nil {
 					relState.set(p.Label, peerPubkey, label)
 				}
@@ -1146,7 +1246,7 @@ func runServe(args []string) error {
 			// the (possibly discovered) set can't unilaterally block this
 			// connection. Buys a fresh (or cached) token per relay it
 			// tries, from that relay's own sidecar — docs/adr/0008.
-			candidate, _, err := exchangeAnyMetered(relays, m, own, peerPubkey, defaultCandidate, *ttl)
+			candidate, _, err := exchangeAnyMetered(relays, payer, own, peerPubkey, defaultCandidate, *ttl)
 			if err != nil {
 				return nil, err
 			}
@@ -1193,7 +1293,7 @@ func runServe(args []string) error {
 			continue
 		}
 		p := p
-		go watchDataRelayFailover(ctx, node, m, relState, p.Label, p.AllowedIP, dataRelays, *relaySessionBytes, relayPurchasePolicy, rendezvousRelays, ownPubkey, *ttl)
+		go watchDataRelayFailover(ctx, node, payer, relState, p.Label, p.AllowedIP, dataRelays, *relaySessionBytes, relayPurchasePolicy, rendezvousRelays, ownPubkey, *ttl)
 	}
 
 	// The other half of Gate 4.3: every tracked peer that ISN'T a
@@ -1220,7 +1320,7 @@ func runServe(args []string) error {
 				if !ok {
 					continue
 				}
-				watchDataRelayAdopt(ctx, node, m, p.Label, ownPubkey, pubkey, *myCandidate, p.AllowedIP, rendezvousRelays)
+				watchDataRelayAdopt(ctx, node, payer, p.Label, ownPubkey, pubkey, *myCandidate, p.AllowedIP, rendezvousRelays, adoptPace)
 				return
 			}
 		}()

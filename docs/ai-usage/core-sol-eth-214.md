@@ -26,3 +26,16 @@ Operational files written outside git:
 - `/home/anonjr/bramble-work/status/eth-214-console-revoked.png`
 - `/home/anonjr/bramble-work/status/eth-214-report.md`
 - `/home/anonjr/.cache/agent-tmp/core-sol-eth-214-handoff.md` (review handoff)
+
+## ETH-234: merge conflict resolution
+
+Demo beats: 3 (works and pays), 5 (revoke).
+
+Paths written:
+
+- `approval/src/lib/service.ts`
+- `docs/ai-usage/core-sol-eth-214.md`
+
+Merge `origin/hackathon` into the existing PR branch without rewriting history.
+Keep the activity feed's failed-revoke timestamp cleanup and the approval
+service's signer failure logging.

@@ -173,6 +173,9 @@ type DataRelaySessionResponse struct {
 	Port           int    `json:"port"`
 	ExpiresAt      int64  `json:"expiresAt"`
 	SettlementTxID string `json:"settlementTxId,omitempty"`
+	// Bytes is the allotment the relay granted. Set by a sponsored session
+	// (its cap can be below the request); a paid session leaves it zero.
+	Bytes int64 `json:"bytes,omitempty"`
 }
 
 // DataRelaySession asks the local sidecar to buy a bytes-metered data-relay

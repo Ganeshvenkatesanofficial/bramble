@@ -10,6 +10,7 @@ Environment=RELAY_SIDECAR_PORT=7891
 Environment=RELAY_INTERNAL_PORT=7895
 Environment=RELAY_PRICE_PER_BYTE=1
 Environment=RELAY_DATA_HOST=0.0.0.0
+Environment=RELAY_EXTRA_ARGS=
 # Values in the env file override the defaults above.
 EnvironmentFile=/etc/bramble/relay-%i.env
 WorkingDirectory=/opt/bramble/relay
@@ -21,7 +22,8 @@ ExecStart=/opt/bramble/relay/bin/relay \
   -sidecar-port ${RELAY_SIDECAR_PORT} \
   -internal-port ${RELAY_INTERNAL_PORT} \
   -price-per-byte ${RELAY_PRICE_PER_BYTE} \
-  -data-host ${RELAY_DATA_HOST}
+  -data-host ${RELAY_DATA_HOST} \
+  $RELAY_EXTRA_ARGS
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

@@ -350,6 +350,7 @@ export class ApprovalService {
         (item) => item.agentLabel === agentLabel && item.status === 'approved'
       )
       if (expectedId && record?.id !== expectedId) return
+      const requestedAt = new Date(this.clock.now()).toISOString()
       if (!(await resolver.hasGrant(agentLabel))) {
         if (reason === 'duration' && record) {
           this.markRevoked(record, reason)
@@ -359,6 +360,7 @@ export class ApprovalService {
       }
       if (record) {
         record.status = 'revoking'
+        record.revokeRequestedAt = requestedAt
         if (reason === 'duration') record.expiryStatus = 'revoking'
       }
       let transaction
@@ -372,7 +374,10 @@ export class ApprovalService {
           record.unresolvedWrite = unresolvedWrite
           return this.view(record)
         }
-        if (record) record.status = 'approved'
+        if (record) {
+          record.status = 'approved'
+          delete record.revokeRequestedAt
+        }
         logSignerFailure('revoke', error)
         throw new ApiError(502, 'revoke_failed', 'The signer did not confirm the revoke.')
       }
