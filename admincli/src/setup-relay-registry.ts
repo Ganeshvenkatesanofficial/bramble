@@ -1,3 +1,4 @@
+import './env'
 // One-time, tailnet-operator action: deploys a fresh UserRegistry
 // subregistry and registers it under this tailnet as "relays" — a
 // namespace pointer, not a device. Everything under it (e.g.

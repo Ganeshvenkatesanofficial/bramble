@@ -1,3 +1,4 @@
+import './env'
 // Rotates a device's pubkey text record — the EAC-gated rotation path
 // (docs/adr/0004). Functionally the non-empty-value case of
 // scripts/provision-dev-tailnet/set-pubkey.ts, reimplemented here as the

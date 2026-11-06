@@ -1,3 +1,4 @@
+import '../src/env'
 // Section B verification: table-driven EAC permit/deny check for the
 // `acl-granters` setter role (docs/adr/0005-acl-record-schema.md) — the
 // gateway-owner-controlled half of the trust-store model, independent from

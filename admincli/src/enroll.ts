@@ -1,3 +1,4 @@
+import './env'
 // Enrolls a new device subname: deploys a dedicated Permissioned Resolver
 // for it (mirrors scripts/gate0.3-eac-check / scripts/provision-dev-tailnet's
 // proven pattern — "a subname with its own Permissioned Resolver"), calls

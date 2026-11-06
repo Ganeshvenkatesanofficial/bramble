@@ -1,3 +1,4 @@
+import './env'
 // Real-chain implementations of lib.ts's Resolver and Signer, plus the Key
 // Ring-backed granter key loader. The CLIs use these. Importing this file loads
 // .env through setup.ts, so tests and other importers that supply their own

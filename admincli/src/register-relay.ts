@@ -1,3 +1,4 @@
+import './env'
 // Registers a relay subname on the relay registry (docs/adr/0003's
 // Consequence section, resolved) — mirrors enroll.ts's "deploy a dedicated
 // resolver, register, write initial records" exactly, just targeting the

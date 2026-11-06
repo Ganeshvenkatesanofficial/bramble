@@ -1,3 +1,4 @@
+import '../src/env'
 // Gate 2.1 verification: table-driven EAC permit/deny test for enrollment,
 // rotation, and revocation — one case per {enroller, rotator, revoker,
 // no-role} account x {enroll, rotate, revoke} action. Only the diagonal may

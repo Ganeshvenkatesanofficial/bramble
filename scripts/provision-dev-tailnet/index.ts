@@ -1,3 +1,4 @@
+import '../../admincli/src/env'
 // One-time setup script for Phase 1 Section A: registers a persistent test
 // tailnet (a name + subregistry + one device subname) on the selected
 // ENSv2 Sepolia deployment, so the sidecar has real on-chain data to resolve
@@ -8,7 +9,7 @@
 // (steps 7-8) was Gate 0.3-specific and isn't needed here.
 //
 // Usage: bun run index.ts   (run from this directory; reads ../../.env)
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -56,21 +57,6 @@ if (requestedLabel && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(requestedLa
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-
-// Bun loads .env natively — no dotenv dependency needed.
-const envPath = path.resolve(__dirname, '../../.env')
-if (existsSync(envPath)) {
-  const env = await Bun.file(envPath).text()
-  for (const line of env.split('\n')) {
-    const match = line.match(/^([^#=]+)=(.*)$/)
-    if (match && !process.env[match[1].trim()]) {
-      // Strip one layer of matching surrounding quotes — see
-      // admincli/src/setup.ts's identical loader for the full reasoning.
-      const rawValue = match[2].trim()
-      process.env[match[1].trim()] = rawValue.replace(/^(['"])(.*)\1$/, '$2')
-    }
-  }
-}
 
 const ethRegistrarAbi = parseAbi([
   'function isAvailable(string label) view returns (bool)',

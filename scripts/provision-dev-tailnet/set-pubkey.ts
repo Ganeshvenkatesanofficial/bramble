@@ -1,3 +1,4 @@
+import '../../admincli/src/env'
 // Sets (or clears) a device's `pubkey` text record on its already-deployed
 // resolver. Generalizes register-device2.ts's step-3 setText() call into a
 // standalone, reusable tool — used both to revoke (pass an empty string) and
@@ -8,7 +9,7 @@
 // Usage: bun run set-pubkey.ts <device-label> <new-pubkey-or-empty>
 //   bun run set-pubkey.ts device2 ""                    # revoke
 //   bun run set-pubkey.ts device2 76158fe000ffdcc4...    # restore
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createPublicClient, createWalletClient, http, parseAbi, toHex } from 'viem'
@@ -17,20 +18,6 @@ import { normalize, packetToBytes } from 'viem/ens'
 import { ensSepolia, RPC_URL } from '../../sidecar/src/ens/config'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-
-const envPath = path.resolve(__dirname, '../../.env')
-if (existsSync(envPath)) {
-  const env = await Bun.file(envPath).text()
-  for (const line of env.split('\n')) {
-    const match = line.match(/^([^#=]+)=(.*)$/)
-    if (match && !process.env[match[1].trim()]) {
-      // Strip one layer of matching surrounding quotes — see
-      // admincli/src/setup.ts's identical loader for the full reasoning.
-      const rawValue = match[2].trim()
-      process.env[match[1].trim()] = rawValue.replace(/^(['"])(.*)\1$/, '$2')
-    }
-  }
-}
 
 const [deviceLabel, newPubkey] = process.argv.slice(2)
 if (deviceLabel === undefined || newPubkey === undefined) {

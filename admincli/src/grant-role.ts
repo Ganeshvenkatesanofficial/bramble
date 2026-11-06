@@ -1,3 +1,4 @@
+import './env'
 // Delegates one of Gate 2.1's three distinct EAC roles to another account.
 // Usage:
 //   bun run grant-role.ts enroll <account-address>

@@ -1,3 +1,4 @@
+import './env'
 // Sets a gateway's own `acl-granters` record (docs/adr/0005) — the list of
 // already-enrolled identity labels this gateway will accept ACL vouches
 // from. This is the gateway owner's own trust decision, independent of any
