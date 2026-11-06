@@ -26,6 +26,11 @@ The team directed the architecture and scope, operated the physical Ledger and l
 
 Per-track attribution and involvement narrative for the submission dashboard is written separately by the team, not duplicated here.
 
+## Mumbai build: paths written by agents
+
+- **`hedera-audit/`** — W10 option A, the HCS audit trail module, its tests and its README. Written by the Hedera-Claude agent (Claude), ticket ETH-46.
+- **`docs/16_HCS_AUDIT_RECORD_FORMAT.md`** and **`docs/adr/0011-w10-hedera-service-options.md`** — the record-format reference and the draft ADR with three options, for a human to decide. Written by the Hedera-Claude agent (Claude), ticket ETH-46.
+
 ## Network lane: paths written by agents (ETH-37)
 
 Agent: Net-Claude, committing as `Net-Claude (agent, Chaitanya Kelkar)` (Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026). Move these rows into the shared Paths table from ETH-27 when that lands.

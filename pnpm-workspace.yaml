@@ -7,4 +7,5 @@ packages:
   - scripts/demo
   - admincli
   - dashboard
+  - hedera-audit
   - approval
