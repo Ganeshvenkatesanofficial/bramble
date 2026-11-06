@@ -800,6 +800,15 @@ func watchDataRelayFailover(ctx context.Context, node *wgnode.Node, m *sidecar.M
 // ports were coincidentally identical across calls — see docs/adr/0008).
 const dataRelayAdoptExchangeTimeout = 3 * time.Second
 
+const (
+	// rendezvousDiscoveryRetry is the minimum gap between repeated relay
+	// discovery queries while no rendezvous relay is known.
+	rendezvousDiscoveryRetry = 10 * time.Second
+	// exchangeBackoffMax caps the pause before retrying a peer that did not
+	// answer a rendezvous exchange (see exchangeBackoff).
+	exchangeBackoffMax = 2 * time.Minute
+)
+
 // watchDataRelayAdopt does not gate on WaitForStall the way
 // watchDataRelayFailover does: it stays continuously present at the relay
 // instead, cycling a short Exchange every few seconds for as long as ctx
@@ -1042,9 +1051,14 @@ func runServe(args []string) error {
 			SidecarURL: os.Getenv("BRAMBLE_RENDEZVOUS_PAYMENT_URL"),
 		}}
 	}
+	// discoveryFailed: the registry scan errored (not merely found nothing).
+	// The resolver below then retries it lazily; without that, one transient
+	// RPC error would leave this node with no rendezvous for its whole life.
+	discoveryFailed := false
 	if len(dataRelays) == 0 || len(rendezvousRelays) == 0 {
 		if relays, relErr := m.Relays(); relErr != nil {
-			fmt.Fprintf(os.Stderr, "relay discovery: %v (falling back to -rendezvous/-data-relay only)\n", relErr)
+			discoveryFailed = true
+			fmt.Fprintf(os.Stderr, "relay discovery: %v (will retry; using -rendezvous/-data-relay meanwhile)\n", relErr)
 		} else {
 			if len(rendezvousRelays) == 0 {
 				for _, r := range relays.Rendezvous {
@@ -1123,9 +1137,11 @@ func runServe(args []string) error {
 		},
 	}
 
-	if len(rendezvousRelays) > 0 {
-		relays, own, defaultCandidate := rendezvousRelays, ownPubkey, *myCandidate
-		loop.EndpointResolver = func(p admission.Peer, peerPubkey string) (*netip.AddrPort, error) {
+	if len(rendezvousRelays) > 0 || discoveryFailed {
+		pool := newRendezvousPool(rendezvousRelays, m.Relays, rendezvousDiscoveryRetry)
+		backoff := newExchangeBackoff(*ttl, exchangeBackoffMax)
+		own, defaultCandidate := ownPubkey, *myCandidate
+		resolve := func(relays []sidecar.RendezvousRelay, p admission.Peer, peerPubkey string) (*netip.AddrPort, error) {
 			if relayPeers[p.Label] {
 				endpoint, label, err := relayRoutedEndpoint(node, m, dataRelays, *relaySessionBytes, relayPurchasePolicy, relays, own, peerPubkey, *ttl)
 				if err == nil {
@@ -1168,6 +1184,24 @@ func runServe(args []string) error {
 				}
 			}
 			return &endpoint, nil
+		}
+		loop.EndpointResolver = func(p admission.Peer, peerPubkey string) (*netip.AddrPort, error) {
+			relays, err := pool.Get()
+			if err != nil {
+				return nil, err
+			}
+			// A peer that failed to answer recently is skipped: each attempt
+			// buys a token and blocks this loop for a whole exchange timeout.
+			if wait := backoff.Wait(peerPubkey); wait > 0 {
+				return nil, fmt.Errorf("skipping rendezvous with %s for %s: it did not answer the last attempt", p.Label, wait.Round(time.Second))
+			}
+			endpoint, err := resolve(relays, p, peerPubkey)
+			if err != nil {
+				backoff.Fail(peerPubkey)
+			} else {
+				backoff.Succeed(peerPubkey)
+			}
+			return endpoint, err
 		}
 	}
 
