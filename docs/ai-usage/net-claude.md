@@ -1,0 +1,5 @@
+- ETH-189 (ETH-177 T6): `relay/datarelay.go`, `relay/sidecar.go`, `relay/main.go`, `relay/datarelay_test.go` (sponsor flags, cap, validation). AI-assisted.
+- ETH-189: `relay-sidecar/src/{sponsor,ens,config,index}.ts`, `relay-sidecar/test/sponsor.test.ts`, `relay-sidecar/test/e2e-harness/src/index.ts`, `relay-sidecar/package.json`, `pnpm-lock.yaml` (viem added). AI-assisted.
+- ETH-189: `brambled/sponsor/`, `brambled/main.go`, `brambled/sidecar/client.go`, `brambled/sponsored_relay_e2e_test.go`, `brambled/netlab_role_test.go`, `brambled/README.md` (`-sponsored-relay`, `-relay-first`, `relayPayer`). AI-assisted.
+- ETH-189: `deploy/nat-lab/docker-lab.sh`, `deploy/nat-lab/README.md`, `deploy/systemd/bramble-relay@.service`, `deploy/env/relay.env.example`, `deploy/REFERENCE.md`. AI-assisted.
+- ETH-189: `docs/adr/0018-sponsored-relay-sessions.md`, `relay/README.md`, `README.md` (status row). AI-assisted.
