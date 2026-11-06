@@ -34,7 +34,7 @@
 import { createWalletClient, http, getAddress } from 'viem'
 import { normalize } from 'viem/ens'
 import { RPC_URL, tailnetName, tailnetRegistry, relayRegistry, ROLE_REGISTRAR } from '../../sidecar/src/ens/config'
-import { accountFromEnv, hackathonSepolia, publicClient } from './setup'
+import { accountFromEnv, ensSepolia, publicClient } from './setup'
 import { registryWriteAbi, resolverWriteAbi, pubkeySetter, revokedSetter, aclSetter, aclGrantersSetter } from './roles'
 import { connectLedgerAccount } from './ledger-eth-sign'
 
@@ -52,7 +52,7 @@ async function main() {
   const ledger = useLedger ? await connectLedgerAccount() : null
   const account = ledger ? ledger.account : accountFromEnv()
   if (useLedger) console.log(`signing as Ledger account ${account.address} -- confirm the transaction on-device`)
-  const wallet = createWalletClient({ account, chain: hackathonSepolia, transport: http(RPC_URL) })
+  const wallet = createWalletClient({ account, chain: ensSepolia, transport: http(RPC_URL) })
 
   async function writeAndWait(label: string, args: Parameters<typeof wallet.writeContract>[0]) {
     const hash = await wallet.writeContract(args)

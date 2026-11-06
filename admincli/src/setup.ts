@@ -1,15 +1,14 @@
 // Shared bootstrap for every admincli command: .env loading, the
-// hackathon-Sepolia chain override, and a public client. Mirrors the
+// ENSv2 Sepolia chain override, and a public client. Mirrors the
 // boilerplate already duplicated across scripts/gate0.3-eac-check and
 // scripts/provision-dev-tailnet — kept here once since every file in this
 // package needs exactly the same setup, unlike those cross-package scripts.
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createPublicClient, http, getAddress, type Address } from 'viem'
-import { sepolia } from 'viem/chains'
+import { createPublicClient, http, type Address } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { UNIVERSAL_RESOLVER, RPC_URL } from '../../sidecar/src/ens/config'
+import { ensSepolia, RPC_URL } from '../../sidecar/src/ens/config'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -33,15 +32,11 @@ if (existsSync(envPath)) {
   }
 }
 
-// viem ships a built-in Universal Resolver address for Sepolia that points
-// at the production/beta ENSv2 deployment, not the hackathon one — see
-// docs/04_TECH_STACK.md, "Universal Resolver gotcha."
-export const hackathonSepolia = {
-  ...sepolia,
-  contracts: { ...sepolia.contracts, ensUniversalResolver: { address: getAddress(UNIVERSAL_RESOLVER) } },
-}
+// ensSepolia carries the Universal Resolver of the deployment that
+// BRAMBLE_ENS_DEPLOYMENT selects (sidecar/src/ens/config.ts).
+export { ensSepolia }
 
-export const publicClient = createPublicClient({ chain: hackathonSepolia, transport: http(RPC_URL) })
+export const publicClient = createPublicClient({ chain: ensSepolia, transport: http(RPC_URL) })
 
 // accountFromEnv resolves a private key from the named env var into a viem
 // Account. Defaults to SEPOLIA_PRIVATE_KEY (the operator's own key, same var

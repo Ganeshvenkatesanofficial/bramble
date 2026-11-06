@@ -1,17 +1,13 @@
 import { createPublicClient, http, keccak256, toHex } from 'viem'
-import { sepolia } from 'viem/chains'
 import { normalize } from 'viem/ens'
-import { RPC_URL, UNIVERSAL_RESOLVER, registryAbi, tailnetName, tailnetRegistry } from '../../../sidecar/src/ens/config'
+import { RPC_URL, ensSepolia, registryAbi, tailnetName, tailnetRegistry } from '../../../sidecar/src/ens/config'
 import type { DeviceFacts } from './chain'
 
 // The approval service runs on the admin machine, not on a mesh node, so it reads ENS directly. It must not
 // import sidecar/src/ens/client.ts: that client routes every read through Tor, which is never started here.
-// viem's built-in Sepolia Universal Resolver is the production deployment, so the hackathon one is set explicitly.
+// ensSepolia carries the Universal Resolver of the deployment BRAMBLE_ENS_DEPLOYMENT selects.
 export const publicClient = createPublicClient({
-  chain: {
-    ...sepolia,
-    contracts: { ...sepolia.contracts, ensUniversalResolver: { address: UNIVERSAL_RESOLVER } },
-  },
+  chain: ensSepolia,
   transport: http(RPC_URL, { timeout: 60_000 }),
   ccipRead: false,
 })

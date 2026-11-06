@@ -34,7 +34,7 @@ import {
   ALL_ROLES,
   REGISTRATION_ROLE_BITMAP,
 } from '../../sidecar/src/ens/config'
-import { accountFromEnv, hackathonSepolia, publicClient } from './setup'
+import { accountFromEnv, ensSepolia, publicClient } from './setup'
 import { registryWriteAbi } from './roles'
 
 const verifiableFactoryAbi = parseAbi([
@@ -45,7 +45,7 @@ const userRegistryInitAbi = parseAbi(['function initialize((address account, uin
 
 async function main() {
   const account = accountFromEnv()
-  const wallet = createWalletClient({ account, chain: hackathonSepolia, transport: http(RPC_URL) })
+  const wallet = createWalletClient({ account, chain: ensSepolia, transport: http(RPC_URL) })
 
   async function writeAndWait(label: string, args: Parameters<typeof wallet.writeContract>[0]) {
     const hash = await wallet.writeContract(args)

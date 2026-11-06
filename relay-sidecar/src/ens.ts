@@ -3,17 +3,12 @@
 // sees every peer's source IP, so Tor would hide nothing here. The record
 // rules match brambled/admission/loop.go's `authorized`: a non-empty pubkey,
 // an expiry in the future, and no revoked=true record.
-import { createPublicClient, getAddress, http, keccak256, parseAbi, toHex } from 'viem'
-import { sepolia } from 'viem/chains'
+import { createPublicClient, getAddress, http, keccak256, toHex } from 'viem'
 import { normalize } from 'viem/ens'
+import { ensSepolia, registryAbi } from '../../sidecar/src/ens/config'
 
-// Same hackathon Universal Resolver override as sidecar/src/ens/client.ts;
-// viem's built-in Sepolia address targets the wrong deployment.
-const UNIVERSAL_RESOLVER = getAddress('0xd26f2040d083af1cd2962ba303f4bea0c4faf142')
-
-const registryAbi = parseAbi([
-  'function getState(uint256 anyId) view returns (uint8 status, uint64 expiry, address latestOwner, uint256 tokenId, uint256 resource)',
-])
+// The ENS deployment (and so the Universal Resolver) comes from the shared
+// config module, selected by BRAMBLE_ENS_DEPLOYMENT, same as the node sidecar.
 
 export type EnrollmentCheck = { enrolled: boolean; reason?: string }
 
@@ -27,10 +22,7 @@ export function createEnrollmentReader(opts: {
   nowSeconds?: () => number
 }): EnrollmentReader {
   const client = createPublicClient({
-    chain: {
-      ...sepolia,
-      contracts: { ...sepolia.contracts, ensUniversalResolver: { address: UNIVERSAL_RESOLVER } },
-    },
+    chain: ensSepolia,
     transport: http(opts.rpcUrl, { fetchFn: opts.fetchFn, timeout: 20_000 }),
     ccipRead: false,
   })

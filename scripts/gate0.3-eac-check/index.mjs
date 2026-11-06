@@ -12,9 +12,9 @@
 // (b) is the actual K2 kill-criterion check from 07_RISKS.md: if a
 // delegated account can act outside its grant, EAC doesn't restrict and
 // the ENS pitch collapses. This script proves it does or doesn't, against
-// the real deployed hackathon contracts, not the general ENSv2 beta.
+// the selected deployment (BRAMBLE_ENS_DEPLOYMENT).
 //
-// Usage: node index.mjs   (run from this directory; reads ../../.env)
+// Usage: bun run index.mjs   (run from this directory; reads ../../.env)
 
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -38,43 +38,15 @@ import {
   getAddress,
   formatEther,
 } from 'viem'
-import { sepolia } from 'viem/chains'
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { normalize, packetToBytes } from 'viem/ens'
 
-// ---------------------------------------------------------------------------
-// Hackathon ENSv2 Sepolia deployment addresses.
-// Source: https://feature-permres-inode-refact.docs-bao.pages.dev/learn/deployments#sepolia-ensv2-beta
-// Cross-checked against Kevin | ENS's Discord post, Sept 4 2026.
-// ---------------------------------------------------------------------------
-const ETH_REGISTRY = getAddress('0x1d78834d97c1d7b1a38c1dedbd1a287cfed3971e') // Permissioned Registry for .eth
-const ETH_REGISTRAR = getAddress('0x7d1b7f586a62ac3f54b9a396849757814283270b')
-const MOCK_USDC = getAddress('0xcbfd80f74375c54e545af34788ff465f96f66f05')
-const VERIFIABLE_FACTORY = getAddress('0x894bc9cc8ff1ad96b8a288c86a8c71d662c07780')
-const PERMISSIONED_RESOLVER_IMPL = getAddress('0xa9d3814ab151bf6e37a427432795371a8361614e')
-const USER_REGISTRY_IMPL = getAddress('0x47b442d0cf617c41cabaff5f02f44dd1e5f72546')
-const UNIVERSAL_RESOLVER = getAddress('0xd26f2040d083af1cd2962ba303f4bea0c4faf142') // UpgradableUniversalResolverProxy
-
-// ---------------------------------------------------------------------------
-// EAC role constants (values from the ENSv2 docs' Permissioned Registry /
-// Permissioned Resolver role tables, not guessed).
-// ---------------------------------------------------------------------------
-const ROLE_SET_SUBREGISTRY = 1n << 20n
-const ROLE_SET_RESOLVER = 1n << 24n
-const ROLE_CAN_TRANSFER_ADMIN = (1n << 28n) << 128n
-const REGISTRATION_ROLE_BITMAP =
-  ROLE_SET_SUBREGISTRY |
-  (ROLE_SET_SUBREGISTRY << 128n) | // ROLE_SET_SUBREGISTRY_ADMIN
-  ROLE_SET_RESOLVER |
-  (ROLE_SET_RESOLVER << 128n) | // ROLE_SET_RESOLVER_ADMIN
-  ROLE_CAN_TRANSFER_ADMIN
-
-const ROLE_SET_TEXT = 1n << 4n
-const ROLE_SET_ADDRESS = 1n << 0n
-
-// Every regular + admin role bit set (bit 0 of all 64 nybbles), computed
-// rather than copy-pasted, to avoid a uint256-overflow typo.
-const ALL_ROLES = BigInt('0x' + '1'.repeat(64))
+// Load after dotenv so deployment selection sees the operator's environment.
+const {
+  ETH_REGISTRY, ETH_REGISTRAR, MOCK_USDC, VERIFIABLE_FACTORY,
+  PERMISSIONED_RESOLVER_IMPL, USER_REGISTRY_IMPL, ensSepolia,
+  REGISTRATION_ROLE_BITMAP, ROLE_SET_TEXT, ROLE_SET_ADDRESS, ALL_ROLES, RPC_URL,
+} = await import('../../sidecar/src/ens/config.ts')
 
 // ---------------------------------------------------------------------------
 // ABIs — minimal, hand-written from the docs' function/event tables.
@@ -135,18 +107,8 @@ if (!process.env.SEPOLIA_PRIVATE_KEY) {
 const rawKey = process.env.SEPOLIA_PRIVATE_KEY.trim()
 const privateKey = rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`
 const account = privateKeyToAccount(privateKey)
-const rpcUrl = process.env.SEPOLIA_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com'
-
-const hackathonSepolia = {
-  ...sepolia,
-  contracts: {
-    ...sepolia.contracts,
-    ensUniversalResolver: { address: UNIVERSAL_RESOLVER },
-  },
-}
-
-const publicClient = createPublicClient({ chain: hackathonSepolia, transport: http(rpcUrl) })
-const wallet = createWalletClient({ account, chain: hackathonSepolia, transport: http(rpcUrl) })
+const publicClient = createPublicClient({ chain: ensSepolia, transport: http(RPC_URL) })
+const wallet = createWalletClient({ account, chain: ensSepolia, transport: http(RPC_URL) })
 
 const results = {}
 function report(name, pass, detail) {

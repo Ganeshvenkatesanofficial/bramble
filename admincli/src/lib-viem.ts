@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { createWalletClient, http, toHex, type Account } from 'viem'
 import { packetToBytes } from 'viem/ens'
 import { RPC_URL, tailnetName } from '../../sidecar/src/ens/config'
-import { accountFromEnv, hackathonSepolia, publicClient } from './setup'
+import { accountFromEnv, ensSepolia, publicClient } from './setup'
 import { resolverWriteAbi } from './roles'
 import { ringDecrypt } from './ledger-ring'
 import { GRANTER_KEY_RING_PATH } from './granter-key-path'
@@ -23,13 +23,13 @@ export function createViemSigner(account?: Account): Signer {
     async setText(name, key, value) {
       wallet ??= createWalletClient({
         account: account ?? accountFromEnv(),
-        chain: hackathonSepolia,
+        chain: ensSepolia,
         transport: http(RPC_URL),
       })
       const resolverAddress = await publicClient.getEnsResolver({ name })
       if (!resolverAddress) throw new Error(`no resolver found for ${name}`)
       const hash = await wallet.writeContract({
-        chain: hackathonSepolia,
+        chain: ensSepolia,
         account: wallet.account!,
         address: resolverAddress,
         abi: resolverWriteAbi,

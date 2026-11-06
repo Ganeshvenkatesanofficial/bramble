@@ -19,7 +19,7 @@
 //
 // Usage: bun run enroll.ts <device-label> <pubkey> [expiry-years=10]
 import { RPC_URL, tailnetName } from '../../sidecar/src/ens/config'
-import { accountFromEnv, hackathonSepolia, publicClient } from './setup'
+import { accountFromEnv, ensSepolia, publicClient } from './setup'
 import { connectLedgerAccount } from './ledger-eth-sign'
 import { createViemEnrollChain } from './enroll-chain-viem'
 import { enrollDevice } from './lib'
@@ -51,7 +51,7 @@ async function main() {
         chain: createViemEnrollChain({
           account,
           publicClient,
-          chain: hackathonSepolia,
+          chain: ensSepolia,
           rpcUrl: RPC_URL,
           log: console.log,
         }),
