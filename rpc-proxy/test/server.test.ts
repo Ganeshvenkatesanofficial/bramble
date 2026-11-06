@@ -12,6 +12,8 @@ interface Upstream {
   server: Server
   url: string
   received: { path: string; headers: Record<string, unknown>; body: string }[]
+  /** Answer the next N calls with a JSON-RPC -32602 error, then behave normally. */
+  invalidParamsTimes?: number
   override?: { status: number; contentType: string; body: (url: string) => string; headers?: Record<string, string> }
 }
 
@@ -25,6 +27,13 @@ function startUpstream(): Promise<Upstream> {
       req.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf-8')
         received.push({ path: req.url ?? '', headers: req.headers, body })
+        const pending = holder.upstream?.invalidParamsTimes ?? 0
+        if (pending > 0) {
+          holder.upstream!.invalidParamsTimes = pending - 1
+          res.writeHead(200, { 'content-type': 'application/json' })
+          res.end(JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code: -32602, message: 'upstream error' } }))
+          return
+        }
         const override = holder.upstream?.override
         if (override) {
           res.writeHead(override.status, { 'content-type': override.contentType, ...override.headers })
@@ -84,6 +93,38 @@ describe('rpc-proxy', () => {
   afterEach(async () => {
     await close(proxy.server)
     await close(upstream.server)
+  })
+
+  it('retries an eth_getLogs the upstream rejects as invalid params, once, and logs the call once', async () => {
+    await boot({ upstreamRetryDelayMs: 1 })
+    upstream.invalidParamsTimes = 1
+    const call = { jsonrpc: '2.0', id: 1, method: 'eth_getLogs', params: [{ fromBlock: '0x1', toBlock: '0x2' }] }
+    const res = await post(base, call)
+    expect(await res.json()).toEqual({ jsonrpc: '2.0', id: 1, result: 'ok:eth_getLogs' })
+    expect(upstream.received).toHaveLength(2)
+    const view = (await (await fetch(base + '/log')).json()) as { entries: unknown[] }
+    expect(view.entries).toHaveLength(1)
+  })
+
+  it('returns the error when the retry is rejected too', async () => {
+    await boot({ upstreamRetryDelayMs: 1 })
+    upstream.invalidParamsTimes = 5
+    const res = await post(base, { jsonrpc: '2.0', id: 1, method: 'eth_getLogs', params: [{}] })
+    expect(((await res.json()) as { error: { code: number } }).error.code).toBe(-32602)
+    expect(upstream.received).toHaveLength(2)
+  })
+
+  it('does not retry other methods or when the retry is disabled', async () => {
+    await boot({ upstreamRetryDelayMs: 1 })
+    upstream.invalidParamsTimes = 1
+    await post(base, { jsonrpc: '2.0', id: 1, method: 'eth_call', params: [] })
+    expect(upstream.received).toHaveLength(1)
+    proxy.server.close()
+    upstream.received.length = 0
+    await boot({ upstreamRetryDelayMs: 0 })
+    upstream.invalidParamsTimes = 1
+    await post(base, { jsonrpc: '2.0', id: 1, method: 'eth_getLogs', params: [{}] })
+    expect(upstream.received).toHaveLength(1)
   })
 
   it('forwards a call, returns the upstream answer and logs ip, method and params', async () => {
