@@ -92,15 +92,13 @@ test('verification HTTP boundary requires authorization and never returns an ope
   expect((await missing(request)).status).toBe(503)
 })
 
-test('approval API exposes verification only to an authorized reader', async () => {
+test('approval API exposes verification only to an authorized reader and reads its own recorder', async () => {
   const { createApprovalApi } = await import('../src/lib/api')
   const api = createApprovalApi({ token: () => 'test-only' })
   expect((await api.handle(new Request('http://local/api/audit/verification'))).status).toBe(401)
-  expect(
-    (
-      await api.handle(
-        new Request('http://local/api/audit/verification', { headers: { authorization: 'Bearer test-only' } })
-      )
-    ).status
-  ).toBe(503)
+  const response = await api.handle(
+    new Request('http://local/api/audit/verification', { headers: { authorization: 'Bearer test-only' } })
+  )
+  expect(response.status).toBe(200)
+  expect((await response.json()).entries).toEqual([])
 })

@@ -1,7 +1,8 @@
 import { timingSafeEqual } from 'node:crypto'
-import { ApiError, type GrantSigner, type IdentityResolver, type Clock } from './contracts'
-import { ApprovalService } from './service'
-import { readInput, label } from './validation'
+import { ApiError, type GrantSigner, type IdentityResolver, type Clock, type PaymentInput } from './contracts'
+import { ApprovalService, systemClock } from './service'
+import { AuditRecorder, type AuditTrail } from './audit'
+import { parsePayment, readInput, readPayment, label } from './validation'
 import { createAuditVerificationApi, type AuditSource } from './audit-verification'
 
 interface ApiOptions {
@@ -9,12 +10,25 @@ interface ApiOptions {
   signer?: GrantSigner
   resolver?: IdentityResolver
   clock?: Clock
+  /** Posts salted commitments to HCS. Without it, audit feed rows report `audit_not_configured`. */
+  auditTrail?: AuditTrail
+  /** Parent ENS name of agent labels, for example `acme.eth`. */
+  ensParent?: string
+  /**
+   * Settled payments this process observes itself, for example from the mirror node. Each is
+   * polled and recorded once per `txRef`; nothing here is believed on a caller's word.
+   */
+  settlements?: () => Promise<{ settled: PaymentInput[]; unsupported?: string[] }>
+  /** Delay between settlement polls. Defaults to 30 seconds. */
+  settlementPollMs?: number
   token: () => string | undefined
 }
 
 export function createApprovalApi(options: ApiOptions) {
-  const verifyAudit = createAuditVerificationApi({ token: options.token, source: () => options.auditSource })
-  const service = new ApprovalService(options.signer, options.resolver, options.clock)
+  const clock = options.clock ?? systemClock
+  const audit = new AuditRecorder(options.auditTrail, clock)
+  const verifyAudit = createAuditVerificationApi({ token: options.token, source: () => options.auditSource ?? audit })
+  const service = new ApprovalService(options.signer, options.resolver, clock, audit, options.ensParent)
   const json = (value: unknown, status = 200) =>
     Response.json(value, { status, headers: { 'cache-control': 'no-store' } })
 
@@ -22,7 +36,35 @@ export function createApprovalApi(options: ApiOptions) {
   const jsonWrite = (value: { status?: string } | undefined) =>
     json(value, value?.status === 'approving' || value?.status === 'revoking' ? 202 : 200)
 
+  // A source that is down or returns a malformed row skips that poll; the next one retries.
+  const observeSettlements = async () => {
+    if (!options.settlements) return
+    try {
+      const { settled, unsupported = [] } = await options.settlements()
+      for (const payment of settled) {
+        try {
+          service.recordPayment(parsePayment({ ...payment }))
+        } catch {
+          // A malformed row is not recorded.
+        }
+      }
+      for (const txRef of unsupported) service.recordUnsupportedPayment(txRef)
+    } catch {
+      // The source is unavailable.
+    }
+  }
+  if (options.settlements) {
+    const pollMs = options.settlementPollMs ?? 30_000
+    const tick = async () => {
+      await observeSettlements()
+      clock.schedule(tick, pollMs)
+    }
+    clock.schedule(tick, 0)
+  }
+
   return {
+    audit,
+    observeSettlements,
     async handle(request: Request): Promise<Response> {
       try {
         if (request.method === 'POST') {
@@ -40,6 +82,10 @@ export function createApprovalApi(options: ApiOptions) {
           return json(service.create(await readInput(request)), 201)
         }
         if (path === '/api/requests' && request.method === 'GET') return json({ requests: service.list() })
+        if (path === '/api/audit' && request.method === 'GET') return json({ entries: service.auditFeed() })
+        if (path === '/api/payments/settled' && request.method === 'POST') {
+          return json(service.recordPayment(await readPayment(request)), 202)
+        }
         const identity = /^\/api\/identities\/([^/]+)$/.exec(path)
         if (identity && request.method === 'GET') {
           const name = label(identity[1], 'agentLabel')

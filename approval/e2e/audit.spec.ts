@@ -51,6 +51,8 @@ test('live panel requires unlock, marks failed refresh stale and clears on lock'
   await expect(panel.getByRole('alert')).toContainText('stale')
   await expect(panel.getByText('Commitment matched', { exact: true })).toHaveCount(0)
   await expect(panel.getByText('Stale · recheck needed', { exact: true })).toHaveCount(3)
+  await expect(panel.getByText('Last successful check; recheck needed.', { exact: true })).toHaveCount(3)
+  await expect(panel.getByText('reproduces the mirror message')).toHaveCount(0)
   await expect(page.getByText('private upstream detail')).toHaveCount(0)
   await page.getByRole('button', { name: 'Lock console' }).click()
   await expect(panel.getByRole('article')).toHaveCount(0)

@@ -97,6 +97,9 @@ importers:
 
   approval:
     dependencies:
+      '@bramble/hedera-audit':
+        specifier: workspace:*
+        version: link:../hedera-audit
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

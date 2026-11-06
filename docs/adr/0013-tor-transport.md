@@ -65,6 +65,6 @@ export function startTor(opts?: StartTorOptions): Promise<void>
 
 ## Open
 
-- Revocation latency with the ENS poll over Tor (ETH-61).
+- Revocation latency with the ENS poll over Tor, measured on one machine by trace replay: median 7.0 to 11.5 s, worst 29 s, against 3.9 to 4.4 s without Tor (Verified, 6 November 2026, [measurement note](../measurements/2026-11-06-revocation-over-tor.md)). Open: a live revocation with two machines, a run from the cloud machines, and the cause of the slow tail.
 - Whether `@x402/hedera` makes network calls outside the wrapped fetch (ETH-58).
-- Snapshot bootstrap for faster cold start (ETH-61, cut-first).
+- Snapshot bootstrap for faster cold start: not built, cut first. Tor became ready in 4.3 to 5.0 s in the ETH-61 runs.

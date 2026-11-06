@@ -18,15 +18,17 @@ in `APPROVAL_DEMO_TOKEN`. The API never returns the token. Reads are public and 
 prove an agent's identity. A request is a suggestion, and only a human approver's
 explicit action authorizes a grant.
 
-| Method | Path                             | Result                                              |
-| ------ | -------------------------------- | --------------------------------------------------- |
-| POST   | `/api/requests`                  | Create a pending request (201)                      |
-| GET    | `/api/requests`                  | `{ requests: [...] }`                               |
-| GET    | `/api/requests/:id`              | One request                                         |
-| GET    | `/api/identities/:label`         | `{ identity: facts or null }`; 503 without resolver |
-| POST   | `/api/requests/:id/approve`      | Confirm a grant through the signer                  |
-| POST   | `/api/requests/:id/deny`         | Record denial without signing                       |
-| POST   | `/api/grants/:agentLabel/revoke` | Clear that agent's ACL through the signer           |
+| Method | Path                             | Result                                               |
+| ------ | -------------------------------- | ---------------------------------------------------- |
+| POST   | `/api/requests`                  | Create a pending request (201)                       |
+| GET    | `/api/requests`                  | `{ requests: [...] }`                                |
+| GET    | `/api/requests/:id`              | One request                                          |
+| GET    | `/api/identities/:label`         | `{ identity: facts or null }`; 503 without resolver  |
+| POST   | `/api/requests/:id/approve`      | Confirm a grant through the signer                   |
+| POST   | `/api/requests/:id/deny`         | Record denial without signing                        |
+| POST   | `/api/grants/:agentLabel/revoke` | Clear that agent's ACL through the signer            |
+| POST   | `/api/payments/settled`          | Report a settled payment; posts one commitment (202) |
+| GET    | `/api/audit`                     | `{ entries: [...] }`, the audit feed                 |
 
 The request body is `{ agentLabel, gatewayLabel, service, note?, requestedDuration? }`.
 Duration is integer seconds, counted from grant confirmation, or from the first answer
@@ -121,6 +123,68 @@ The panel refreshes every two seconds; the node's sidecar remains the payer.
 See [`docs/16_AGENT_PAYMENTS_FLOW.md`](../docs/16_AGENT_PAYMENTS_FLOW.md) for
 configuration, the automatic relay payment trigger, and verification limits.
 
+## Audit trail (W10, demo beat 3)
+
+The service posts one salted commitment to a Hedera Consensus Service (HCS) topic
+for each confirmed grant, each confirmed revoke (manual or duration expiry) and
+each settled payment, whether the mirror-node observer or `POST /api/payments/settled` reports it. The commitment format is in
+`docs/16_HCS_AUDIT_RECORD_FORMAT.md`. The topic never holds plaintext.
+
+The service captures the event while it holds the per-agent write lock, then the
+post starts only after the lock is released. A slow or failed post never delays or
+reverses the access decision. Each post has one feed row in `GET /api/audit`:
+
+| Field                                                      | Meaning                                                                                    |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `id`, `kind`, `createdAt`, `requestId?`                    | Row ID, `grant`, `revoke` or `payment`, UTC time, the access request it belongs to         |
+| `status`                                                   | `pending`, `posted` or `failed`                                                            |
+| `commitment`, `topicId`, `sequenceNumber`, `transactionId` | The public receipt of a `posted` row. Build the HashScan link from them                    |
+| `error`                                                    | For a `failed` row: `hcs_post_failed`, `audit_event_unavailable` or `audit_not_configured` |
+
+A request also carries `grantAuditId` and `revokeAuditId`. The feed holds no event
+field, no error text from Hedera, and no secret. A `failed` row is not retried.
+
+- `audit_event_unavailable`: the signer returned no `serviceDigest` (ADR 0005), or the revoke
+  has no matching request. The service never posts a plaintext service name instead. The real
+  signer (`chain.ts`) reads the public keys and the granter key once, pins them for that grant, and
+  holds the `0x`-prefixed digest before it submits. It returns that same digest when the grant is
+  confirmed after a reconciliation retry or a later poll, so unreadable ENS or a changed key after
+  submission cannot change or lose it. A restart loses the request-to-digest
+  link, so a revoke of a grant made before the restart has no request and posts nothing.
+- `audit_not_configured`: no HCS trail is set. Decisions still succeed.
+- A repeated payment report with the same `txRef` returns the first row and posts nothing.
+- The grant event's `expiresAt` is `0` when the request has no duration.
+
+Payments settle in the sidecar, which does not call this service. When
+`APPROVAL_PAYMENT_AGENTS` is set, the service polls the Hedera testnet mirror node every 30 seconds
+(the same configuration and window as `GET /api/payments`) and posts one commitment for each
+successful outgoing USDC transaction of a configured payer. Records that share a transaction ID are
+netted into one payment. Only a plain transfer is committed: the payer is the only account that
+pays, exactly one account receives, and it receives the payer's whole net debit. A transaction
+with split payees, another payer, or a received amount that differs from the debit is not
+committed; it appears once as a `failed` payment row with `audit_event_unavailable`. The first poll starts with the first request to the API route and covers the whole
+`since` window; a poll that finds the mirror unavailable or incomplete posts nothing and retries.
+Replays are dropped by `txRef` in memory, so a restart posts the window's payments again. Set
+`since` to the start of the demo.
+
+`POST /api/payments/settled` takes `{ payer, payee, asset, amountAtomic, txRef }` with
+Hedera IDs and a decimal amount. It needs the bearer token and shares the `txRef` check with the
+observer. The service trusts that reporter's claim that the payment settled.
+
+The service keeps each opening (the event and its salt) in memory, in
+`audit.opening(entryId)`. No HTTP route returns it. A restart loses the openings,
+and the topic entries then stay unverifiable.
+
+| Variable                                                | Purpose                                                           |
+| ------------------------------------------------------- | ----------------------------------------------------------------- |
+| `HEDERA_AUDIT_TOPIC_ID`                                 | Topic from `createAuditTopic`; unset means `audit_not_configured` |
+| `HEDERA_CLIENT_ACCOUNT_ID`, `HEDERA_CLIENT_PRIVATE_KEY` | The payer that holds the topic's submit key                       |
+| `HEDERA_AUDIT_NETWORK`                                  | `testnet` (default) or `previewnet`. Mainnet is not accepted      |
+| `APPROVAL_ENS_PARENT`                                   | Parent name of agent labels, for example `acme.eth`; optional     |
+
+The tests use a fake topic client. They need no network and no secret:
+`pnpm --filter @bramble/approval test`.
+
 ## HCS audit panel (beat 3)
 
 The approval console shows the HCS audit panel below the request queue. Unlock it with the demo token to read `/api/audit/verification`. This read requires bearer authorization, sends `Cache-Control: no-store`, and returns verification summaries. Openings, salts and event fields stay in process.
@@ -129,6 +193,6 @@ The approval console shows the HCS audit panel below the request queue. Unlock i
 
 The verifier looks up the receipt's exact topic and sequence, checks the message kind and commitment, then opens it with the retained event and salt. A match means the configured mirror returned matching bytes. It does not independently prove consensus, the source transaction, or completeness. Missing openings, malformed records, mismatches, post failures, mirror delays and mirror failures have separate labels. Failed refreshes mark retained results stale. Locking clears the panel. The view checks up to the latest 50 retained rows.
 
-The `createApprovalApi` option `auditSource` accepts ETH-48's structural `AuditRecorder` interface (`list()` and `opening(id)`). The current base does not contain that recorder, so the live path returns 503 until integration passes the same in-process recorder to this option. No fallback fixture enters the live route. After ETH-48 merges, wire its recorder into this option in the process that owns the queue. Durable opening retention and live HashScan browser verification remain open. H4 screenshot approval remains required.
+The live route reads the service's own in-process `AuditRecorder` (`list()` and `opening(id)`), so it shows the grant, revoke and payment rows the service posts. The `createApprovalApi` option `auditSource` overrides that source for tests. No fallback fixture enters the live route. Durable opening retention and live HashScan browser verification remain open. H4 screenshot approval remains required.
 
 Run `bun test approval/test/audit-verification.test.ts` from the root for the verification boundary, and `pnpm --filter @bramble/approval test:ui` after the production build for screenshots and stale/lock behavior at 1280 px and 390 px. Public-console testing by a different Sol tester and human H4 approval are separate gates.
