@@ -64,7 +64,7 @@ export function RequestCard({ request, token, offline }: { request: RequestView;
   }
   const positive = request.status === 'approved'
   return (
-    <article className="request-card" aria-label={`Request from ${request.agentLabel}`}>
+    <article className="request-card" data-state={request.status} aria-label={`Request from ${request.agentLabel}`}>
       <header className="card-header">
         <div>
           <p className="eyebrow">Access request</p>
@@ -147,7 +147,7 @@ export function RequestCard({ request, token, offline }: { request: RequestView;
       )}
       {message && !busy && <p role="status">{message}</p>}
       {error && (
-        <p role="alert" className="negative">
+        <p role="alert" aria-label="Request decision error" className="negative">
           {error}
         </p>
       )}

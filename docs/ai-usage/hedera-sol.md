@@ -176,3 +176,28 @@ Paths written in the API slice:
 Verified: API authentication, topology redaction and grant-state tests fail before
 implementation and pass after implementation. Browser and repository validation
 follow in the UI slice.
+
+Paths written in the UI and evidence slice:
+
+- `approval/src/app/globals.css`
+- `approval/src/app/layout.tsx`
+- `approval/src/app/audit/fixtures/page.tsx`
+- `approval/src/app/payments/page.tsx`
+- `approval/src/components/approval-console.tsx`
+- `approval/src/components/join-console.tsx`
+- `approval/src/components/request-card.tsx`
+- `approval/src/components/network-panel.tsx`
+- `approval/e2e/console.spec.ts`
+- `approval/e2e/memory-server.ts`
+- `approval/e2e/network.spec.ts`
+- `approval/e2e/accessibility.spec.ts`
+- `approval/package.json`
+- `join-ui/src/index.tsx`
+- `pnpm-lock.yaml`
+- `README.md`
+- `approval/README.md`
+- `docs/reference/approval-api.md`
+- `docs/reference/approval-network.md`
+
+The screenshot check caught repeated onboarding panels from duplicate sibling
+keys. A browser count assertion reproduces the defect before the key correction.

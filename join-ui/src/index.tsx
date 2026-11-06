@@ -55,7 +55,7 @@ function DeviceCard({
 }: Omit<PanelProps, 'rows'> & { row: JoinRow }) {
   const busy = busyId === row.id || !!row.inProgress
   return (
-    <article className="request-card" aria-label={`Device ${row.label}`}>
+    <article className="request-card" data-state={row.status} aria-label={`Device ${row.label}`}>
       <header className="card-header">
         <div>
           <p className="eyebrow">Device membership</p>

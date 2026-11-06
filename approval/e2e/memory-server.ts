@@ -4,6 +4,7 @@ import { createPaymentsSource, createStatusSource } from '../src/lib/activity'
 import { MemoryChain } from '../test/memory-chain'
 import { memoryEnrollChain } from '../../admincli/src/enroll-memory'
 import { createJoinChain } from '../src/lib/join-chain'
+import { createNetworkSource } from '../src/lib/network'
 
 const chain = new MemoryChain()
 chain.beforeGrant = () => Bun.sleep(1500)
@@ -19,6 +20,36 @@ chain.revoke = async (label) => {
   return { transactionHash: `0x${'2'.repeat(64)}` }
 }
 let offline = false
+let networkOffline = false
+let probeFailed = false
+const network = createNetworkSource({
+  baseUrl: () => 'http://gateway.test',
+  fetchImpl: async (target) => {
+    if (networkOffline) throw new Error('Test status unavailable')
+    const path = new URL(String(target)).pathname
+    if (path === '/peers')
+      return Response.json([
+        {
+          label: 'agent-1.bramble.eth',
+          authorized: true,
+          handshaked: true,
+          lastHandshakeUnixNs: (Date.now() - 15_000) * 1_000_000,
+          endpoint: '192.0.2.10:5000',
+        },
+        {
+          label: 'laptop.bramble.eth',
+          authorized: true,
+          handshaked: true,
+          lastHandshakeUnixNs: (Date.now() - 40_000) * 1_000_000,
+          endpoint: '192.0.2.20:5000',
+        },
+        { label: 'retired.bramble.eth', authorized: false, handshaked: false, lastHandshakeUnixNs: 0 },
+      ])
+    if (path === '/relays') return Response.json({ dataRelays: { 'relay-eu': 'http://192.0.2.20:8080' } })
+    if (probeFailed) throw new Error('Test probe timeout')
+    return Response.json(path === '/ping' ? { reachable: true, rtt: '12.4ms' } : { ok: true })
+  },
+})
 // Set BRAMBLED_STATUS_URL to read a real brambled statusapi instead of the in-memory events.
 const gatewayEvents: unknown[] = []
 const status = createStatusSource({
@@ -57,6 +88,7 @@ const payments = createPaymentsSource({
 function freshApi() {
   const memory = memoryEnrollChain({ tailnetName: 'bramble.eth' })
   return createApprovalApi({
+    network,
     token: () => 'browser-test-only',
     signer: chain,
     resolver: chain,
@@ -93,6 +125,8 @@ Bun.serve({
     const url = new URL(request.url)
     if (url.pathname === '/__test/reset' && request.method === 'POST') {
       offline = false
+      networkOffline = false
+      probeFailed = false
       chain.grants.clear()
       chain.failGrant = false
       gatewayEvents.length = 0
@@ -110,6 +144,14 @@ Bun.serve({
     if (url.pathname === '/__test/offline' && request.method === 'POST') {
       offline = true
       return Response.json({ offline: true })
+    }
+    if (url.pathname === '/__test/network-offline' && request.method === 'POST') {
+      networkOffline = true
+      return Response.json({ offline: true })
+    }
+    if (url.pathname === '/__test/probe-failed' && request.method === 'POST') {
+      probeFailed = true
+      return Response.json({ failed: true })
     }
     if (offline && url.pathname === '/api/requests' && request.method === 'GET') {
       return Response.json({ error: { message: 'Test connection unavailable' } }, { status: 503 })

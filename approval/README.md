@@ -244,3 +244,14 @@ The verifier looks up the receipt's exact topic and sequence, checks the message
 The live route reads the service's own in-process `AuditRecorder` (`list()` and `opening(id)`), so it shows the grant, revoke and payment rows the service posts. The `createApprovalApi` option `auditSource` overrides that source for tests. No fallback fixture enters the live route. Durable opening retention and live HashScan browser verification remain open. H4 screenshot approval remains required.
 
 Run `bun test approval/test/audit-verification.test.ts` from the root for the verification boundary, and `pnpm --filter @bramble/approval test:ui` after the production build for screenshots and stale/lock behavior at 1280 px and 390 px. Public-console testing by a different Sol tester and human H4 approval are separate gates.
+
+## Console network and accessibility
+
+The operator console follows the system light/dark preference and reduced-motion
+preference. Decisions remain keyboard operable. Network status is visible after
+unlock and refreshes every five seconds. Device checks use the gateway tunnel
+ping. Relay checks report HTTP health RTT from the approval server.
+
+The existing `BRAMBLED_STATUS_URL` supplies the gateway status API. No new
+configuration is required. See the [network reference](../docs/reference/approval-network.md)
+for response fields, private-data redaction, inferred paths and verification limits.
