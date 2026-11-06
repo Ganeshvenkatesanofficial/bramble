@@ -18,6 +18,11 @@
 
 Reads send `Cache-Control: no-store`.
 
+`GET /api/network` requires the operator token and returns redacted approval-derived
+topology, joins, members and service request states, with optional gateway observations. `POST /api/network/ping`
+requires the token and probes a server-known relay/rendezvous HTTP target or an optionally observed device. See the
+[console network reference](approval-network.md) for fields and observation limits.
+
 ## Request body
 
 `POST /api/requests` takes `application/json`.
@@ -69,10 +74,15 @@ Every response that carries a request has these fields.
 | -------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------- |
 | `manual`       | A human calls the revoke endpoint and the signer confirms.                                                              | Set                 |
 | `duration`     | The expiry timer calls the same revoke path and the signer confirms.                                                    | Set                 |
-| `duration`     | The expiry timer fires, a fresh ACL read shows no grant, and the service marks the request revoked without a signer call. | Absent              |
 | `external`     | A later approve for the same agent reads an empty ACL, so the service retires the older `approved` request.             | Absent              |
 
 A client shows a transaction link only when `revokeTransaction` is present.
+
+A confirmed local grant proceeds to a revoke transaction even when an ENS read
+still returns an older empty ACL. Manual and timed revokes require the revoke's
+own confirmed receipt. A submitted write with an unknown outcome remains
+unresolved and blocks another write for that agent. Without a confirmed local
+grant, the service checks ENS and returns `409 not_granted` for an empty ACL.
 
 ## Duration
 

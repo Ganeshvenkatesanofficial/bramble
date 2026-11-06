@@ -35,6 +35,12 @@ This table is the index of new work. Each agent adds or updates its row in the s
 | ETH-177e   | Local web UI: setup, join, status, peers, connection test and admin view                                                                            | partial: real embedded UI startup and approved enrollment reported at [970461c](https://github.com/WhyAsh5114/bramble/commit/970461c); completed browser flow and connected/service result remain Open.                                                                                |
 | ETH-177 T6 | Relay-first forwarding for a device without a payer key; operator-sponsored capped sessions ([ADR 0018](docs/adr/0018-sponsored-relay-sessions.md)) | partial: [relay fix PR #53](https://github.com/WhyAsh5114/bramble/pull/53) deployed at `970461c`; fresh-device relay-only service acceptance failed ([acceptance log](docs/measurements/2026-11-06-onboarding-acceptance.md)).                                                         |
 
+The approval console overhaul adds light/dark themes, keyboard decisions,
+authenticated approval-derived topology and timestamped connectivity checks for beats 2,
+4 and 5. The topology API is implemented in [5a14382](https://github.com/WhyAsh5114/bramble/commit/5a14382).
+[Network reference](docs/reference/approval-network.md) describes the observation
+and verification limits. Live cloud acceptance remains Open.
+
 W6 (this documentation) is a deliverable and not a feature. W7 (Ledger approval signing) is out of scope.
 
 ## Mumbai sponsor integrations

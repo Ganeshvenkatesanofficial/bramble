@@ -7,7 +7,7 @@ export default function PaymentsPage() {
       <header>
         <Link href="/">bramble / approval</Link>
       </header>
-      <main>
+      <main id="main-content">
         <PaymentsPanel />
       </main>
     </div>

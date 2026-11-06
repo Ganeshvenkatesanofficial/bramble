@@ -3,8 +3,8 @@ import { execFileSync } from 'node:child_process'
 
 const head = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], { encoding: 'utf8' }).trim()
 
-// The HCS panel has its own alerts; the queue specs only assert on queue notices.
-const queueAlert = (page: Page) => page.getByRole('main').getByRole('alert').filter({ hasNotText: 'HCS verification' })
+// Other panels can report independent failures while the queue stays usable.
+const queueAlert = (page: Page) => page.getByRole('alert', { name: /Request (queue|decision) error/ })
 
 const headers = { authorization: 'Bearer browser-test-only' }
 const input = {
