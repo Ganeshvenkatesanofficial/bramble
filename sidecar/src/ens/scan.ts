@@ -31,16 +31,64 @@ const MAX_BLOCK_RANGE = 9_000n
 // this project scans regardless.
 type ScannedLog = Log & { args: Record<string, unknown> }
 
+// RETRY_DELAYS_MS spaces the retries of one failed getLogs window. The
+// public Sepolia endpoint is a load-balanced pool: getBlockNumber can reach a
+// backend that already has the newest block, and the getLogs that follows can
+// reach a backend that does not, which rejects the window with -32602
+// "Invalid parameters" (found live on the cloud nodes, 6 Nov 2026: the worker
+// and the gateway each hit it on their first scan after start-up). Repeating
+// the identical request fails again about as often, because the lag is shared
+// across the pool, so a retry asks for "latest" instead of the head number.
+// The delays total about 10 s, well inside brambled's 8 minute budget.
+const RETRY_DELAYS_MS = [1_500, 3_000, 6_000]
+
+// PRUNED_HISTORY is the error code public nodes use when they no longer serve
+// old logs. Retrying cannot fix it, and callers (admincli's mesh-ip
+// allocation) need the error at once rather than a partial list.
+const PRUNED_HISTORY = 4444
+
+// viem wraps an unrecognised RPC code (4444 among them) in UnknownRpcError
+// with code -1 and keeps the node's code on `cause`, so walk the chain.
+function isRetryable(err: unknown): boolean {
+  for (
+    let e = err as { code?: unknown; cause?: unknown } | null | undefined, i = 0;
+    e && i < 5;
+    e = e.cause as typeof e, i++
+  ) {
+    if (e.code === PRUNED_HISTORY) return false
+  }
+  return true
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
 export async function scanLogsChunked(
   client: PublicClient,
-  params: { address: `0x${string}`; event: AbiEvent; fromBlock: bigint; toBlock?: bigint }
+  params: { address: `0x${string}`; event: AbiEvent; fromBlock: bigint; toBlock?: bigint },
+  retryDelaysMs: readonly number[] = RETRY_DELAYS_MS
 ): Promise<ScannedLog[]> {
   const head = params.toBlock ?? (await client.getBlockNumber())
   const logs: ScannedLog[] = []
   for (let start = params.fromBlock; start <= head; start += MAX_BLOCK_RANGE) {
     const end = start + MAX_BLOCK_RANGE - 1n > head ? head : start + MAX_BLOCK_RANGE - 1n
-    const chunk = await client.getLogs({ address: params.address, event: params.event, fromBlock: start, toBlock: end })
-    logs.push(...(chunk as ScannedLog[]))
+    for (let attempt = 0; ; attempt++) {
+      try {
+        // After a failure, the window that ends at head asks for "latest": each backend then resolves the
+        // bound against its own head, so a lagging backend cannot reject it (see RETRY_DELAYS_MS).
+        const toBlock = attempt > 0 && end === head && params.toBlock === undefined ? 'latest' : end
+        const chunk = await client.getLogs({
+          address: params.address,
+          event: params.event,
+          fromBlock: start,
+          toBlock,
+        })
+        logs.push(...(chunk as ScannedLog[]))
+        break
+      } catch (err) {
+        if (attempt >= retryDelaysMs.length || !isRetryable(err)) throw err
+        await sleep(retryDelaysMs[attempt])
+      }
+    }
   }
   return logs
 }

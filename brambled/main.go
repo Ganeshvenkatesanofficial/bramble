@@ -741,7 +741,10 @@ func exchangeAnyMetered(relays []sidecar.RendezvousRelay, m relayPayer, ownPubke
 // how a capped sponsored session is renewed. Failed attempts back off
 // (failoverBackoff), so a peer that is gone does not spend a token and a
 // session every few seconds.
-func watchDataRelayFailover(ctx context.Context, node *wgnode.Node, m relayPayer, state *relayState, peerLabel string, allowedIP netip.Prefix, pool dataRelayFlag, sessionBytes int64, policy dataRelayPurchasePolicy, relays []sidecar.RendezvousRelay, ownPubkey string, ttl time.Duration) {
+//
+// relaySet is read on every attempt, so a rendezvous set recovered after a
+// start-up discovery failure reaches this watcher.
+func watchDataRelayFailover(ctx context.Context, node *wgnode.Node, m relayPayer, state *relayState, peerLabel string, allowedIP netip.Prefix, pool dataRelayFlag, sessionBytes int64, policy dataRelayPurchasePolicy, relaySet rendezvousSource, ownPubkey string, ttl time.Duration) {
 	// Every relay ever excluded, not just the one currently in use —
 	// without this, a second stall (e.g. the just-adopted backup relay
 	// also looking dead because the *other* side hasn't picked it up yet)
@@ -798,6 +801,12 @@ func watchDataRelayFailover(ctx context.Context, node *wgnode.Node, m relayPayer
 		// than giving up — WaitForStall's own stallTimeout below is what
 		// rate-limits the first retry, since usedLabel is unchanged and
 		// RxBytes still isn't moving; failoverBackoff spaces out the rest.
+		relays, err := relaySet()
+		if err != nil {
+			// No token or session was bought, so this does not count toward failoverBackoff.
+			fmt.Fprintf(os.Stderr, "data-relay: %s: failover attempt failed, will retry: %v\n", peerLabel, err)
+			continue
+		}
 		endpoint, newLabel, err := relayRoutedEndpoint(node, m, remaining, sessionBytes, policy, relays, ownPubkey, pubkey, ttl)
 		if err != nil {
 			failures++
@@ -860,6 +869,15 @@ const failoverMaxBackoff = 3 * time.Minute
 // ports were coincidentally identical across calls — see docs/adr/0008).
 const dataRelayAdoptExchangeTimeout = 3 * time.Second
 
+const (
+	// rendezvousDiscoveryRetry is the minimum gap between repeated relay
+	// discovery queries while no rendezvous relay is known.
+	rendezvousDiscoveryRetry = 10 * time.Second
+	// exchangeBackoffMax caps the pause before retrying a peer that did not
+	// answer a rendezvous exchange (see exchangeBackoff).
+	exchangeBackoffMax = 2 * time.Minute
+)
+
 // On the paid path (pace nil), watchDataRelayAdopt does not gate on
 // WaitForStall the way watchDataRelayFailover does: it stays continuously present at the relay
 // instead, cycling a short Exchange every few seconds for as long as ctx
@@ -898,7 +916,11 @@ const (
 //
 // A cycle that fails fast (a refused token, an unreachable sidecar) still
 // takes dataRelayAdoptExchangeTimeout, so a failing relay is not hammered.
-func watchDataRelayAdopt(ctx context.Context, node *wgnode.Node, m relayPayer, peerLabel, ownPubkey, peerPubkey, ownCandidate string, allowedIP netip.Prefix, relays []sidecar.RendezvousRelay, pace *rate.Limiter) {
+//
+// relaySet is read on every cycle, so a rendezvous set recovered after a
+// start-up discovery failure reaches this watcher. While no relay is known,
+// a cycle waits dataRelayAdoptExchangeTimeout like any other failed cycle.
+func watchDataRelayAdopt(ctx context.Context, node *wgnode.Node, m relayPayer, peerLabel, ownPubkey, peerPubkey, ownCandidate string, allowedIP netip.Prefix, relaySet rendezvousSource, pace *rate.Limiter) {
 	var current string
 	lastChange := time.Now()
 	backoff := dataRelayAdoptExchangeTimeout
@@ -914,7 +936,11 @@ func watchDataRelayAdopt(ctx context.Context, node *wgnode.Node, m relayPayer, p
 			}
 		}
 		started := time.Now()
-		candidate, _, err := exchangeAnyMetered(relays, m, ownPubkey, peerPubkey, ownCandidate, dataRelayAdoptExchangeTimeout)
+		var candidate string
+		relays, err := relaySet()
+		if err == nil {
+			candidate, _, err = exchangeAnyMetered(relays, m, ownPubkey, peerPubkey, ownCandidate, dataRelayAdoptExchangeTimeout)
+		}
 		if err != nil {
 			select {
 			case <-ctx.Done():
@@ -1146,9 +1172,14 @@ func runServe(args []string) error {
 			SidecarURL: os.Getenv("BRAMBLE_RENDEZVOUS_PAYMENT_URL"),
 		}}
 	}
+	// discoveryFailed: the registry scan errored (not merely found nothing).
+	// The resolver below then retries it lazily; without that, one transient
+	// RPC error would leave this node with no rendezvous for its whole life.
+	discoveryFailed := false
 	if len(dataRelays) == 0 || len(rendezvousRelays) == 0 {
 		if relays, relErr := m.Relays(); relErr != nil {
-			fmt.Fprintf(os.Stderr, "relay discovery: %v (falling back to -rendezvous/-data-relay only)\n", relErr)
+			discoveryFailed = true
+			fmt.Fprintf(os.Stderr, "relay discovery: %v (will retry; using -rendezvous/-data-relay meanwhile)\n", relErr)
 		} else {
 			if len(rendezvousRelays) == 0 {
 				for _, r := range relays.Rendezvous {
@@ -1227,9 +1258,15 @@ func runServe(args []string) error {
 		},
 	}
 
-	if len(rendezvousRelays) > 0 {
-		relays, own, defaultCandidate := rendezvousRelays, ownPubkey, *myCandidate
-		loop.EndpointResolver = func(p admission.Peer, peerPubkey string) (*netip.AddrPort, error) {
+	// relaySet is what every consumer of the rendezvous set reads: the resolver below and both
+	// data-relay watchers. A start-up discovery failure that the pool later recovers from is
+	// therefore seen by the failover and adopt paths too, not only by the first connect.
+	pool := newRendezvousPool(rendezvousRelays, m.Relays, rendezvousDiscoveryRetry)
+	relaySet := rendezvousSource(pool.Get)
+	if len(rendezvousRelays) > 0 || discoveryFailed {
+		backoff := newExchangeBackoff(*ttl, exchangeBackoffMax)
+		own, defaultCandidate := ownPubkey, *myCandidate
+		resolve := func(relays []sidecar.RendezvousRelay, p admission.Peer, peerPubkey string) (*netip.AddrPort, error) {
 			if relayPeers[p.Label] {
 				endpoint, label, err := relayRoutedEndpoint(node, payer, dataRelays, *relaySessionBytes, relayPurchasePolicy, relays, own, peerPubkey, *ttl)
 				if err == nil {
@@ -1273,6 +1310,24 @@ func runServe(args []string) error {
 			}
 			return &endpoint, nil
 		}
+		loop.EndpointResolver = func(p admission.Peer, peerPubkey string) (*netip.AddrPort, error) {
+			relays, err := pool.Get()
+			if err != nil {
+				return nil, err
+			}
+			// A peer that failed to answer recently is skipped: each attempt
+			// buys a token and blocks this loop for a whole exchange timeout.
+			if wait := backoff.Wait(peerPubkey); wait > 0 {
+				return nil, fmt.Errorf("skipping rendezvous with %s for %s: it did not answer the last attempt", p.Label, wait.Round(time.Second))
+			}
+			endpoint, err := resolve(relays, p, peerPubkey)
+			if err != nil {
+				backoff.Fail(peerPubkey)
+			} else {
+				backoff.Succeed(peerPubkey)
+			}
+			return endpoint, err
+		}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -1294,7 +1349,7 @@ func runServe(args []string) error {
 			continue
 		}
 		p := p
-		go watchDataRelayFailover(ctx, node, payer, relState, p.Label, p.AllowedIP, dataRelays, *relaySessionBytes, relayPurchasePolicy, rendezvousRelays, ownPubkey, *ttl)
+		go watchDataRelayFailover(ctx, node, payer, relState, p.Label, p.AllowedIP, dataRelays, *relaySessionBytes, relayPurchasePolicy, relaySet, ownPubkey, *ttl)
 	}
 
 	// The other half of Gate 4.3: every tracked peer that ISN'T a
@@ -1305,7 +1360,7 @@ func runServe(args []string) error {
 	// so a plain direct-peer setup with no relay involved anywhere keeps
 	// its old behavior exactly (no extra re-exchange traffic on an
 	// ordinary idle connection).
-	adoptWatching := len(dataRelays) > 0 && len(rendezvousRelays) > 0
+	adoptWatching := len(dataRelays) > 0 && (len(rendezvousRelays) > 0 || discoveryFailed)
 	startAdoptWatcher := func(p admission.Peer) {
 		if !adoptWatching || relayPeers[p.Label] {
 			return
@@ -1321,7 +1376,7 @@ func runServe(args []string) error {
 				if !ok {
 					continue
 				}
-				watchDataRelayAdopt(ctx, node, payer, p.Label, ownPubkey, pubkey, *myCandidate, p.AllowedIP, rendezvousRelays, adoptPace)
+				watchDataRelayAdopt(ctx, node, payer, p.Label, ownPubkey, pubkey, *myCandidate, p.AllowedIP, relaySet, adoptPace)
 				return
 			}
 		}()

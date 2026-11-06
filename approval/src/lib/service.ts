@@ -374,6 +374,7 @@ export class ApprovalService {
           record.unresolvedWrite = unresolvedWrite
           return this.view(record)
         }
+        logSignerFailure('revoke', error)
         if (record) {
           record.status = 'approved'
           delete record.revokeRequestedAt

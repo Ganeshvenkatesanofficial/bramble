@@ -299,10 +299,10 @@ func TestSponsoredRelay_RenewsSessionAtCapWithOneRelay(t *testing.T) {
 		t.Fatal(err)
 	}
 	go watchDataRelayFailover(ctx, p.device, devicePayer, state, "cloud1", netip.PrefixFrom(p.cloudIP, 32), p.pool, 10_000,
-		unrestrictedDataRelayPurchasePolicy, p.relays, p.devicePub, 20*time.Second)
+		unrestrictedDataRelayPurchasePolicy, staticRendezvous(p.relays), p.devicePub, 20*time.Second)
 	cloudPayer := &countingPayer{relayPayer: &sponsor.Payer{Label: "cloud1"}}
 	go watchDataRelayAdopt(ctx, p.cloud, cloudPayer, "device1", p.cloudPub, p.devicePub, "",
-		netip.PrefixFrom(p.deviceIP, 32), p.relays, pace)
+		netip.PrefixFrom(p.deviceIP, 32), staticRendezvous(p.relays), pace)
 
 	if status, body, err := getUntil(p.httpClient(10*time.Second), "http://cloud1.mesh/", 20*time.Second); err != nil || status != http.StatusOK {
 		t.Fatalf("first GET: %d %q %v", status, body, err)

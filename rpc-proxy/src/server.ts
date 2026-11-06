@@ -64,6 +64,19 @@ function rpcError(id: JsonRpcId, code: number, message: string) {
   return { jsonrpc: '2.0', id, error: { code, message } }
 }
 
+/** Identical retries of a single eth_getLogs the upstream rejects as invalid params. */
+const GET_LOGS_RETRIES = 2
+
+// isInvalidParams reports whether an upstream body is a JSON-RPC error with code -32602.
+function isInvalidParams(text: string): boolean {
+  try {
+    const body: unknown = JSON.parse(text)
+    return isObject(body) && isObject(body.error) && body.error.code === -32602
+  } catch {
+    return false
+  }
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -132,14 +145,29 @@ export function createProxyServer(config: Config): ProxyServer {
     }
 
     try {
-      const upstream = await fetch(config.upstreamUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: raw,
-        redirect: 'error',
-        signal: AbortSignal.timeout(config.upstreamTimeoutMs),
-      })
-      const text = await upstream.text()
+      const callUpstream = (body: string) =>
+        fetch(config.upstreamUrl, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body,
+          redirect: 'error',
+          signal: AbortSignal.timeout(config.upstreamTimeoutMs),
+        })
+      let upstream = await callUpstream(raw)
+      let text = await upstream.text()
+      // The upstream is a load-balanced pool. A getLogs whose toBlock is the head that eth_blockNumber just
+      // returned can land on a backend that has not seen that block yet, and that backend answers -32602.
+      // Retry a single call with the identical body, so the caller's block bounds are never changed here: a
+      // pinned or historical window must return exactly the range it asked for. Callers that can safely widen
+      // an unpinned head bound to "latest" do that themselves (sidecar/src/ens/scan.ts). The retries are not
+      // logged: the log records what clients sent, not what the proxy did.
+      if (config.upstreamRetryDelayMs > 0 && calls.length === 1 && methods[0] === 'eth_getLogs') {
+        for (let retry = 0; retry < GET_LOGS_RETRIES && isInvalidParams(text); retry++) {
+          await new Promise((resolve) => setTimeout(resolve, config.upstreamRetryDelayMs))
+          upstream = await callUpstream(raw)
+          text = await upstream.text()
+        }
+      }
       // The response is rebuilt from allowed JSON-RPC fields: provider errors can echo the request URL in many forms.
       const safe = isJsonMediaType(upstream.headers.get('content-type') ?? '')
         ? sanitizeUpstreamBody(text, secrets)

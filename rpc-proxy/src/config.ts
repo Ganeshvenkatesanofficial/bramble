@@ -11,6 +11,8 @@ export interface Config {
   maxLoggedParamsChars: number
   rateLimitPerMinute: number
   upstreamTimeoutMs: number
+  /** Pause before the one retry of an eth_getLogs call the upstream rejects as invalid params. 0 disables the retry. */
+  upstreamRetryDelayMs: number
 }
 
 function intEnv(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
@@ -43,5 +45,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     maxLoggedParamsChars: intEnv(env, 'MAX_LOGGED_PARAMS_CHARS', 2048),
     rateLimitPerMinute: intEnv(env, 'RATE_LIMIT_PER_MINUTE', 300),
     upstreamTimeoutMs: intEnv(env, 'UPSTREAM_TIMEOUT_MS', 15_000),
+    upstreamRetryDelayMs: intEnv(env, 'UPSTREAM_RETRY_DELAY_MS', 1_000),
   }
 }
