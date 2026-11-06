@@ -5,7 +5,7 @@
 # Usage: publish-release.sh --release DIR --version V --env FILE [--env FILE ...]
 #          [--install-sh FILE] [--uninstall-sh FILE] [--ssh ALIAS] [--caddy] [--init] [--dry-run]
 #
-# DIR holds bramble-<os>-<arch>.tar.gz files and SHA256SUMS (scripts/release/build.sh output).
+# DIR holds bramble_<os>_<arch>.tar.gz files and SHA256SUMS (scripts/release.sh writes ./release).
 # Each --env file supplies public values only (deploy/env/public.env.example); the generator
 # reads a fixed list of names and ignores the rest, so a node env file is safe to pass.
 # --init   create /var/lib/bramble-dist on the machine (one sudo, first run only).
@@ -59,17 +59,16 @@ rpc_host="$(env_get BRAMBLE_RPC_HOST)"
 
 echo "Checking tarball checksums in $release"
 (cd "$release" && sha256sum -c SHA256SUMS) || die "checksum mismatch in $release"
-ls "$release"/bramble-*.tar.gz >/dev/null 2>&1 || die "no bramble-*.tar.gz in $release"
+ls "$release"/bramble_*.tar.gz >/dev/null 2>&1 || die "no bramble_*.tar.gz in $release"
 
 stage="$(mktemp -d "${TMPDIR:-/tmp}/bramble-publish.XXXXXX")"
 trap 'rm -rf "$stage"' EXIT
-mkdir -p "$stage/dl/$version" "$stage/tailnets"
-cp "$release"/bramble-*.tar.gz "$release/SHA256SUMS" "$stage/dl/$version/"
+mkdir -p "$stage/dl" "$stage/.well-known"
+cp "$release"/bramble_*.tar.gz "$release/SHA256SUMS" "$stage/dl/"
 
 envargs=(); for f in "${envs[@]}"; do envargs+=(--env "$f"); done
-node "$here/gen-tailnet-config.mjs" "${envargs[@]}" --out "$stage/tailnets/.new.json"
-name="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).name)' "$stage/tailnets/.new.json")"
-mv "$stage/tailnets/.new.json" "$stage/tailnets/$name.json"
+node "$here/gen-node-config.mjs" --version "$version" "${envargs[@]}" --out "$stage/.well-known/bramble.json"
+name="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).tailnet)' "$stage/.well-known/bramble.json")"
 
 bake() { # bake <src> <dest>: put the install host into a script
   grep -q '@@BRAMBLE_INSTALL_HOST@@' "$1" || echo "warning: $1 has no @@BRAMBLE_INSTALL_HOST@@ placeholder; it must already know its host" >&2
@@ -82,7 +81,7 @@ bake "$install_sh" "$stage/install.sh"
 # Last check before anything leaves this machine. SHA256SUMS and the tarballs are excluded:
 # they hold 64-digit hashes by design.
 secret_re='(^|[^0-9a-fA-F])[0-9a-fA-F]{64}([^0-9a-fA-F]|$)|BEGIN [A-Z ]*PRIVATE|PRIVATE_KEY=|Bearer [A-Za-z0-9]|api[_-]?key='
-checked=("$stage/install.sh" "$stage/tailnets")
+checked=("$stage/install.sh" "$stage/.well-known")
 [ -f "$stage/uninstall.sh" ] && checked+=("$stage/uninstall.sh")
 if grep -rIEn "$secret_re" "${checked[@]}" >/dev/null 2>&1; then
   die "staged files contain a secret-looking string; nothing was uploaded"
@@ -99,9 +98,13 @@ fi
 "${rsh[@]}" "test -d $dist && test -w $dist" || die "$dist is missing or not writable on $ssh_alias; run once with --init"
 
 # Order matters: tarballs first, install.sh last, so the entry point never names a missing file.
+# /dl is flat and holds only the current release, so --delete drops the previous one. A device
+# that downloads while the new tarball and SHA256SUMS land one after the other sees a checksum
+# mismatch and refuses; it succeeds on retry.
 rsync_opts=(-rt --chmod=D755,F644 -e "ssh -o BatchMode=yes")
-rsync "${rsync_opts[@]}" "$stage/dl/" "$ssh_alias:$dist/dl/"
-rsync "${rsync_opts[@]}" "$stage/tailnets/" "$ssh_alias:$dist/tailnets/"
+rsync "${rsync_opts[@]}" --delete --exclude=SHA256SUMS "$stage/dl/" "$ssh_alias:$dist/dl/"
+rsync "${rsync_opts[@]}" "$stage/dl/SHA256SUMS" "$ssh_alias:$dist/dl/SHA256SUMS"
+rsync "${rsync_opts[@]}" "$stage/.well-known/" "$ssh_alias:$dist/.well-known/"
 [ -f "$stage/uninstall.sh" ] && rsync "${rsync_opts[@]}" "$stage/uninstall.sh" "$ssh_alias:$dist/uninstall.sh"
 rsync "${rsync_opts[@]}" "$stage/install.sh" "$ssh_alias:$dist/install.sh"
 echo "Uploaded to $ssh_alias:$dist"
@@ -119,4 +122,4 @@ if [ "$do_caddy" -eq 1 ]; then
   echo "Caddy reloaded (old file kept as /etc/caddy/Caddyfile.bak-$ts)"
 fi
 
-echo "Next: deploy/scripts/smoke-public.sh https://$console_host $version $name"
+echo "Next: deploy/scripts/smoke-public.sh https://$console_host $name"
