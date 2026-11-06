@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bun mock/server.ts",
     "build": "next build --webpack",
+    "embed": "node scripts/embed.mjs",
     "lint": "eslint",
     "format": "prettier --write . --ignore-path .gitignore",
     "format:check": "prettier --check . --ignore-path .gitignore",

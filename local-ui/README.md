@@ -8,13 +8,14 @@ The UI reads one endpoint, `GET /api/state`, every second. It writes only throug
 
 Run these from the repository root.
 
-| Command                                                     | What it does                                                        |
-| ----------------------------------------------------------- | ------------------------------------------------------------------- |
-| `pnpm --filter @bramble/local-ui build`                     | Writes the static export to `local-ui/out/`. Go embeds this folder. |
-| `pnpm --filter @bramble/local-ui dev`                       | Serves `out/` and a mock `bramble` API on `http://127.0.0.1:7788/`. |
-| `pnpm --filter @bramble/local-ui test`                      | Unit tests for the copy helpers, parsers and the mock.              |
-| `pnpm --filter @bramble/local-ui test:ui`                   | Playwright run at 1280 px and 390 px wide. Needs `build` first.     |
-| `SCREENSHOT_DIR=docs/screenshots/local-ui pnpm ... test:ui` | Writes a screenshot of every screen to that folder.                 |
+| Command                                                     | What it does                                                                                            |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `pnpm --filter @bramble/local-ui build`                     | Writes the static export to `local-ui/out/`.                                                            |
+| `pnpm --filter @bramble/local-ui embed`                     | Copies `out/` into `node-daemon/ui/dist/`, which Go embeds. Run it after `build` and before `go build`. |
+| `pnpm --filter @bramble/local-ui dev`                       | Serves `out/` and a mock `bramble` API on `http://127.0.0.1:7788/`.                                     |
+| `pnpm --filter @bramble/local-ui test`                      | Unit tests for the copy helpers, parsers and the mock.                                                  |
+| `pnpm --filter @bramble/local-ui test:ui`                   | Playwright run at 1280 px and 390 px wide. Needs `build` first.                                         |
+| `SCREENSHOT_DIR=docs/screenshots/local-ui pnpm ... test:ui` | Writes a screenshot of every screen to that folder.                                                     |
 
 ## Screens
 

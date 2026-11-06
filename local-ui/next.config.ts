@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next'
 
 const config: NextConfig = {
-  // The `bramble` binary embeds the static export in `out/` and serves it at `/`.
+  // The export lands in `out/`; `pnpm embed` copies it to `node-daemon/ui/dist/` for go:embed.
   output: 'export',
   poweredByHeader: false,
   images: { unoptimized: true },
