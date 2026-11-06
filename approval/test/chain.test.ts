@@ -193,6 +193,30 @@ describe('approval service over the admincli signer', () => {
     expect(s.chain.records.get(`agent-1.${TAILNET}|acl`)).toBe('')
   })
 
+  test('immediate revoke after confirmed approval survives an older empty ENS snapshot', async () => {
+    const s = service()
+    s.chain.state.stale = { afterWrites: 0, value: null }
+    const { id } = await s.suggest()
+    const approved = await s.approve(id)
+    expect(approved.status).toBe(200)
+    const grant = (await approved.json()).grantTransaction
+    expect(grant).toEqual({ transactionHash: `0x${'1'.padStart(64, '0')}` })
+
+    const revoked = await s.revoke()
+    const body = await revoked.json()
+    expect({ status: revoked.status, body }).toMatchObject({
+      status: 200,
+      body: { status: 'revoked', revokeTransaction: { transactionHash: `0x${'2'.padStart(64, '0')}` } },
+    })
+    const detail = await (await s.api.handle(call(`/requests/${id}`))).json()
+    expect(detail).toMatchObject({
+      status: 'revoked',
+      grantTransaction: grant,
+      revokeTransaction: { transactionHash: `0x${'2'.padStart(64, '0')}` },
+      revokeReason: 'manual',
+    })
+  })
+
   test('a revoked, unpublished or expired ENS identity blocks approval before any write', async () => {
     for (const facts of [
       { pubkey: 'ab', revoked: true, expiry: FAR_FUTURE },

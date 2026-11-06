@@ -1,5 +1,4 @@
 import {
-  clearAcl,
   computeGrantDigests,
   deviceName,
   grantAcl,
@@ -157,11 +156,12 @@ export function createChainAdapters(config: ChainConfig): ChainAdapters {
 
       async revoke(agentLabel) {
         const tracked = track()
-        const deps = { resolver, signer: tracked.signer, tailnetName }
         try {
-          const cleared = await clearAcl(deps, { deviceLabel: agentLabel })
-          if (!cleared.txHash) throw new Error('acl was already empty; no transaction to report')
-          return { transactionHash: cleared.txHash }
+          // The service has established a grant to revoke. An older empty ENS read
+          // must not skip the clear; only this transaction's receipt proves it settled.
+          const pending = await tracked.signer.setText(deviceName(agentLabel, tailnetName), 'acl', '')
+          await pending.wait()
+          return { transactionHash: pending.hash }
         } catch (error) {
           const hash = tracked.submittedHash()
           if (!hash) throw error
