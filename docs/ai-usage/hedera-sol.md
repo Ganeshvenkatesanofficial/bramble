@@ -15,7 +15,7 @@ Verified:
   lifecycle test. This exercises in-memory ENS and loopback WireGuard.
 - `cd node-daemon && go test -race ./...` passed.
 - The built `brambled` accepts `serve -sponsored-relay -relay-first -label
-  review-device` with an isolated environment. It reaches the expected
+review-device` with an isolated environment. It reaches the expected
   missing-tailnet configuration error instead of rejecting the flags.
 
 Read from source: child output stays in memory; the crash summary excludes
@@ -90,7 +90,6 @@ Additional local evidence paths written in this wake:
 - `/home/anonjr/bramble-work/status/eth-243-release-auth-receipts.json`
 - `/home/anonjr/.cache/agent-tmp/eth-243-post-release-handoff.md` (handoff references the saved task report)
 
-
 ## ETH-243 running-slot validation
 
 Demo beats 1, 2, 3 and 5. Verified two isolated Pi access-lifecycle runs at
@@ -117,7 +116,6 @@ Additional handoff paths:
 
 - `/home/anonjr/bramble-work/status/eth-243/artifact-helper/` (upload receipts)
 - `/home/anonjr/.cache/agent-tmp/eth-243-running-slot-handoff.md`
-
 
 ## ETH-308 PR 42 documentation conflict resolution
 
@@ -157,3 +155,108 @@ Paths written:
 - `docs/DEMO_SCRIPT.md`
 - `docs/measurements/2026-11-06-onboarding-acceptance.md`
 - `docs/ai-usage/hedera-sol.md`
+
+## 2026-11-06 — ETH-317 admin console overhaul
+
+Demo beats: 2, 4 and 5. Adds an authenticated, redacted network view and
+tracked-device and configured-relay diagnostics. Preserves the decision services.
+
+Paths written in the API slice:
+
+- `approval/src/lib/network.ts`
+- `approval/src/lib/api.ts`
+- `approval/src/lib/activity.ts`
+- `approval/src/app/api/[...path]/route.ts`
+- `approval/test/network.test.ts`
+- `approval/test/api.test.ts`
+- `docs/ai-usage/hedera-sol.md`
+
+Verified: API authentication, topology redaction and grant-state tests fail before
+implementation and pass after implementation. Browser and repository validation
+follow in the UI slice.
+
+Paths written in the UI and evidence slice:
+
+- `approval/src/app/globals.css`
+- `approval/src/app/layout.tsx`
+- `approval/src/app/audit/fixtures/page.tsx`
+- `approval/src/app/payments/page.tsx`
+- `approval/src/components/approval-console.tsx`
+- `approval/src/components/join-console.tsx`
+- `approval/src/components/request-card.tsx`
+- `approval/src/components/network-panel.tsx`
+- `approval/e2e/console.spec.ts`
+- `approval/e2e/memory-server.ts`
+- `approval/e2e/network.spec.ts`
+- `approval/e2e/accessibility.spec.ts`
+- `approval/package.json`
+- `join-ui/src/index.tsx`
+- `pnpm-lock.yaml`
+- `README.md`
+- `approval/README.md`
+- `docs/reference/approval-api.md`
+- `docs/reference/approval-network.md`
+
+The screenshot check caught repeated onboarding panels from duplicate sibling
+keys. A browser count assertion reproduces the defect before the key correction.
+
+Implementation review: Standards found no documented violation and one optional
+duplicated-validator smell. Spec found numeric peer endpoints were misclassified
+against DNS-named relays. A failing API test reproduces that issue; bounded
+server-side DNS resolution fixes it and keeps unresolved paths unknown.
+The network module also avoids importing browser fetch types into server consumers.
+
+## 2026-11-06 — ETH-317 requested no-feed revision
+
+Demo beats: 2, 4 and 5. Retains the same branch and PR #66. Builds topology from
+approval facts without the gateway tunnel and probes only server-known HTTP
+targets from the console host. Missing device probe targets remain unavailable.
+
+Paths written in the API revision:
+
+- `approval/src/lib/network.ts`
+- `approval/src/lib/api.ts`
+- `approval/src/app/api/[...path]/route.ts`
+- `approval/test/network.test.ts`
+- `approval/test/api.test.ts`
+- `docs/ai-usage/hedera-sol.md`
+
+Verified: the no-feed API regression fails before the revision and passes after
+it with `network` omitted and `BRAMBLED_STATUS_URL` unset. Seven network API tests
+pass, including real loopback HTTP checks, grant/revoke state and response redaction.
+
+Paths written in the browser and documentation revision:
+
+- `approval/src/app/globals.css`
+- `approval/src/components/network-panel.tsx`
+- `approval/e2e/memory-server.ts`
+- `approval/e2e/network.spec.ts`
+- `docs/reference/approval-network.md`
+- `docs/reference/approval-api.md`
+- `approval/README.md`
+- `README.md`
+
+The no-feed browser assertion reproduces absent unavailable-field labels against
+the prior build. New browser screenshots and axe results follow final validation.
+
+Verified on 6 November 2026 after the revision: `pnpm verify` exits 0;
+126 approval tests pass; all 24 Playwright tests pass. Eight axe scans report zero
+violations. SVG color contrast remains incomplete for 12 text nodes in each live
+fixture scan and eight in each no-feed scan; explicit palette contrast checks
+pass. Inspected all four no-feed screenshots at desktop and phone widths in both
+themes. Automated checks do not establish complete manual WCAG conformance or
+live cloud connectivity.
+
+Read from source: implementation review finds zero documented standards
+violations and zero spec gaps. One optional duplicated-defaults smell remains in
+unavailable device construction. Grant/revoke service files remain unchanged.
+Cross-family review and merge remain Open.
+
+Evidence paths written:
+
+- `/home/anonjr/bramble-work/status/eth-317-revision-verify.log`
+- `/home/anonjr/bramble-work/status/eth-317-revision-browser.log`
+- `/home/anonjr/bramble-work/status/eth-317-revision-evidence/`
+- `approval/test-results/` (ignored screenshots and axe reports)
+
+- `/home/anonjr/.cache/agent-tmp/eth-317-revision-handoff.md`

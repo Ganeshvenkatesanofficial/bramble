@@ -4,6 +4,7 @@ import { paymentsHandler } from '../../../lib/payments-handler'
 import { auditTrailFromEnv } from '../../../lib/audit-runtime'
 import { ConfigError, realAdaptersFromEnv, realJoinChainFromEnv } from '../../../lib/chain-env'
 import { createSettlementSource } from '../../../lib/payments'
+import { createNetworkSource } from '../../../lib/network'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -33,6 +34,11 @@ function joinAdapter() {
   }
 }
 const api = createApprovalApi({
+  network: createNetworkSource({
+    baseUrl: () => process.env.BRAMBLED_STATUS_URL,
+    dataRelays: () => process.env.BRAMBLE_DATA_RELAYS,
+    rendezvousUrl: () => process.env.BRAMBLE_RENDEZVOUS_PAYMENT_URL,
+  }),
   joinChain: joinAdapter(),
   token: () => process.env.APPROVAL_DEMO_TOKEN,
   signer: chain?.signer,

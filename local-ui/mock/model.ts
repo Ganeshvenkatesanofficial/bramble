@@ -3,7 +3,7 @@
  * `/api/admin/*` proxy. It exists so the UI and its browser tests do not wait for the real daemon.
  * Test hooks live under `/__test/*`; the real daemon has none of them.
  */
-import type { BrambleState, JoinRecord, Peer } from '../src/lib/contract'
+import type { BrambleState, JoinRecord, Peer, ServiceLink } from '../src/lib/contract'
 
 export type Scenario =
   'fresh' | 'ready' | 'pending' | 'approved' | 'denied' | 'connected' | 'connected-empty' | 'error' | 'error-first-join'
@@ -23,6 +23,10 @@ export interface Flags {
 const FINGERPRINT = '9f3ac1d27b4e86a05c13de7f2a98b410'
 
 const seconds = (offset: number) => new Date(Date.now() - offset * 1000).toISOString()
+
+function services(): ServiceLink[] {
+  return [{ peer: 'gateway-1', service: 'task', url: 'http://127.0.0.1:41873/task' }]
+}
 
 function peers(): Peer[] {
   return [
@@ -103,6 +107,7 @@ export function createMock() {
       fingerprint: FINGERPRINT,
       isAdmin: admin,
       peers: [],
+      services: [],
     }
     const named = { ...base, phase: 'ready' as const, name: 'laptop-ana' }
     const tailnet = 'acme.bramble.eth'
@@ -119,6 +124,7 @@ export function createMock() {
         joinId: 'join-099',
         meshIp: '100.64.0.7',
         peers: peers(),
+        services: services(),
       },
       'connected-empty': { ...named, phase: 'connected', tailnet, joinId: 'join-099', meshIp: '100.64.0.7' },
       'error-first-join': {
@@ -147,7 +153,7 @@ export function createMock() {
   function connectSoon() {
     clearTimeout(connectTimer)
     connectTimer = setTimeout(() => {
-      if (state.phase === 'approved') state = { ...state, phase: 'connected', peers: peers() }
+      if (state.phase === 'approved') state = { ...state, phase: 'connected', peers: peers(), services: services() }
     }, flags.connectDelayMs)
   }
 
@@ -167,7 +173,7 @@ export function createMock() {
         state = { ...state, phase: 'approved', meshIp: join.meshIp }
         connectSoon()
       } else {
-        state = { ...state, phase: 'denied', meshIp: undefined, peers: [] }
+        state = { ...state, phase: 'denied', meshIp: undefined, peers: [], services: [] }
       }
     }
     return json(join)
@@ -226,7 +232,15 @@ export function createMock() {
     }
     if (path === 'leave' && request.method === 'POST') {
       clearTimeout(connectTimer)
-      state = { ...state, phase: 'ready', tailnet: undefined, joinId: undefined, meshIp: undefined, peers: [] }
+      state = {
+        ...state,
+        phase: 'ready',
+        tailnet: undefined,
+        joinId: undefined,
+        meshIp: undefined,
+        peers: [],
+        services: [],
+      }
       return json({ ok: true })
     }
     if (path === 'test' && request.method === 'POST') {

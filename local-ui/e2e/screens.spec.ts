@@ -103,6 +103,9 @@ test('connected: peers show direct and relayed paths, tests report results, leav
   await expect(direct.getByText('Direct')).toBeVisible()
   await expect(page.getByRole('listitem', { name: 'Device agent-1' }).getByText('Relayed')).toBeVisible()
   await expect(page.getByRole('listitem', { name: 'Device laptop-bo' }).getByText('Not connected')).toBeVisible()
+  const open = page.getByRole('link', { name: 'Open task' })
+  await expect(open).toHaveAttribute('href', 'http://127.0.0.1:41873/task')
+  await expect(open).toHaveAttribute('target', '_blank')
   await shot(page, info, '08-connected')
 
   await page.getByRole('button', { name: 'Test connection', exact: true }).click()

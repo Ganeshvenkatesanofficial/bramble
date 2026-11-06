@@ -16,7 +16,7 @@ export default async function AuditFixturesPage() {
           <span className="network mono">Fixture preview</span>
         </div>
       </header>
-      <main>
+      <main id="main-content">
         <div className="page-heading">
           <div>
             <p className="eyebrow">Approval console · Offline review</p>

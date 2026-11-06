@@ -336,7 +336,12 @@ async function approvalTimeout() {
     `HTTP ${failed.status} ${errorLine(failed.body)}`
   )
   check('console answer leaks no RPC URL or key', clean(failed.text))
-  check('service log keeps the cause but masks the RPC URL', log.includes('timed out') && clean(log), log)
+  // Since 0701e14 the service logs only the failed operation, never the cause.
+  check(
+    'service log names the failed grant and leaks no RPC URL',
+    log.includes('signer grant failed') && clean(log),
+    log
+  )
   rpcDown = false
   const retried = await read(await call(console3, `/requests/${request.id}/approve`, 'POST'))
   check(

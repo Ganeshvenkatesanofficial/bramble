@@ -10,6 +10,8 @@ export function JoinConsole({ token }: { token: string }) {
   const [members, setMembers] = useState<JoinRow[]>([])
   const [queueError, setQueueError] = useState<string | null>(null)
   const [memberError, setMemberError] = useState<string | null>(null)
+  const [queueLoaded, setQueueLoaded] = useState(false)
+  const [membersLoaded, setMembersLoaded] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [refresh, setRefresh] = useState(0)
@@ -29,9 +31,11 @@ export function JoinConsole({ token }: { token: string }) {
         if (kind === 'joins') {
           setJoins(response.joins ?? [])
           setQueueError(null)
+          setQueueLoaded(true)
         } else {
           setMembers(response.members ?? [])
           setMemberError(null)
+          setMembersLoaded(true)
         }
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -90,8 +94,24 @@ export function JoinConsole({ token }: { token: string }) {
           {actionError ?? queueError ?? memberError}
         </p>
       )}
-      <PendingJoins {...props} rows={joins} />
-      <Members {...props} rows={members} />
+      {queueLoaded ? (
+        <PendingJoins {...props} rows={joins} />
+      ) : (
+        !queueError && (
+          <p role="status" className="empty">
+            Loading device joins…
+          </p>
+        )
+      )}
+      {membersLoaded ? (
+        <Members {...props} rows={members} />
+      ) : (
+        !memberError && (
+          <p role="status" className="empty">
+            Loading ENS members…
+          </p>
+        )
+      )}
       {activity.length > 0 && <JoinActivity rows={activity} />}
     </>
   )

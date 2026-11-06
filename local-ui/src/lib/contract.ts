@@ -11,6 +11,13 @@ export interface Peer {
   rttMs?: number
 }
 
+/** A tailnet service this device can open through its loopback forward. */
+export interface ServiceLink {
+  peer: string
+  service: string
+  url: string
+}
+
 export interface BrambleState {
   phase: Phase
   name: string
@@ -20,6 +27,7 @@ export interface BrambleState {
   meshIp?: string
   isAdmin: boolean
   peers: Peer[]
+  services: ServiceLink[]
   error?: { message: string; nextStep: string }
 }
 
@@ -51,6 +59,22 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 const text = (value: unknown) => (typeof value === 'string' ? value : undefined)
 
+/** Keeps only plain-http links to this machine's loopback, the only place a forward listens. */
+function parseServiceLink(value: unknown): ServiceLink | null {
+  if (!isRecord(value)) return null
+  const peer = text(value.peer)
+  const service = text(value.service)
+  const raw = text(value.url)
+  if (!peer || !service || !raw) return null
+  try {
+    const url = new URL(raw)
+    if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.username || url.password) return null
+    return { peer, service, url: url.href }
+  } catch {
+    return null
+  }
+}
+
 export function parseState(value: unknown): BrambleState {
   if (!isRecord(value) || typeof value.phase !== 'string' || !phases.includes(value.phase)) {
     throw new Error('Unexpected reply from Bramble.')
@@ -75,6 +99,9 @@ export function parseState(value: unknown): BrambleState {
         typeof peer.lastHandshake === 'string' || typeof peer.lastHandshake === 'number' ? peer.lastHandshake : null,
       rttMs: typeof peer.rttMs === 'number' ? peer.rttMs : undefined,
     })),
+    services: (Array.isArray(value.services) ? value.services : [])
+      .map(parseServiceLink)
+      .filter((link): link is ServiceLink => link !== null),
     error,
   }
 }
