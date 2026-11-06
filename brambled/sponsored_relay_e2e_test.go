@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -114,60 +115,65 @@ func TestSponsoredRelay_RefusesUnenrolledLabel(t *testing.T) {
 	}
 }
 
-// TestSponsoredRelay_HTTP200ThroughRelayWithNoDirectPath is ETH-189's
-// end-to-end check: a "device" node with no Hedera key and a "cloud" node,
-// neither given any endpoint for the other, reach each other only through
-// the real relay binary, using sponsored tokens and a sponsored session.
-func TestSponsoredRelay_HTTP200ThroughRelayWithNoDirectPath(t *testing.T) {
-	rdvAddr, sidecarURL := startRealSponsoringRelay(t, "device1,cloud1", 1<<20)
-	relays := []sidecar.RendezvousRelay{{Label: "relay1", Address: rdvAddr, SidecarURL: sidecarURL}}
-	pool := dataRelayFlag{"relay1": sidecarURL}
+// sponsoredPair is a "device" node with no Hedera key and a "cloud" node,
+// neither given any endpoint for the other, joined only through the real
+// relay binary with sponsored tokens and a sponsored session for the device.
+type sponsoredPair struct {
+	device, cloud       *wgnode.Node
+	devicePub, cloudPub string
+	deviceIP, cloudIP   netip.Addr
+	relays              []sidecar.RendezvousRelay
+	pool                dataRelayFlag
+	deviceEndpoint      *netip.AddrPort
+}
 
-	devicePriv, devicePub, err := wgnode.GenerateKeyPair()
-	if err != nil {
+func connectSponsoredPair(t *testing.T, sponsorBytes int64, handler http.Handler) *sponsoredPair {
+	t.Helper()
+	rdvAddr, sidecarURL := startRealSponsoringRelay(t, "device1,cloud1", sponsorBytes)
+	p := &sponsoredPair{
+		relays:   []sidecar.RendezvousRelay{{Label: "relay1", Address: rdvAddr, SidecarURL: sidecarURL}},
+		pool:     dataRelayFlag{"relay1": sidecarURL},
+		deviceIP: netip.MustParseAddr("10.99.0.1"),
+		cloudIP:  netip.MustParseAddr("10.99.0.2"),
+	}
+	var devicePriv, cloudPriv string
+	var err error
+	if devicePriv, p.devicePub, err = wgnode.GenerateKeyPair(); err != nil {
 		t.Fatal(err)
 	}
-	cloudPriv, cloudPub, err := wgnode.GenerateKeyPair()
-	if err != nil {
+	if cloudPriv, p.cloudPub, err = wgnode.GenerateKeyPair(); err != nil {
 		t.Fatal(err)
 	}
-	deviceIP, cloudIP := netip.MustParseAddr("10.99.0.1"), netip.MustParseAddr("10.99.0.2")
-	device, err := wgnode.New(wgnode.Config{PrivateKeyHex: devicePriv, ListenPort: 0, LocalAddress: deviceIP, Netstack: true})
-	if err != nil {
+	if p.device, err = wgnode.New(wgnode.Config{PrivateKeyHex: devicePriv, ListenPort: 0, LocalAddress: p.deviceIP, Netstack: true}); err != nil {
 		t.Fatal(err)
 	}
-	defer device.Close()
-	cloud, err := wgnode.New(wgnode.Config{PrivateKeyHex: cloudPriv, ListenPort: 0, LocalAddress: cloudIP, Netstack: true})
-	if err != nil {
+	t.Cleanup(func() { p.device.Close() })
+	if p.cloud, err = wgnode.New(wgnode.Config{PrivateKeyHex: cloudPriv, ListenPort: 0, LocalAddress: p.cloudIP, Netstack: true}); err != nil {
 		t.Fatal(err)
 	}
-	defer cloud.Close()
+	t.Cleanup(func() { p.cloud.Close() })
 
-	ln, err := cloud.ListenTCP(8080)
+	ln, err := p.cloud.ListenTCP(8080)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
-	go func() {
-		_ = http.Serve(ln, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, "hello through the sponsored relay")
-		}))
-	}()
+	t.Cleanup(func() { ln.Close() })
+	go func() { _ = http.Serve(ln, handler) }()
 
 	// Device side: the flagged -relay-peer, sponsored. Cloud side: the
 	// adopting peer; it only needs a sponsored rendezvous token.
-	var deviceEndpoint, cloudEndpoint *netip.AddrPort
+	var cloudEndpoint *netip.AddrPort
 	var deviceErr, cloudErr error
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		deviceEndpoint, _, deviceErr = relayRoutedEndpoint(device, &sponsor.Payer{Label: "device1"}, pool, 10_000,
-			unrestrictedDataRelayPurchasePolicy, relays, devicePub, cloudPub, 20*time.Second)
+		p.deviceEndpoint, _, deviceErr = relayRoutedEndpoint(p.device, &sponsor.Payer{Label: "device1"}, p.pool, 10_000,
+			unrestrictedDataRelayPurchasePolicy, p.relays, p.devicePub, p.cloudPub, 20*time.Second)
 	}()
 	go func() {
 		defer wg.Done()
-		candidate, _, err := exchangeAnyMetered(relays, &sponsor.Payer{Label: "cloud1"}, cloudPub, devicePub, "", 20*time.Second)
+		candidate, _, err := exchangeAnyMetered(p.relays, &sponsor.Payer{Label: "cloud1"}, p.cloudPub, p.devicePub, "", 20*time.Second)
 		if err != nil {
 			cloudErr = err
 			return
@@ -177,42 +183,154 @@ func TestSponsoredRelay_HTTP200ThroughRelayWithNoDirectPath(t *testing.T) {
 			cloudErr = err
 			return
 		}
-		cloudErr = cloud.SetPersistentKeepalive(devicePub, dataRelayKeepaliveSeconds)
+		cloudErr = p.cloud.SetPersistentKeepalive(p.devicePub, dataRelayKeepaliveSeconds)
 		cloudEndpoint = &addr
 	}()
 	wg.Wait()
 	if deviceErr != nil || cloudErr != nil {
 		t.Fatalf("device: %v; cloud: %v", deviceErr, cloudErr)
 	}
-	if deviceEndpoint.String() != cloudEndpoint.String() {
-		t.Fatalf("endpoints differ: %s vs %s", deviceEndpoint, cloudEndpoint)
+	if p.deviceEndpoint.String() != cloudEndpoint.String() {
+		t.Fatalf("endpoints differ: %s vs %s", p.deviceEndpoint, cloudEndpoint)
 	}
-	if err := device.AddPeer(cloudPub, netip.PrefixFrom(cloudIP, 32), deviceEndpoint); err != nil {
+	if err := p.device.AddPeer(p.cloudPub, netip.PrefixFrom(p.cloudIP, 32), p.deviceEndpoint); err != nil {
 		t.Fatal(err)
 	}
-	if err := cloud.AddPeer(devicePub, netip.PrefixFrom(deviceIP, 32), cloudEndpoint); err != nil {
+	if err := p.cloud.AddPeer(p.devicePub, netip.PrefixFrom(p.deviceIP, 32), cloudEndpoint); err != nil {
 		t.Fatal(err)
 	}
+	return p
+}
 
-	client := &http.Client{
-		Timeout: 20 * time.Second,
+func (p *sponsoredPair) httpClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
 		Transport: &http.Transport{DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-			return device.DialTCP(netip.AddrPortFrom(cloudIP, 8080))
+			return p.device.DialTCP(netip.AddrPortFrom(p.cloudIP, 8080))
 		}},
 	}
-	var resp *http.Response
-	for deadline := time.Now().Add(20 * time.Second); time.Now().Before(deadline); time.Sleep(300 * time.Millisecond) {
-		if resp, err = client.Get("http://cloud1.mesh/"); err == nil {
-			break
+}
+
+// getUntil retries a GET until it returns or the deadline passes.
+func getUntil(client *http.Client, url string, within time.Duration) (int, string, error) {
+	var lastErr error
+	for deadline := time.Now().Add(within); time.Now().Before(deadline); time.Sleep(300 * time.Millisecond) {
+		resp, err := client.Get(url)
+		if err != nil {
+			lastErr = err
+			continue
 		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		return resp.StatusCode, string(body), nil
 	}
+	return 0, "", lastErr
+}
+
+// TestSponsoredRelay_HTTP200ThroughRelayWithNoDirectPath is ETH-189's
+// end-to-end check: a device with no Hedera key reaches a cloud node only
+// through the real relay binary, using sponsored tokens and a sponsored
+// session.
+func TestSponsoredRelay_HTTP200ThroughRelayWithNoDirectPath(t *testing.T) {
+	p := connectSponsoredPair(t, 1<<20, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "hello through the sponsored relay")
+	}))
+	status, body, err := getUntil(p.httpClient(20*time.Second), "http://cloud1.mesh/", 20*time.Second)
 	if err != nil {
 		t.Fatalf("HTTP GET through the relay: %v", err)
 	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	t.Logf("device -> relay %s -> cloud: HTTP %d %q", deviceEndpoint, resp.StatusCode, body)
-	if resp.StatusCode != http.StatusOK || string(body) != "hello through the sponsored relay" {
-		t.Fatalf("unexpected response: %d %q", resp.StatusCode, body)
+	t.Logf("device -> relay %s -> cloud: HTTP %d %q", p.deviceEndpoint, status, body)
+	if status != http.StatusOK || body != "hello through the sponsored relay" {
+		t.Fatalf("unexpected response: %d %q", status, body)
+	}
+}
+
+// countingPayer counts the tokens and data-relay sessions a payer takes.
+type countingPayer struct {
+	relayPayer
+	tokens, sessions atomic.Int32
+}
+
+func (c *countingPayer) RendezvousToken(sidecarURL string) (*sidecar.RendezvousTokenResponse, error) {
+	resp, err := c.relayPayer.RendezvousToken(sidecarURL)
+	if err == nil {
+		c.tokens.Add(1)
+	}
+	return resp, err
+}
+
+func (c *countingPayer) DataRelaySession(sidecarURL string, bytes int64) (*sidecar.DataRelaySessionResponse, error) {
+	resp, err := c.relayPayer.DataRelaySession(sidecarURL, bytes)
+	if err == nil {
+		c.sessions.Add(1)
+	}
+	return resp, err
+}
+
+// TestSponsoredRelay_RenewsSessionAtCapWithOneRelay is ETH-195's renewal
+// finding: with a single relay, a sponsored session that reaches its byte
+// cap must be replaced by a new one, not end the connection. The cap is
+// 64 KiB; a 512 KiB download exhausts it. The device's failover watcher and
+// the cloud's paced, stall-gated adopt watcher run as runServe wires them.
+// A session's TTL expiry stops forwarding the same way, so the same path
+// renews it; this test does not wait out the 5-minute TTL.
+func TestSponsoredRelay_RenewsSessionAtCapWithOneRelay(t *testing.T) {
+	big := strings.Repeat("x", 512<<10)
+	p := connectSponsoredPair(t, 64<<10, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/big" {
+			fmt.Fprint(w, big)
+			return
+		}
+		fmt.Fprint(w, "hello after renewal")
+	}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	devicePayer := &countingPayer{relayPayer: &sponsor.Payer{Label: "device1"}}
+	devicePayer.sessions.Store(1) // the session connectSponsoredPair took
+	state := newRelayState()
+	state.set("cloud1", p.cloudPub, "relay1")
+	pace, err := sponsor.PollLimiter(30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go watchDataRelayFailover(ctx, p.device, devicePayer, state, "cloud1", netip.PrefixFrom(p.cloudIP, 32), p.pool, 10_000,
+		unrestrictedDataRelayPurchasePolicy, p.relays, p.devicePub, 20*time.Second)
+	cloudPayer := &countingPayer{relayPayer: &sponsor.Payer{Label: "cloud1"}}
+	go watchDataRelayAdopt(ctx, p.cloud, cloudPayer, "device1", p.cloudPub, p.devicePub, "",
+		netip.PrefixFrom(p.deviceIP, 32), p.relays, pace)
+
+	if status, body, err := getUntil(p.httpClient(10*time.Second), "http://cloud1.mesh/", 20*time.Second); err != nil || status != http.StatusOK {
+		t.Fatalf("first GET: %d %q %v", status, body, err)
+	}
+	// On a healthy link the paced adopter must not poll: the unpaced loop
+	// takes a token every 3 s and used the default 30/hour in 90 s.
+	time.Sleep(15 * time.Second)
+	if n := cloudPayer.tokens.Load(); n != 0 {
+		t.Fatalf("cloud took %d sponsored tokens on a healthy link", n)
+	}
+	// The download runs into the cap; it may fail or stall, which is the point.
+	if _, body, err := getUntil(p.httpClient(8*time.Second), "http://cloud1.mesh/big", 8*time.Second); err == nil && len(body) == len(big) {
+		t.Fatalf("a %d-byte body crossed a 64 KiB session; the cap did not apply", len(body))
+	}
+
+	deadline := time.Now().Add(90 * time.Second)
+	for devicePayer.sessions.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(500 * time.Millisecond)
+	}
+	if n := devicePayer.sessions.Load(); n < 2 {
+		t.Fatalf("no new sponsored session after the cap (sessions taken: %d)", n)
+	}
+	status, body, err := getUntil(p.httpClient(10*time.Second), "http://cloud1.mesh/", 60*time.Second)
+	if err != nil {
+		t.Fatalf("GET after renewal: %v", err)
+	}
+	t.Logf("after the cap: %d sponsored sessions, %d cloud tokens, HTTP %d %q", devicePayer.sessions.Load(), cloudPayer.tokens.Load(), status, body)
+	if status != http.StatusOK || body != "hello after renewal" {
+		t.Fatalf("unexpected response after renewal: %d %q", status, body)
 	}
 }

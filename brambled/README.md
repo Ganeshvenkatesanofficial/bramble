@@ -78,6 +78,12 @@ WireGuard device's peer table from it.
     for a device with no Hedera key. The relay must run `-sponsor-enrolled`;
     it checks `-label` is enrolled, grants a capped free session and sees the
     device's source IP (`../docs/adr/0018-sponsored-relay-sessions.md`).
+    When a session reaches its cap or TTL, the failover watcher asks the pool
+    for a new one.
+  - `-sponsored-tokens-per-hour` (default `30`) — with `-sponsored-relay`,
+    the relay's `-sponsor-max-per-hour`. For peers it adopts, brambled polls
+    the relay only while the peer's traffic has stalled, and keeps its polling
+    a fifth under this limit so connects and renewals still get a token.
   - `-relay-first` — treat every tracked peer as a `-relay-peer`. Opens one
     session per peer; on a large tailnet name the cloud labels with
     `-relay-peer` instead.
