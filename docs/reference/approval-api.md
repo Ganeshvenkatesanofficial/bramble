@@ -174,7 +174,7 @@ The output contains `version`, `tailnet`, `chainId`, `rpcUrl`, `registry`, `join
 
 ## Join verification
 
-- **Verified:** on 6 November 2026, `pnpm verify` passes. Approval tests: 88 tests and 506 assertions. HTTP lifecycle, token checks, validation, rate limiting, retries, allocation reservation, and restart-member revocation use the in-memory chain and admincli.
+- **Verified:** on 6 November 2026, `pnpm verify` passes. Approval tests: 90 tests and 516 assertions. HTTP lifecycle, token checks, validation, rate limiting, retries, allocation reservation, and restart-member revocation use the in-memory chain and admincli.
 - **Verified:** eight Playwright checks pass at 1280 px and 390 px, including a join appearing within two seconds and approve/revoke/deny. Tests use ports 13181/13182 and the in-memory chain; they do not prove public-host latency or a Sepolia transaction.
 - **Verified:** the receipt-timeout test uses a loopback JSON-RPC boundary and confirms that a retry sends one transaction total.
 - **Open:** the opt-in Sepolia smoke (`SEPOLIA_PRIVATE_KEY="${SEPOLIA_PRIVATE_KEY:-$SEPOLIA_PK}" pnpm --filter @bramble/approval exec bun scripts/smoke-join.ts`) requires the administrator configuration. On 6 November 2026, the local attempt stopped before signing because `APPROVAL_ENS_PARENT` was absent.

@@ -31,4 +31,4 @@ Additional paths written:
 
 Open: real Sepolia smoke requires administrator configuration; this run lacks `APPROVAL_ENS_PARENT`.
 
-Verified on 6 November 2026: `pnpm verify` passes (approval: 88 tests, 506 assertions). Browser checks pass in desktop and mobile layouts (8 tests), including join visibility under 2 seconds with the in-memory chain. Browser command uses `PLAYWRIGHT_BROWSERS_PATH=/home/anonjr/.cache/ms-playwright BRAMBLE_TEST_UI_PORT=13181 BRAMBLE_TEST_API_PORT=13182 pnpm --filter @bramble/approval test:ui` because the normal dev port is occupied.
+Verified on 6 November 2026: `pnpm verify` passes (approval: 90 tests, 516 assertions). Browser checks pass in desktop and mobile layouts (8 tests), including join visibility under 2 seconds with the in-memory chain. Browser command uses `PLAYWRIGHT_BROWSERS_PATH=/home/anonjr/.cache/ms-playwright BRAMBLE_TEST_UI_PORT=13181 BRAMBLE_TEST_API_PORT=13182 pnpm --filter @bramble/approval test:ui` because the normal dev port is occupied.
