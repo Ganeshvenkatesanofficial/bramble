@@ -16,6 +16,10 @@ AI assistance also covered implementation and tests, not only the planning docum
 - **`admincli/src/`** — EAC enrollment and role/ACL commands, Ledger signing and Key Ring integration, and their tests (for example `admincli/src/enroll.ts`, `admincli/src/ledger-eth-sign.ts`, `admincli/src/set-acl.ts`).
 - **`admincli/src/lib.ts`, `admincli/src/lib-viem.ts`, `admincli/src/lib.test.ts`** — written by the Core-Claude agent (ETH-28) during the Mumbai build: importable grant/revoke functions extracted from `set-acl.ts`, `revoke-acl.ts` and `revoke.ts`, the viem-backed `Resolver`/`Signer`, and in-memory unit tests. The same change rewrote `admincli/src/set-acl.ts`, `revoke-acl.ts` and `revoke.ts` as thin wrappers and removed `admincli/src/acl-grant.ts`.
 - **`dashboard/`** — the read-only application UI and API routes.
+- **`agent-mcp/`** — the MCP server that gives a Claude Code agent `request_private_access` and `call_private_service`, with its tests and docs (ETH-32). Written by the Net-Claude agent (Claude Sonnet 5.5), committed as that agent.
+
+- **`rpc-proxy/` and `deploy/rpc-proxy/`** — the W11 memory-only logging JSON-RPC proxy, its tests, and its deployment recipe (`rpc-proxy/src/`, `rpc-proxy/test/server.test.ts`, `deploy/rpc-proxy/README.md`).
+
 - **`deploy/`** — the cloud topology runbook, systemd units, install and check scripts, env-var name templates, and the NAT test setup (`deploy/README.md`, `deploy/REFERENCE.md`, `deploy/TOPOLOGY.md`, `deploy/systemd/`, `deploy/scripts/`, `deploy/nat-lab/`, `deploy/env/`, `deploy/caddy/`, `deploy/stun/`, `deploy/sysctl/`, `deploy/scripts/stun-probe.py`, `deploy/scripts/agent-in-box.sh`) and the ADR `docs/adr/0015-cloud-demo-topology.md`. Written by Infra-Claude under ETH-49 and reviewed by another model family.
 
 Mumbai-hackathon agent work (paths written by agents; commits use each agent's own git identity):
@@ -25,6 +29,11 @@ Mumbai-hackathon agent work (paths written by agents; commits use each agent's o
 The team directed the architecture and scope, operated the physical Ledger and live test infrastructure, submitted real testnet transactions, checked resulting chain state, and reviewed generated or AI-assisted changes. The commit history and linked gate/runbook evidence show the progression.
 
 Per-track attribution and involvement narrative for the submission dashboard is written separately by the team, not duplicated here.
+
+## Mumbai build: paths written by agents
+
+- **`hedera-audit/`** — W10 option A, the HCS audit trail module, its tests and its README. Written by the Hedera-Claude agent (Claude), ticket ETH-46.
+- **`docs/16_HCS_AUDIT_RECORD_FORMAT.md`** and **`docs/adr/0011-w10-hedera-service-options.md`** — the record-format reference and the draft ADR with three options, for a human to decide. Written by the Hedera-Claude agent (Claude), ticket ETH-46.
 
 ## Network lane: paths written by agents (ETH-37)
 
