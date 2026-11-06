@@ -3,6 +3,7 @@ import { ApiError, type GrantSigner, type IdentityResolver, type Clock, type Pay
 import { ApprovalService, systemClock } from './service'
 import { AuditRecorder, type AuditTrail } from './audit'
 import { parsePayment, readInput, readPayment, label } from './validation'
+import { loadActivity, type PaymentsSource, type StatusSource } from './activity'
 
 interface ApiOptions {
   signer?: GrantSigner
@@ -20,6 +21,8 @@ interface ApiOptions {
   /** Delay between settlement polls. Defaults to 30 seconds. */
   settlementPollMs?: number
   token: () => string | undefined
+  /** Read-only feed sources. An omitted source reports `not_configured`. */
+  activity?: { status?: StatusSource; payments?: PaymentsSource }
 }
 
 export function createApprovalApi(options: ApiOptions) {
@@ -78,6 +81,11 @@ export function createApprovalApi(options: ApiOptions) {
           return json(service.create(await readInput(request)), 201)
         }
         if (path === '/api/requests' && request.method === 'GET') return json({ requests: service.list() })
+        if (path === '/api/activity' && request.method === 'GET') {
+          return json(
+            await loadActivity({ requests: service.list(), ...options.activity, ensParent: options.ensParent })
+          )
+        }
         if (path === '/api/audit' && request.method === 'GET') return json({ entries: service.auditFeed() })
         if (path === '/api/payments/settled' && request.method === 'POST') {
           return json(service.recordPayment(await readPayment(request)), 202)

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/WhyAsh5114/bramble/brambled/wgnode"
 )
 
@@ -97,5 +99,51 @@ func TestWaitForStall_PeerNotYetInTableIsNotAStall(t *testing.T) {
 	err := WaitForStall(ctx, f, "pub", 10*time.Millisecond, 20*time.Millisecond)
 	if err != context.DeadlineExceeded {
 		t.Fatalf("err = %v, want context.DeadlineExceeded (should never report a stall for an absent peer)", err)
+	}
+}
+
+// A link that recovers while the poll waits for a token must not be
+// polled, and must not take the token.
+func TestWaitForStallWithToken_RechecksStallAfterWaitingForToken(t *testing.T) {
+	f := &fakePeerLister{}
+	f.set(100, true)
+	lim := rate.NewLimiter(rate.Every(300*time.Millisecond), 1)
+	if !lim.Allow() {
+		t.Fatal("limiter should start with one token")
+	}
+
+	// The stall is seen at ~100ms, with no token until ~300ms. The link
+	// recovers at 150ms and keeps moving until 600ms.
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		for i := int64(1); i <= 15; i++ {
+			f.set(100+i, true)
+			time.Sleep(30 * time.Millisecond)
+		}
+	}()
+
+	start := time.Now()
+	if err := WaitForStallWithToken(context.Background(), f, "pub", 10*time.Millisecond, 100*time.Millisecond, lim); err != nil {
+		t.Fatalf("WaitForStallWithToken: %v", err)
+	}
+	elapsed := time.Since(start)
+	// Traffic stops at ~600ms, so the second stall is seen at ~700ms.
+	if elapsed < 650*time.Millisecond {
+		t.Fatalf("returned after %s, during or straight after the recovered traffic", elapsed)
+	}
+	if lim.Allow() {
+		t.Fatal("token taken twice: the limiter should be empty after the one poll")
+	}
+}
+
+func TestWaitForStallWithToken_TakesTokenWhenFree(t *testing.T) {
+	f := &fakePeerLister{}
+	f.set(100, true)
+	lim := rate.NewLimiter(rate.Every(time.Hour), 1)
+	if err := WaitForStallWithToken(context.Background(), f, "pub", 10*time.Millisecond, 50*time.Millisecond, lim); err != nil {
+		t.Fatalf("WaitForStallWithToken: %v", err)
+	}
+	if lim.Allow() {
+		t.Fatal("the poll did not take the token")
 	}
 }

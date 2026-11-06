@@ -44,11 +44,12 @@ what it talks to.
 ## Known gaps
 
 - No live peer/handshake state (WireGuard connection status, rx/tx bytes,
-  gateway CONNECT allow/deny events) — that data only exists in `brambled`'s
-  own memory today, and `brambled` has no HTTP surface at all yet. Adding one
-  is real, separate scope (touches `brambled/main.go`) — see the project's
-  build-plan discussion before doing it, since another change may already be
-  in flight against that file.
+  gateway CONNECT allow/deny events) in this dashboard. `brambled` does have
+  an HTTP surface: `brambled/statusapi` serves `/peers`, `/activity`, `/ping`
+  and `/endpoint`, bound to loopback by default (`-status-bind`). This
+  dashboard does not read it. The [approval console](../approval/README.md)
+  reads `/activity` for its live feed; wiring peer state in here is separate
+  scope.
 - No transaction history (enrollment, revocation, role grants, past relay
   payments) — `admincli`'s scripts print these once and exit; nothing
   persists them for a dashboard to read back. Etherscan/HashScan links here

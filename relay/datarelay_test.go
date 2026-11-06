@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -201,5 +202,109 @@ func TestDataRelay_InternalAPI_RejectsNonPositiveBytes(t *testing.T) {
 
 	if rec.Code != 400 {
 		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func postInternal(t *testing.T, handler http.Handler, req internalAllocateRequest) *httptest.ResponseRecorder {
+	t.Helper()
+	body, _ := json.Marshal(req)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest("POST", "/internal/data-relay-session", bytes.NewReader(body)))
+	return rec
+}
+
+func TestDataRelay_Sponsored_ClampsToCap(t *testing.T) {
+	r := newDataRelay()
+	r.sponsorBytes = 1 << 20
+	handler := internalAPIHandler(r, "127.0.0.1")
+
+	rec := postInternal(t, handler, internalAllocateRequest{Bytes: 1 << 30, Sponsored: true})
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var resp internalAllocateResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if resp.Bytes != 1<<20 {
+		t.Fatalf("granted %d bytes for a 1 GiB sponsored request, want the 1 MiB cap", resp.Bytes)
+	}
+
+	// A request under the cap is granted as asked, not rounded up.
+	rec = postInternal(t, handler, internalAllocateRequest{Bytes: 4096, Sponsored: true})
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if rec.Code != 200 || resp.Bytes != 4096 {
+		t.Fatalf("status %d, granted %d, want 200 and 4096", rec.Code, resp.Bytes)
+	}
+}
+
+func TestDataRelay_Sponsored_SessionStopsForwardingAtCap(t *testing.T) {
+	r := newDataRelay()
+	r.sponsorBytes = 8 // two 4-byte datagrams
+	s, err := r.allocateSponsored("127.0.0.1", 1<<30)
+	if err != nil {
+		t.Fatalf("allocateSponsored: %v", err)
+	}
+	if s.bytesAllotted != 8 {
+		t.Fatalf("bytesAllotted = %d, want the cap 8", s.bytesAllotted)
+	}
+	relayAddr := s.conn.LocalAddr().(*net.UDPAddr)
+
+	a, b := openPeer(t), openPeer(t)
+	if _, err := a.WriteToUDP([]byte("seed"), relayAddr); err != nil {
+		t.Fatalf("a write: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	// The seed datagram only filled slot A, so the 8-byte budget is untouched.
+	for _, msg := range []string{"ping", "pong"} {
+		if _, err := b.WriteToUDP([]byte(msg), relayAddr); err != nil {
+			t.Fatalf("b write: %v", err)
+		}
+		recvOrFail(t, a, msg)
+	}
+	if _, err := b.WriteToUDP([]byte("over"), relayAddr); err != nil {
+		t.Fatalf("b write: %v", err)
+	}
+	recvNothing(t, a)
+}
+
+func TestDataRelay_Sponsored_RefusedWhenSponsorshipOff(t *testing.T) {
+	r := newDataRelay() // sponsorBytes == 0: -sponsor-enrolled not set
+	handler := internalAPIHandler(r, "127.0.0.1")
+
+	rec := postInternal(t, handler, internalAllocateRequest{Bytes: 1000, Sponsored: true})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rec.Code)
+	}
+	if len(r.sessions) != 0 {
+		t.Fatalf("a refused sponsored request still allocated %d session(s)", len(r.sessions))
+	}
+
+	// The paid path is unchanged by the new field.
+	if rec := postInternal(t, handler, internalAllocateRequest{Bytes: 1000}); rec.Code != 200 {
+		t.Fatalf("paid allocation status = %d, want 200", rec.Code)
+	}
+}
+
+func TestValidateSponsorFlags(t *testing.T) {
+	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	full := map[string]string{"BRAMBLE_TAILNET_NAME": "t.eth", "BRAMBLE_TAILNET_REGISTRY": "0x1"}
+
+	if err := validateSponsorFlags(true, true, 1<<20, 30, env(full)); err != nil {
+		t.Fatalf("valid config rejected: %v", err)
+	}
+	if err := validateSponsorFlags(false, true, 1<<20, 30, env(full)); err == nil {
+		t.Fatal("accepted -sponsor-enrolled without -meter")
+	}
+	if err := validateSponsorFlags(true, false, 1<<20, 30, env(full)); err == nil {
+		t.Fatal("accepted -sponsor-enrolled without -data-relay")
+	}
+	if err := validateSponsorFlags(true, true, 0, 30, env(full)); err == nil {
+		t.Fatal("accepted a zero sponsor cap")
+	}
+	if err := validateSponsorFlags(true, true, 1<<20, 30, env(map[string]string{"BRAMBLE_TAILNET_NAME": "t.eth"})); err == nil {
+		t.Fatal("accepted a config with no tailnet registry")
 	}
 }
