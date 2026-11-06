@@ -108,6 +108,7 @@ func sidecarConfig() sidecar.Config {
 	}
 	return sidecar.Config{
 		Dir:             envOr("BRAMBLE_SIDECAR_DIR", "../sidecar"),
+		Binary:          os.Getenv("BRAMBLE_SIDECAR_BIN"),
 		Port:            port,
 		TailnetName:     os.Getenv("BRAMBLE_TAILNET_NAME"),
 		TailnetRegistry: os.Getenv("BRAMBLE_TAILNET_REGISTRY"),

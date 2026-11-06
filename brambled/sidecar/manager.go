@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -32,9 +33,17 @@ type healthResponse struct {
 	TailnetRegistry string `json:"tailnetRegistry"`
 }
 
+// BinaryName is the compiled sidecar's file name in a release bundle.
+const BinaryName = "bramble-sidecar"
+
 type Config struct {
-	// Dir is the sidecar's project directory (contains package.json).
+	// Dir is the sidecar's project directory (contains package.json). It is
+	// the development fallback, used only when no compiled sidecar is found
+	// (see resolveCommand).
 	Dir string
+	// Binary is the path of a compiled sidecar. Empty means look for
+	// BinaryName next to the running executable, then fall back to Dir.
+	Binary string
 	// Port is the local TCP port the sidecar listens on.
 	Port int
 	// TailnetName and TailnetRegistry are passed through to the sidecar's
@@ -79,8 +88,12 @@ func Start(cfg Config) (*Manager, error) {
 		cfg.Port = 7890
 	}
 
-	cmd := exec.Command("bun", "run", "src/index.ts")
-	cmd.Dir = cfg.Dir
+	name, args, dir, err := resolveCommand(cfg, executablePath())
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("BRAMBLE_SIDECAR_PORT=%d", cfg.Port),
 		fmt.Sprintf("BRAMBLE_TAILNET_NAME=%s", cfg.TailnetName),
@@ -116,6 +129,49 @@ func Start(cfg Config) (*Manager, error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+// executablePath returns the real path of the running binary, or "" when the
+// OS cannot say. Symlinks are resolved so a launcher linked into a PATH
+// directory still finds the sidecar installed beside the real file.
+func executablePath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	if real, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = real
+	}
+	return exe
+}
+
+// resolveCommand picks how to start the sidecar, in this order:
+//  1. cfg.Binary, which must exist (an explicit path that is wrong is an error).
+//  2. BinaryName in the same directory as exe, the release layout.
+//  3. "bun run src/index.ts" in cfg.Dir, the development layout.
+func resolveCommand(cfg Config, exe string) (name string, args []string, dir string, err error) {
+	if cfg.Binary != "" {
+		if !isExecutableFile(cfg.Binary) {
+			return "", nil, "", fmt.Errorf("sidecar binary %q is not an executable file", cfg.Binary)
+		}
+		binary, err := filepath.Abs(cfg.Binary)
+		if err != nil {
+			return "", nil, "", fmt.Errorf("resolving sidecar binary: %w", err)
+		}
+		return binary, nil, "", nil
+	}
+	if exe != "" {
+		beside := filepath.Join(filepath.Dir(exe), BinaryName)
+		if isExecutableFile(beside) {
+			return beside, nil, "", nil
+		}
+	}
+	return "bun", []string{"run", "src/index.ts"}, cfg.Dir, nil
+}
+
+func isExecutableFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0
 }
 
 // waitTorReady polls /tor/status until the sidecar's Tor client is ready.
