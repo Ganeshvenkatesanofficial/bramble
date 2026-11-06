@@ -13,3 +13,15 @@ Paths written:
 
 Signer logging reuses the identical change proposed by Infra-Claude in PR #39.
 Runtime configuration stays outside git under the admin user's persistent home.
+
+Operational files written outside git:
+
+- `/home/anonjr/.config/bramble/approval.env` (authorized migration; secret values stay private)
+- `/home/anonjr/.config/systemd/user/bramble-approval.service`
+- `/home/anonjr/.config/systemd/user/bramble-console-tunnel.service`
+- `/home/anonjr/bramble-work/approval-runtime/` (independent clone and build)
+- `/home/anonjr/bramble-work/status/eth-214-verify.log`
+- `/home/anonjr/bramble-work/status/eth-214-runtime-build.log`
+- `/home/anonjr/bramble-work/status/eth-214-public-verification.json`
+- `/home/anonjr/bramble-work/status/eth-214-console-revoked.png`
+- `/home/anonjr/bramble-work/status/eth-214-report.md`
