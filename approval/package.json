@@ -17,6 +17,7 @@
   "dependencies": {
     "@bramble/hedera-audit": "workspace:*",
     "@bramble/join-ui": "workspace:*",
+    "@xyflow/react": "^12.12.1",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.2.6",
     "lucide-react": "^1.43.0",
