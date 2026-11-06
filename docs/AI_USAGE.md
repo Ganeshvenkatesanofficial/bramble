@@ -15,6 +15,7 @@ AI assistance also covered implementation and tests, not only the planning docum
 - **`admincli/src/`** — EAC enrollment and role/ACL commands, Ledger signing and Key Ring integration, and their tests (for example `admincli/src/enroll.ts`, `admincli/src/ledger-eth-sign.ts`, `admincli/src/set-acl.ts`).
 - **`admincli/src/lib.ts`, `admincli/src/lib-viem.ts`, `admincli/src/lib.test.ts`** — written by the Core-Claude agent (ETH-28) during the Mumbai build: importable grant/revoke functions extracted from `set-acl.ts`, `revoke-acl.ts` and `revoke.ts`, the viem-backed `Resolver`/`Signer`, and in-memory unit tests. The same change rewrote `admincli/src/set-acl.ts`, `revoke-acl.ts` and `revoke.ts` as thin wrappers and removed `admincli/src/acl-grant.ts`.
 - **`dashboard/`** — the read-only application UI and API routes.
+- **`agent-mcp/`** — the MCP server that gives a Claude Code agent `request_private_access` and `call_private_service`, with its tests and docs (ETH-32). Written by the Net-Claude agent (Claude Sonnet 5.5), committed as that agent.
 
 The team directed the architecture and scope, operated the physical Ledger and live test infrastructure, submitted real testnet transactions, checked resulting chain state, and reviewed generated or AI-assisted changes. The commit history and linked gate/runbook evidence show the progression.
 
