@@ -68,6 +68,8 @@ Use the same commit on every machine. Record the commit in the demo log. Deploy 
 
 Run on 6 Nov 2026: all three machines at `a9db736` (merge of PR #18). The public clone worked with no deploy key.
 
+To update a node to another commit, fetch and check it out as `bramble`, then rebuild as root with `sudo GOFLAGS=-buildvcs=false ./deploy/scripts/install.sh <role>`. Without the flag, `go build` stops with `error obtaining VCS status: exit status 128`, because root reads a checkout that `bramble` owns (Verified on `gateway` and `worker`, 6 Nov 2026, ETH-205).
+
 ### A5. Run the installer. Verified (cloud, 6 Nov 2026)
 
 ```sh
