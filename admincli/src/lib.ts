@@ -17,6 +17,7 @@ import { normalize } from 'viem/ens'
 import { x25519 } from '@noble/curves/ed25519'
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils'
 import { aclDigestECDH } from './roles'
+import { allocateMeshIP } from './mesh-ip'
 
 /** Reads ENS text records. Returns `null` or `''` for an unset record. */
 export interface Resolver {
@@ -235,7 +236,7 @@ export async function clearAcl(deps: LibDeps, params: { deviceLabel: string }): 
  */
 export async function setDeviceRevoked(
   deps: LibDeps,
-  params: { deviceLabel: string; value: boolean }
+  params: { deviceLabel: string; value: boolean; progress?: { txHash?: string } }
 ): Promise<SetRevokedResult> {
   const log = deps.log ?? noop
   const value = String(params.value)
@@ -246,6 +247,7 @@ export async function setDeviceRevoked(
   const pending = await deps.signer.setText(deviceFullname, 'revoked', value)
   log(`   tx: ${pending.hash}`)
   await pending.wait()
+  if (params.progress) params.progress.txHash = pending.hash
   const confirmedMs = Date.now() - startedAt
   log(`   confirmed ${confirmedMs}ms after submit`)
 
@@ -253,4 +255,153 @@ export async function setDeviceRevoked(
   if (after !== value) throw new Error(`revoked did not round-trip: got ${JSON.stringify(after)}`)
   log(`done. ${deviceFullname} revoked=${after}.`)
   return { deviceFullname, txHash: pending.hash, confirmedMs, after }
+}
+
+/**
+ * The chain writes enrollment needs beyond `setText`. A caller supplies the real viem
+ * implementation (`enroll-chain-viem.ts`) or an in-memory one. Every method resolves only
+ * after the transaction is confirmed, and returns its hash.
+ */
+export interface EnrollChain {
+  /** Deploys a dedicated Permissioned Resolver owned by the signer. */
+  deployResolver(): Promise<{ address: string; txHash: string }>
+  /** True when `label` holds an unexpired registration on the tailnet registry. */
+  isRegistered(label: string): Promise<boolean>
+  registeredResolver(label: string): Promise<string | null>
+  register(params: { label: string; resolver: string; expirySeconds: number }): Promise<string>
+  /** `setText` through a known resolver, so a lagging node cannot hide a resolver just set. */
+  setTextAt(resolver: string, name: string, key: string, value: string): Promise<string>
+  /** Mesh-ip records of every enrolled device except `excludeLabel`. */
+  usedMeshIPs(excludeLabel: string): Promise<(string | null)[]>
+}
+
+export interface EnrollDeps {
+  resolver: Resolver
+  chain: EnrollChain
+  tailnetName: string
+  log?: (line: string) => void
+  /** Read-back polling. Defaults: 10 attempts, 3000 ms apart (a load-balanced RPC lags). */
+  readbackAttempts?: number
+  readbackDelayMs?: number
+  sleep?: (ms: number) => Promise<void>
+}
+
+/** What a failed enrollment already wrote, so a retry resumes instead of repeating a step. */
+export interface EnrollProgress {
+  resolverAddress?: string
+  registered?: boolean
+  pubkeyWritten?: boolean
+  /** The mesh-ip record value, `10.77.0.<n>/24`. */
+  meshCidr?: string
+  meshIpWritten?: boolean
+  txHashes: { deploy?: string; register?: string; pubkey?: string; meshIp?: string }
+}
+
+export interface EnrollParams {
+  deviceLabel: string
+  pubkey: string
+  expiryYears?: number
+  /** Mutated as each step confirms. Pass the same object to retry a failed enrollment. */
+  progress?: EnrollProgress
+  now?: () => number
+}
+
+export interface EnrollResult {
+  deviceFullname: string
+  resolverAddress: string
+  meshCidr: string
+  /** `meshCidr` without the prefix length. */
+  meshIp: string
+  txHashes: EnrollProgress['txHashes']
+}
+
+export class LabelRegisteredError extends Error {
+  constructor(readonly deviceLabel: string) {
+    super(`${deviceLabel} is already registered`)
+  }
+}
+
+async function readBack(deps: EnrollDeps, name: string, key: string, expected: string) {
+  const attempts = deps.readbackAttempts ?? 10
+  const delayMs = deps.readbackDelayMs ?? 3000
+  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+  let value: string | null = null
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) await sleep(delayMs)
+    value = await deps.resolver.getText(name, key)
+    if (value === expected) return
+  }
+  throw new Error(`${key} did not round-trip: got ${JSON.stringify(value)}`)
+}
+
+/**
+ * Enrolls a device subname: deploys its own resolver, registers the label, writes the
+ * pubkey, then allocates and writes the mesh-ip (docs/adr/0009). The operator writes the
+ * mesh-ip, never the device. Each step is skipped when `progress` shows it already
+ * confirmed, so a retry after a failure never deploys a second resolver.
+ */
+export async function enrollDevice(deps: EnrollDeps, params: EnrollParams): Promise<EnrollResult> {
+  const log = deps.log ?? noop
+  const { deviceLabel, pubkey } = params
+  const progress = (params.progress ??= { txHashes: {} })
+  const fullname = deviceName(deviceLabel, deps.tailnetName)
+
+  if (!progress.resolverAddress && (await deps.chain.isRegistered(deviceLabel))) {
+    throw new LabelRegisteredError(deviceLabel)
+  }
+
+  if (!progress.resolverAddress) {
+    log(`[1/4] Deploying a dedicated resolver for ${deviceLabel}...`)
+    const deployed = await deps.chain.deployResolver()
+    progress.resolverAddress = deployed.address
+    progress.txHashes.deploy = deployed.txHash
+    log(`   resolver: ${deployed.address}`)
+  }
+  const resolverAddress = progress.resolverAddress
+
+  if (!progress.registered) {
+    log(`[2/4] Registering ${fullname} (requires ROLE_REGISTRAR)...`)
+    const now = (params.now ?? Date.now)()
+    const expirySeconds = Math.floor(now / 1000) + (params.expiryYears ?? 10) * 365 * 24 * 60 * 60
+    // A retry after an unconfirmed register may find it landed; the registry then holds the label.
+    if (await deps.chain.isRegistered(deviceLabel)) {
+      if ((await deps.chain.registeredResolver(deviceLabel))?.toLowerCase() !== resolverAddress.toLowerCase()) {
+        throw new LabelRegisteredError(deviceLabel)
+      }
+      log('   registered with this enrollment resolver; continuing')
+    } else {
+      progress.txHashes.register = await deps.chain.register({
+        label: deviceLabel,
+        resolver: resolverAddress,
+        expirySeconds,
+      })
+    }
+    progress.registered = true
+  }
+
+  if (!progress.pubkeyWritten) {
+    log('[3/4] Writing initial pubkey...')
+    progress.txHashes.pubkey = await deps.chain.setTextAt(resolverAddress, fullname, 'pubkey', pubkey)
+    progress.pubkeyWritten = true
+  }
+  await readBack(deps, fullname, 'pubkey', pubkey)
+
+  if (!progress.meshCidr) {
+    log('[4/4] Allocating mesh-ip...')
+    progress.meshCidr = allocateMeshIP(await deps.chain.usedMeshIPs(deviceLabel))
+  }
+  if (!progress.meshIpWritten) {
+    progress.txHashes.meshIp = await deps.chain.setTextAt(resolverAddress, fullname, 'mesh-ip', progress.meshCidr)
+    progress.meshIpWritten = true
+  }
+  await readBack(deps, fullname, 'mesh-ip', progress.meshCidr)
+
+  log(`done. ${fullname} enrolled, resolver ${resolverAddress}, pubkey ${pubkey}, mesh-ip ${progress.meshCidr}.`)
+  return {
+    deviceFullname: fullname,
+    resolverAddress,
+    meshCidr: progress.meshCidr,
+    meshIp: progress.meshCidr.split('/')[0],
+    txHashes: progress.txHashes,
+  }
 }

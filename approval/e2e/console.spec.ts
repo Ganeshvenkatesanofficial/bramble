@@ -154,3 +154,35 @@ test('a stale queue pauses decisions until a fresh API read succeeds', async ({ 
   await expect(queueAlert(page)).toHaveCount(0)
   await expect(approve).toBeEnabled()
 })
+
+test('open device join is visible within two seconds, then the operator approves, revokes and denies', async ({
+  page,
+  request,
+}) => {
+  await page.goto('/')
+  await page.getByLabel('Demo token', { exact: true }).fill('browser-test-only')
+  await page.getByRole('button', { name: 'Unlock', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Pending device joins' })).toBeVisible()
+  const start = Date.now()
+  const created = await request.post('/api/joins', {
+    data: { label: 'laptop', pubkey: 'ab'.repeat(32), tailnet: 'bramble.eth' },
+  })
+  expect(created.status()).toBe(201)
+  const pending = page
+    .getByRole('region', { name: 'Pending device joins' })
+    .getByRole('article', { name: 'Device laptop' })
+  await expect(pending).toBeVisible({ timeout: 2000 })
+  expect(Date.now() - start).toBeLessThan(2000)
+  await pending.getByRole('button', { name: 'Approve', exact: true }).click()
+  const member = page.getByRole('region', { name: 'Tailnet members' }).getByRole('article', { name: 'Device laptop' })
+  await expect(member.getByText('Mesh IP: 10.77.0.2')).toBeVisible()
+  await member.getByRole('button', { name: 'Revoke', exact: true }).click()
+  await expect(member.getByText('revoked', { exact: true })).toBeVisible()
+  await request.post('/api/joins', { data: { label: 'phone', pubkey: 'cd'.repeat(32), tailnet: 'bramble.eth' } })
+  const phone = page
+    .getByRole('region', { name: 'Pending device joins' })
+    .getByRole('article', { name: 'Device phone' })
+  await phone.getByRole('button', { name: 'Deny', exact: true }).click()
+  await expect(phone).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Device activity' })).toContainText('denied')
+})
