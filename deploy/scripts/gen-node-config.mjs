@@ -14,9 +14,12 @@ export const WANTED = [
   'BRAMBLE_CHAIN_ID',
   'BRAMBLE_TAILNET_REGISTRY',
   'BRAMBLE_RELAY_REGISTRY',
+  'BRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK',
+  'BRAMBLE_RELAY_REGISTRY_DEPLOY_BLOCK',
   'BRAMBLE_PUBLIC_RPC_URL',
   'BRAMBLE_STUN_SERVERS',
   'BRAMBLE_RENDEZVOUS',
+  'BRAMBLE_RENDEZVOUS_PAYMENT_URL',
   'BRAMBLE_DATA_RELAYS',
   'BRAMBLE_RELAY_PEERS',
   'BRAMBLE_APPROVAL_URL',
@@ -99,8 +102,23 @@ export function buildConfig(env, version) {
     registry: address(env, 'BRAMBLE_TAILNET_REGISTRY'),
   }
   if (env.BRAMBLE_RELAY_REGISTRY) config.relayRegistry = address(env, 'BRAMBLE_RELAY_REGISTRY')
+  for (const [name, field] of [
+    ['BRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK', 'registryDeployBlock'],
+    ['BRAMBLE_RELAY_REGISTRY_DEPLOY_BLOCK', 'relayDeployBlock'],
+  ]) {
+    if (env[name] === undefined) continue
+    const block = Number(env[name])
+    if (!/^[1-9]\d*$/.test(env[name]) || !Number.isSafeInteger(block))
+      throw new Error(`${name} must be a positive safe integer`)
+    config[field] = block
+  }
   config.joinApi = publicUrl(join, 'joinApi').replace(/\/$/, '')
   if (rendezvous.length) config.rendezvous = rendezvous[0]
+  if (env.BRAMBLE_RENDEZVOUS_PAYMENT_URL)
+    config.rendezvousPaymentUrl = publicUrl(env.BRAMBLE_RENDEZVOUS_PAYMENT_URL, 'rendezvousPaymentUrl').replace(
+      /\/$/,
+      ''
+    )
   const stun = list(env.BRAMBLE_STUN_SERVERS).map((v) => hostPort(v, 'stun'))
   if (stun.length) config.stun = stun
 

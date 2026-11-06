@@ -49,7 +49,7 @@ function run(command, args, options = {}) {
 const dir = await mkdtemp(path.join(tmpdir(), 'bramble-release-smoke-'))
 try {
   await run('tar', ['-xzf', archive, '-C', dir])
-  assert.deepEqual((await readdir(dir)).sort(), ['bramble', 'bramble-sidecar'])
+  assert.deepEqual((await readdir(dir)).sort(), ['bramble', 'bramble-sidecar', 'brambled'])
   const home = path.join(dir, 'home')
   await mkdir(home)
   const env = {
@@ -62,12 +62,12 @@ try {
   }
   console.log(`runtime: PATH=${env.PATH}; cwd contains only bundle binaries and empty home; no inherited credentials`)
   await run(path.join(dir, 'bramble-sidecar'), ['--self-test'], { cwd: dir, env })
-  const output = await run(path.join(dir, 'bramble'), ['resolve', fixture.deviceLabel], { cwd: dir, env })
+  const output = await run(path.join(dir, 'brambled'), ['resolve', fixture.deviceLabel], { cwd: dir, env })
   assert.ok(output.includes(`fullname: ${fixture.deviceFullname}`), 'resolved expected ENS name')
   assert.ok(output.includes(`pubkey:   ${fixture.expectedPubkey}`), 'resolved expected public key')
   assert.match(output, /status: {3}[1-9]\d*/, 'active ENS device')
   assert.deepEqual(await readdir(home), [], 'no Tor assets or cache written to HOME')
-  assert.deepEqual((await readdir(dir)).sort(), ['bramble', 'bramble-sidecar', 'home'])
+  assert.deepEqual((await readdir(dir)).sort(), ['bramble', 'bramble-sidecar', 'brambled', 'home'])
   console.log('release smoke ok: compiled signing, sibling launch, Tor bootstrap, Sepolia ENS record, no local cache')
 } finally {
   await rm(dir, { recursive: true, force: true })
