@@ -43,6 +43,8 @@ Source of each port: `brambled/main.go` flags (`-listen-port` 51820, `-gateway-p
 | `scripts/smoke.sh`                       | Local liveness checks per role                                  |
 | `scripts/nat-box.sh`                     | NAT in a network namespace on a cloud machine                   |
 | `scripts/agent-in-box.sh`                | Run the agent as `agent` inside the NAT-box namespace           |
+| `scripts/install-pi-agent.sh`            | Install Pi, `agent-mcp`, MCP config and skill for `agent`       |
+| `scripts/pi-agent.sh`                    | Start the Pi demo agent with the DeepSeek key from a file       |
 | `scripts/stun-probe.py`                  | Classify NAT mapping from one UDP socket (needs `python3`)      |
 | `scripts/publish-release.sh`             | Upload a release and the node config to the relays machine      |
 | `scripts/gen-node-config.mjs`            | Build `/.well-known/bramble.json` from env (public values only) |

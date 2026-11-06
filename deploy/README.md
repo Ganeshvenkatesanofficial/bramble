@@ -30,7 +30,7 @@ Agents never look for credentials. Each item below blocks the steps that name it
 | 8   | The Hedera testnet payee account ID for the relays (a public ID; no key is needed on the relays machine)                                | B1        |
 | 9   | The demo token `APPROVAL_DEMO_TOKEN`                                                                                                    | C1        |
 | 10  | A dedicated SSH key pair for the console tunnel (admin to relays), with the public half authorized on the relays machine                | C3        |
-| 11  | Claude Code authentication for the agent on the worker machine                                                                          | F4        |
+| 11  | A DeepSeek API key and the demo token, as two files owned by `agent` on the worker machine (mode `0600`); replaces Claude Code login    | F4        |
 | 12  | Read access to the repository for the machines (public clone, or a deploy key)                                                          | A4        |
 | 13  | Which tailnet and relay registry to use (names and addresses; public values)                                                            | D1        |
 | 14  | Optional: a second STUN server (host and port) or a second public address on the relays machine, for the NAT type check                 | N         |
@@ -232,15 +232,29 @@ Before any grant, from the worker: `curl -sS http://127.0.0.1:8080/task`. In NAT
 
 ### F4. Prepare the agent user. Open
 
-Create a Unix user `agent` with no `sudo` and no read access to `/etc/bramble`. The agent calls only the forward on `127.0.0.1:8080`. The node's WireGuard key and Hedera payer key stay in `/etc/bramble/worker.env` (mode `0600`, owner `bramble`), so the agent never holds a backend credential. Install Claude Code for that user and authenticate it with item 11. Set `BRAMBLE_FORWARD_TIMEOUT_MS=120000` in the environment of the `agent` user's MCP server process (the variable `agent-mcp/src/config.ts` reads; where the launcher passes it is Open until the agent is deployed): the `agent-mcp` default is 10 s (`agent-mcp/src/config.ts`), shorter than the 27 to 32 s gateway decision (Part G), so `call_private_service` would time out first.
+Create a Unix user `agent` with no `sudo` and no read access to `/etc/bramble`. The agent calls only the forward on `127.0.0.1:8080`. The node's WireGuard key and Hedera payer key stay in `/etc/bramble/worker.env` (mode `0600`, owner `bramble`), so the agent never holds a backend credential.
+
+The demo agent runs on Pi (pinned `@earendil-works/pi-coding-agent` 1.5.0) with the DeepSeek model `deepseek/deepseek-flash`, not on Claude Code (decision of the operator, 6 Nov 2026, ETH-243). Pi has native MCP support (`docs/mcp.md` in the Pi package), so it loads `agent-mcp` as is. The steps, as `agent` on the worker:
+
+1. Copy `agent-mcp/`, `deploy/scripts/install-pi-agent.sh` and `deploy/scripts/pi-agent.sh` from the repository checkout, then run `BRAMBLE_AGENT_LABEL=<worker label> BRAMBLE_GATEWAY_LABEL=<gateway label> deploy/scripts/install-pi-agent.sh`. It installs Pi under `~/pi-runtime`, `agent-mcp` under `~/agent-mcp`, Pi's MCP config `~/.pi/agent/mcp.json` (with `BRAMBLE_FORWARD_TIMEOUT_MS=120000`, which the tools need: the `agent-mcp` default of 10 s is shorter than the 27 to 32 s gateway decision in Part G) and the skill `bramble-private-service`.
+2. Put the DeepSeek key in `~/.config/bramble/deepseek.key` and the demo token in `~/.config/bramble/approval.token` (both mode `0600`, owner `agent`; item 11). The launcher reads the key and exports it as `DEEPSEEK_API_KEY` to Pi only. The MCP config reads the token with a command when it starts `agent-mcp`, so it is in no config file and not in Pi's environment.
+3. The approval API listens on the admin machine's loopback. Reach it from the worker with a reverse tunnel started on the admin machine: `ssh -N -R 127.0.0.1:3001:127.0.0.1:3001 <worker>`. Or set `BRAMBLE_APPROVAL_URL` to the public console URL when you run the installer.
+
+The launcher starts Pi with the two Bramble tools only (`--no-builtin-tools`): the agent has no shell, so it cannot read the key files. The demo prompt is one line:
+
+```sh
+~/bin/pi-agent -p "Fetch the task from the private staging service"
+```
+
+The Claude Code path in `agent-mcp/README.md` still works for a machine that has Claude Code login. Evidence: Pi 1.5.0 listed `deepseek/deepseek-flash` and answered a prompt in 1.4 s, and `pi mcp list` showed `bramble-agent` connected with `request_private_access` and `call_private_service` (Verified, worker machine, 6 Nov 2026). The full beat run is Open.
 
 **Launching the agent.** Without the NAT box, the agent runs as `agent` on the host and reaches the forward on the host's `127.0.0.1:8080`. With the NAT box, the node (and so the forward) sits in the `bramble-node` namespace, and a process on the host cannot reach it. Start the agent through the launcher, which enters the namespace as root and then drops to the `agent` user with no capabilities and `no_new_privs`:
 
 ```sh
-sudo deploy/scripts/agent-in-box.sh claude
+sudo deploy/scripts/agent-in-box.sh ~agent/bin/pi-agent -p "Fetch the task from the private staging service"
 ```
 
-The launcher also gives the agent the namespace's resolver and NAT route, so Claude Code reaches its API through the same NAT. Open: the script passes `bash -n` and its `setpriv` flags parse (Verified, development machine, 6 Nov 2026); it has not run as root or in a namespace.
+The launcher also gives the agent the namespace's resolver and NAT route, so Pi reaches the DeepSeek API through the same NAT. Open: the script passes `bash -n` and its `setpriv` flags parse (Verified, development machine, 6 Nov 2026); it has not run as root or in a namespace.
 
 ## Part G: the access gate
 
@@ -325,7 +339,7 @@ State on 6 Nov 2026. Each item blocks the steps that name it; none is searched f
 | Hedera payer account ID and key for gateway and worker (item 7)                      | E1, E3 (`bramble-gateway`), F1, F2              |
 | Tailnet name, registry addresses and deploy blocks (item 13)                         | D2, D3, E1, F1                                  |
 | `APPROVAL_DEMO_TOKEN` and the Ledger Key Ring file on the admin machine (items 2, 9) | C1, C2, C3, C4 (console returns 502 until then) |
-| Claude Code authentication for the `agent` user (item 11)                            | F4                                              |
+| DeepSeek key and demo token files for the `agent` user (item 11)                     | F4                                              |
 
 ## Stop the machines
 

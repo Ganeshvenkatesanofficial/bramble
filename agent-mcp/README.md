@@ -8,6 +8,8 @@ token for the approval API, which the agent can read until the API splits tokens
 [Know the limits](#know-the-limits)). Tool and setting details are in
 [REFERENCE.md](./REFERENCE.md).
 
+To run the agent on Pi with a DeepSeek model instead of Claude Code, see [PI.md](./PI.md).
+
 Demo beats served: 1 (denied), 2 (request), 3 (works after approval) and 5 (denied after revoke).
 
 ## Before you start
