@@ -44,7 +44,7 @@ It uses no root by default. It does not edit shell profiles; it prints the `PATH
 | `--no-open`  | `BRAMBLE_NO_OPEN=1`     | Start, print the address, do not open a browser                                                          |
 | `--tun`      | `BRAMBLE_INSTALL_TUN=1` | Linux: run `sudo setcap cap_net_admin+ep` on `brambled` once, so it can create the interface `bramble0` |
 |              | `BRAMBLE_HOME`          | Data directory. Default `~/.bramble`                                                                     |
-|              | `BRAMBLE_INSTALL_BASE`  | Replace `https://<host>`. Plain `http` is accepted only for `127.0.0.1` and `localhost` (used by tests)  |
+|              | `BRAMBLE_INSTALL_BASE`  | Replace `https://<host>`. Plain `http` requires the exact authority `127.0.0.1` or `localhost`, optionally followed by a numeric port from 1 to 65535; no userinfo, path, query or fragment (used by tests)  |
 
 `--tun` is the only path that calls `sudo`. It says why before it asks. Without it, `bramble` uses the user-space network stack (ETH-180, decision D10).
 
@@ -58,15 +58,15 @@ curl -fsSL https://<host>/uninstall.sh | sh -s -- --yes
 
 It asks for confirmation on the terminal; without a terminal it exits unless you pass `--yes`. It then:
 
-1. Stops the pid in `bramble.pid` and any process whose command line starts with `~/.bramble/bin/`.
+1. Treats `bramble.pid` as a hint. Before each signal, checks that the process executable is inside the resolved `bin/` directory. On Linux, it also accepts a shell whose first script argument is a regular, non-symlinked file inside that directory. It checks all process IDs to find helpers and ignores nonpositive IDs.
 2. On Linux, removes the interface `bramble0` with `sudo ip link delete` if it exists. This is the only `sudo` call.
 3. Deletes `~/.bramble`, including the device key. With `--keep-data` it deletes only `bin/`, `ui.url` and `bramble.pid`.
 
-It refuses `BRAMBLE_HOME` set to `/` or to `$HOME`. Bramble installs no system service, so there is none to remove. The command `bramble uninstall` belongs to the launcher (ETH-180).
+It resolves `BRAMBLE_HOME` and `$HOME` through physical paths before removal. It refuses `/`, `$HOME`, ancestors of `$HOME`, and equivalent paths with repeated slashes, dot segments or symlinks. It refuses a symlinked `bin/` directory or installation marker. The directory must contain the `bramble-install-v1` marker at `.bramble-install`, or the legacy layout of `config.url` and an executable, non-symlinked `bin/bramble`. `--keep-data` preserves the marker so a later full uninstall can remove the remaining data. Bramble installs no system service, so there is none to remove. The command `bramble uninstall` belongs to the launcher (ETH-180).
 
 ## Test
 
-`scripts/release/install.test.sh` serves a stub bundle on loopback and checks `install.sh` and `uninstall.sh` under `sh`, `dash` and `busybox sh`: install, reinstall over a running process, uninstall, checksum mismatch, missing checksum entry, nested archive paths, a host without a tailnet, plain `http` to a remote host, and the confirmation rules. It needs `python3`, `curl`, `tar` and `sha256sum`, and no network or root.
+`scripts/release/install.test.sh` serves a stub bundle on loopback and checks `install.sh` and `uninstall.sh` under `sh`, `dash` and `busybox sh`: install, reinstall over a running process, uninstall, checksum mismatch, missing checksum entry, nested archive paths, a host without a tailnet, plain `http` to a remote host, the confirmation rules, stale PID preservation, native executable ownership, protected path aliases, installation evidence, and `--keep-data`. It needs `python3`, `curl`, `tar` and `sha256sum`, and no network or root.
 
 ## Generator: environment to node config
 
