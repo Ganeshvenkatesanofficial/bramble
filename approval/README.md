@@ -52,3 +52,9 @@ Browser verification uses the production UI and a separate in-memory HTTP API.
 The [browser verification how-to](../docs/how-to-test-approval-console.md) describes
 setup and execution. Screenshots use simulated receipts and do not verify a
 real Sepolia transaction or peer cutoff.
+
+The agent payments UI is available at `/payments`. `GET /api/payments` is a
+read-only testnet mirror feed attributed through `APPROVAL_PAYMENT_AGENTS`.
+The panel refreshes every two seconds; the node's sidecar remains the payer.
+See [`docs/16_AGENT_PAYMENTS_FLOW.md`](../docs/16_AGENT_PAYMENTS_FLOW.md) for
+configuration, the automatic relay payment trigger, and verification limits.
