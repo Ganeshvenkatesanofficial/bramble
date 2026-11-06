@@ -250,6 +250,8 @@ The Claude Code path in `agent-mcp/README.md` still works for a machine that has
 
 Full Pi beat sequence: **Open**. Earlier Pi calls on 6 November 2026 overlapped another driver using the same grant label. Those observations do not establish two isolated runs. Repeat beats 1, 2, 3 and 5 twice with the corrected launcher after the node owner hands over the stopped nodes; record timings and a transcript excerpt before marking this Verified.
 
+Verified, isolated attempt on 6 November 2026: the deployed launcher matches `91f7ca4`. The initial call reached the gateway and was denied for `task` with `no matching granted digest`. Pi created the correct access request in 33.11 s. The operator approval POST returned HTTP 401 (`unauthorized`) using `/home/agent/.config/bramble/approval.token`; no grant was approved. Both units were stopped by 15:06:39 UTC with MainPID 0, and the worker tunnel was closed. The two full runs remain Open until the supplied operator token authenticates. No payment or revocation timing is verified by this attempt.
+
 **Launching the agent.** Without the NAT box, the agent runs as `agent` on the host and reaches the forward on the host's `127.0.0.1:8080`. With the NAT box, the node (and so the forward) sits in the `bramble-node` namespace, and a process on the host cannot reach it. Start the agent through the launcher, which enters the namespace as root and then drops to the `agent` user with no capabilities and `no_new_privs`:
 
 ```sh

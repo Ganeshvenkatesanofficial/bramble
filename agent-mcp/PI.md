@@ -56,5 +56,12 @@ invocation for this check.
 Open: two isolated full runs with the corrected launcher. The earlier runs used
 the same grant label as another driver and do not verify this sequence.
 
+Verified, worker, 6 November 2026 at 15:05–15:06 UTC: the corrected launcher
+created a request for `task`. The operator approval POST returned HTTP 401
+(`unauthorized`) using the supplied worker token file. The gateway recorded
+`no matching granted digest` for the initial call. Neither approval nor the full
+sequence passed. Both nodes and the worker tunnel are stopped. Restore a valid
+operator token before repeating the two runs; keep its value out of transcripts.
+
 See [Pi security explanation](./PI_SECURITY.md) for the tool restrictions and
 [Pi runtime reference](./REFERENCE.md#pi-runtime) for model and launcher settings.

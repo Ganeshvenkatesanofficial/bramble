@@ -49,3 +49,22 @@ The launcher check reproduced the overwritten skill-path failure before the fix.
 Verified on 6 November 2026: both focused launcher tests, shell syntax checks,
 `git diff --check`, and `pnpm verify` pass (34 agent-mcp tests).
 Clean worker sequence remains Open pending the ETH-244 node handoff.
+
+## ETH-243 isolated cloud attempt
+
+Demo beats: 1, 2, 3 and 5. Verified the stopped-node handoff, deployed the
+reviewed launcher and workflow, and ran the initial deny call and Pi prompt.
+The gateway confirmed a missing grant. Pi requested `task`; the operator POST
+failed with HTTP 401. No grant was approved. Both nodes, the Pi process and its
+MCP child, and the worker approval tunnel were stopped. Two full runs remain Open.
+
+Paths written:
+
+- `agent-mcp/PI.md`
+- `deploy/README.md`
+- `docs/ai-usage/hedera-sol.md`
+- `/home/anonjr/bramble-work/status/eth-243/isolated-w2.py`
+- `/home/anonjr/bramble-work/status/eth-243/isolated-w2/` (timings and Pi output)
+- `/home/anonjr/bramble-work/status/eth-243-isolated-docs-verify.log`
+- Worker: `/home/agent/bin/pi-agent`
+- Worker: `/home/agent/.pi/agent/skills/bramble-private-service/SKILL.md`
