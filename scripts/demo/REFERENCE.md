@@ -1,6 +1,19 @@
 # Demo launcher reference
 
-Facts for the commands in [README.md](README.md). Terms: NAT (network address translation) is the router behaviour the NAT box simulates; STUN (Session Traversal Utilities for NAT) is the protocol a node uses to learn its public address; TCP is the transport protocol relays accept connections on; API is application programming interface; ENS is the Ethereum Name Service; DER is the binary encoding of a Hedera key; ECDSA and Ed25519 are the two Hedera signature schemes. Evidence labels are the ones in `docs/15_MUMBAI_HANDOFF.md`: **Verified**, **Read from source**, **Open**. Anything run against real machines is **needs human verification**.
+Facts for the commands in [README.md](README.md).
+
+| Term    | Meaning                                                                    |
+| ------- | -------------------------------------------------------------------------- |
+| NAT     | Network address translation. The router behaviour the NAT box simulates.   |
+| STUN    | Session Traversal Utilities for NAT. How a node learns its public address. |
+| TCP     | Transmission Control Protocol. The transport relays accept connections on. |
+| API     | Application programming interface.                                         |
+| ENS     | Ethereum Name Service.                                                     |
+| DER     | Distinguished Encoding Rules. The binary encoding of a Hedera key.         |
+| ECDSA   | Elliptic Curve Digital Signature Algorithm. One Hedera signature scheme.   |
+| Ed25519 | Edwards-curve signature scheme over Curve25519. The other Hedera scheme.   |
+
+Evidence labels are the ones in `docs/15_MUMBAI_HANDOFF.md`: **Verified**, **Read from source**, **Open**. Anything run against real machines is **needs human verification**.
 
 ## Roles and units
 
