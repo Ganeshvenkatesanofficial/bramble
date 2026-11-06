@@ -7,7 +7,7 @@ test.beforeEach(async ({ request }) => {
 test('operator unlocks the private graph and runs device and relay checks with failure timestamps', async ({
   page,
   request,
-}) => {
+}, info) => {
   await page.goto('/')
   const panel = page.getByRole('region', { name: 'Tailnet network' })
   await expect(panel).toContainText('Unlock the console')
@@ -23,9 +23,11 @@ test('operator unlocks the private graph and runs device and relay checks with f
   const relay = panel.getByRole('article', { name: 'Network node relay-eu' })
   await relay.getByRole('button', { name: 'Check relay' }).click()
   await expect(relay.getByRole('status')).toContainText('HTTP RTT')
+  await panel.screenshot({ path: info.outputPath(`probe-success-${info.project.name}.png`) })
   await request.post('/__test/probe-failed')
   await device.getByRole('button', { name: 'Ping device' }).click()
   await expect(device.getByRole('status')).toContainText('Probe failed')
+  await panel.screenshot({ path: info.outputPath(`probe-failed-${info.project.name}.png`) })
   await request.post('/__test/network-offline')
   await panel.getByRole('button', { name: 'Refresh network' }).click()
   await expect(panel.getByRole('alert')).toContainText('unavailable')

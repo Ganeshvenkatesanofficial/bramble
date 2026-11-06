@@ -104,6 +104,7 @@ for (const theme of ['light', 'dark'] as const) {
     })
     expect(results.violations).toEqual([])
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.evaluate(() => window.scrollTo(0, 0))
     await page.screenshot({ path: info.outputPath(`console-${theme}-${info.project.name}.png`), fullPage: true })
     await network.screenshot({ path: info.outputPath(`network-${theme}-${info.project.name}.png`) })
     const revoke = card.getByRole('button', { name: 'Revoke access' })
