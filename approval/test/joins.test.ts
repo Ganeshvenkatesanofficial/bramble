@@ -2,16 +2,20 @@ import { expect, test } from 'bun:test'
 import { createApprovalApi } from '../src/lib/api'
 import { memoryEnrollChain } from '../../admincli/src/enroll-memory'
 import { createJoinChain } from '../src/lib/join-chain'
+import { createViemEnrollChain } from '../../admincli/src/enroll-chain-viem'
+import type { EnrollChain } from '../../admincli/src/lib'
+import { createPublicClient, http, type TransactionReceipt } from 'viem'
+import { sepolia } from 'viem/chains'
 
 const input = { label: 'laptop', pubkey: 'ab'.repeat(32), tailnet: 'mesh.eth' }
-function setup() {
+function setup(setTextAt?: EnrollChain['setTextAt']) {
   const memory = memoryEnrollChain({ tailnetName: 'mesh.eth' })
   const joinChain = createJoinChain({
     ...memory,
     readbackDelayMs: 0,
     signer: {
       async setText(name, key, value) {
-        const hash = await memory.chain.setTextAt('', name, key, value)
+        const hash = await (setTextAt ?? memory.chain.setTextAt)('', name, key, value)
         return { hash, async wait() {} }
       },
     },
@@ -161,4 +165,47 @@ test('confirmed device revocation survives a stale read-back without duplicate w
   expect((await call(`/joins/${id}/revoke`, 'POST')).status).toBe(409)
   expect((await (await call('/members')).json()).members[0].status).toBe('revoked')
   expect(memory.steps.filter((step) => step === 'setText:revoked')).toHaveLength(1)
+})
+
+test('a cancelled revoke transaction is not reported as revoked, even with a stale read-back', async () => {
+  // The real viem enrollment chain behind a loopback wallet RPC; only the receipt boundary is faked.
+  const sent = `0x${'1'.repeat(64)}` as const
+  const server = Bun.serve({
+    port: 0,
+    hostname: '127.0.0.1',
+    async fetch(request) {
+      const { id, method } = (await request.json()) as { id: number; method: string }
+      return Response.json({ jsonrpc: '2.0', id, result: method === 'eth_chainId' ? '0xaa36a7' : sent })
+    },
+  })
+  try {
+    const publicClient = {
+      ...createPublicClient({ chain: sepolia, transport: http(server.url.href) }),
+      async waitForTransactionReceipt({ onReplaced }: { onReplaced?: (r: { reason: 'cancelled' }) => void }) {
+        onReplaced?.({ reason: 'cancelled' })
+        return { status: 'success', logs: [], transactionHash: `0x${'b'.repeat(64)}` } as unknown as TransactionReceipt
+      },
+    }
+    const viemChain = createViemEnrollChain({
+      account: { address: `0x${'1'.repeat(40)}`, type: 'json-rpc' },
+      publicClient: publicClient as never,
+      chain: sepolia,
+      rpcUrl: server.url.href,
+    })
+    let cancelRevoke = false
+    const { call, memory } = setup((resolver, name, key, value) =>
+      cancelRevoke
+        ? viemChain.setTextAt(`0x${'2'.repeat(40)}`, name, key, value)
+        : memory.chain.setTextAt(resolver, name, key, value)
+    )
+    const { id } = await (await call('/joins', 'POST', input)).json()
+    expect((await call(`/joins/${id}/approve`, 'POST')).status).toBe(200)
+    cancelRevoke = true
+    const revoked = await call(`/joins/${id}/revoke`, 'POST')
+    expect(revoked.status).toBe(502)
+    expect((await (await call(`/joins/${id}`)).json()).status).toBe('approved')
+    expect(await memory.resolver.getText('laptop.mesh.eth', 'revoked')).not.toBe('true')
+  } finally {
+    server.stop(true)
+  }
 })

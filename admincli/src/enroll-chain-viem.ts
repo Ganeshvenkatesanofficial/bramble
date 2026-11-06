@@ -14,6 +14,7 @@ import {
   type Chain,
   type PublicClient,
   type Hex,
+  type ReplacementReason,
 } from 'viem'
 import { packetToBytes } from 'viem/ens'
 import {
@@ -60,10 +61,20 @@ export function createViemEnrollChain(options: ViemEnrollChainOptions): EnrollCh
       submitted.set(label, hash)
       log(`   tx (${label}): ${hash}`)
     }
-    const receipt = await publicClient.waitForTransactionReceipt({ hash })
+    // viem resolves with the replacement's receipt when the nonce is reused. Only a repriced
+    // copy (same target, value and calldata) performed this write; a cancellation or a
+    // different transaction did not, so its success must not count as confirmation.
+    let replacement: ReplacementReason | undefined
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash,
+      onReplaced: ({ reason }) => {
+        replacement = reason
+      },
+    })
     submitted.delete(label)
+    if (replacement && replacement !== 'repriced') throw new Error(`${label} was ${replacement} before it confirmed`)
     if (receipt.status !== 'success') throw new Error(`${label} reverted on-chain`)
-    return { hash, receipt }
+    return { hash: receipt.transactionHash, receipt }
   }
 
   return {
