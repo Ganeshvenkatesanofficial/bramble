@@ -19,6 +19,7 @@ export const WANTED = [
   'BRAMBLE_PUBLIC_RPC_URL',
   'BRAMBLE_STUN_SERVERS',
   'BRAMBLE_RENDEZVOUS',
+  'BRAMBLE_RENDEZVOUS_PAYMENT_URL',
   'BRAMBLE_DATA_RELAYS',
   'BRAMBLE_RELAY_PEERS',
   'BRAMBLE_APPROVAL_URL',
@@ -113,6 +114,11 @@ export function buildConfig(env, version) {
   }
   config.joinApi = publicUrl(join, 'joinApi').replace(/\/$/, '')
   if (rendezvous.length) config.rendezvous = rendezvous[0]
+  if (env.BRAMBLE_RENDEZVOUS_PAYMENT_URL)
+    config.rendezvousPaymentUrl = publicUrl(env.BRAMBLE_RENDEZVOUS_PAYMENT_URL, 'rendezvousPaymentUrl').replace(
+      /\/$/,
+      ''
+    )
   const stun = list(env.BRAMBLE_STUN_SERVERS).map((v) => hostPort(v, 'stun'))
   if (stun.length) config.stun = stun
 

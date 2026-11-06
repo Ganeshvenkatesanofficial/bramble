@@ -104,3 +104,8 @@ test('publishes the registry scan start blocks required by a fresh device', () =
   assert.equal(config.registryDeployBlock, 12074600)
   assert.equal(config.relayDeployBlock, 12074601)
 })
+
+test('publishes the metered rendezvous payment route for credential-free devices', () => {
+  const config = build(`${base}\nBRAMBLE_RENDEZVOUS_PAYMENT_URL=http://203.0.113.5:7891`)
+  assert.equal(config.rendezvousPaymentUrl, 'http://203.0.113.5:7891')
+})
