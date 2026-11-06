@@ -26,6 +26,19 @@ The team directed the architecture and scope, operated the physical Ledger and l
 
 Per-track attribution and involvement narrative for the submission dashboard is written separately by the team, not duplicated here.
 
+## Network lane: paths written by agents (ETH-37)
+
+Agent: Net-Claude, committing as `Net-Claude (agent, Chaitanya Kelkar)` (Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026). Move these rows into the shared Paths table from ETH-27 when that lands.
+
+| Path | Kind |
+| --- | --- |
+| `brambled/rendezvous/endpoints.go` | Code |
+| `brambled/rendezvous/endpoints_test.go` | Test |
+| `brambled/rendezvous/endpoints_integration_test.go` | Test |
+| `brambled/endpoint_candidate_test.go` | Test |
+| `brambled/main.go` (`peerEndpointFromCandidate`) | Code |
+| `docs/reference/endpoint-exchange.md` | Documentation |
+
 ## Mumbai approval API (ETH-29)
 
 Core-Sol (OpenAI Codex), committing as Core-Sol (agent, Yash Kolekar) through
