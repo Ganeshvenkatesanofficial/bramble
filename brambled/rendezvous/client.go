@@ -55,7 +55,7 @@ func Exchange(addr, ownPubkey, peerPubkey, myCandidate, token string, timeout ti
 	enc := json.NewEncoder(conn)
 	dec := json.NewDecoder(conn)
 
-	if err := enc.Encode(message{Type: "hello", Pubkey: ownPubkey, Token: token}); err != nil {
+	if err := enc.Encode(message{Type: "hello", Pubkey: ownPubkey, To: peerPubkey, Token: token}); err != nil {
 		return "", fmt.Errorf("registering with relay: %w", err)
 	}
 
