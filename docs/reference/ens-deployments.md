@@ -44,4 +44,12 @@ These values describe one deployment and must move together:
 
 Contract selection does not translate records between deployments. Retain the old values for rollback. The provisioning command's `--parent-only --name <label>` mode emits the new public parent configuration and saves it to ignored `.tmp/<deployment>-parent.json`. It does not overwrite `sidecar/test/fixtures/dev-tailnet.json` or enroll a placeholder device.
 
+## Migration parent
+
+Verified November 7, 2026: `bramble-mumbai-20261107.eth` is registered on the official deployment and points to device registry `0xF9c3cEa16cD75A1E8efBEE89fF0C1c04aB3F4148` (deployment block `12078393`). Parent registration: [Sepolia transaction](https://sepolia.etherscan.io/tx/0x59cfd583af3b8548f5fc66ac55479b1bc8d92195ce045f27cad7ebd134b3d81e).
+
+The enrolled identities are `mumbai-gateway`, `mumbai-worker` and `mumbai-granter2`. Their published WireGuard keys and mesh addresses match the existing demo identities. The gateway trusts `mumbai-granter2`; the worker begins with an empty ACL.
+
+The separate relay registry is `0x94F99d10eda494aF86D7d6E8431Ecd189E97412d` (deployment block `12078414`). `mumbai-relay.relays.bramble-mumbai-20261107.eth` carries the existing relay's public rendezvous, sidecar and price records.
+
 Open: official-tailnet cloud cutover and demo beats 1, 2, 3 and 5 require live evidence before changing the default or retiring the old configuration.
