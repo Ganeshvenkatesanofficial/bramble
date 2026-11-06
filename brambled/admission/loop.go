@@ -50,6 +50,7 @@ import (
 	"fmt"
 	"net/netip"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/WhyAsh5114/bramble/brambled/sidecar"
@@ -91,8 +92,10 @@ type Event struct {
 type Loop struct {
 	Resolver Resolver
 	Table    PeerTable
-	Peers    []Peer
-	TTL      time.Duration
+	// Peers is the tracked set. Set it before Run; after Run starts, add
+	// to it only through AddPeers.
+	Peers []Peer
+	TTL   time.Duration
 
 	// MaxStale bounds the fail-open window on resolver errors: once a label
 	// has gone this long since its last successful resolve, SyncOnce removes
@@ -121,6 +124,54 @@ type Loop struct {
 	resolvedEndpoints map[string]struct{}  // pubkey -> already resolved via EndpointResolver
 	knownPubkeys      map[string]string    // label -> last pubkey this label was authorized under
 	lastSuccess       map[string]time.Time // label -> time of last successful resolve
+
+	peersMu sync.Mutex    // guards Peers and kick once Run is going
+	kick    chan struct{} // AddPeers asks Run for an early sync pass
+}
+
+// AddPeers starts tracking every peer whose label is not tracked yet and
+// returns the ones it added. Safe to call while Run is going: Run syncs
+// the new peers right away instead of waiting for the next TTL tick.
+// Adding a peer only tracks it. Each sync pass still decides admission from
+// the peer's ENS record, the same as for a peer given at startup.
+func (l *Loop) AddPeers(peers []Peer) []Peer {
+	l.peersMu.Lock()
+	tracked := make(map[string]bool, len(l.Peers))
+	for _, p := range l.Peers {
+		tracked[p.Label] = true
+	}
+	var added []Peer
+	for _, p := range peers {
+		if tracked[p.Label] {
+			continue
+		}
+		tracked[p.Label] = true
+		l.Peers = append(l.Peers, p)
+		added = append(added, p)
+	}
+	kick := l.kickChan()
+	l.peersMu.Unlock()
+	if len(added) > 0 {
+		select {
+		case kick <- struct{}{}:
+		default: // a sync is already pending
+		}
+	}
+	return added
+}
+
+// kickChan returns the early-sync channel. Callers hold peersMu.
+func (l *Loop) kickChan() chan struct{} {
+	if l.kick == nil {
+		l.kick = make(chan struct{}, 1)
+	}
+	return l.kick
+}
+
+func (l *Loop) trackedPeers() []Peer {
+	l.peersMu.Lock()
+	defer l.peersMu.Unlock()
+	return append([]Peer(nil), l.Peers...)
 }
 
 func (l *Loop) now() time.Time {
@@ -134,7 +185,7 @@ func (l *Loop) now() time.Time {
 // table accordingly. Idempotent — safe to call on every tick without diffing
 // against prior state first.
 func (l *Loop) SyncOnce() {
-	for _, p := range l.Peers {
+	for _, p := range l.trackedPeers() {
 		record, err := l.Resolver.ResolveDevice(p.Label)
 		if err != nil {
 			l.emit(Event{Label: p.Label, Authorized: false, Err: err})
@@ -288,6 +339,10 @@ func (l *Loop) Run(ctx context.Context) error {
 		return fmt.Errorf("admission loop TTL must be positive")
 	}
 
+	l.peersMu.Lock()
+	kick := l.kickChan()
+	l.peersMu.Unlock()
+
 	l.SyncOnce()
 
 	ticker := time.NewTicker(l.TTL)
@@ -297,6 +352,8 @@ func (l *Loop) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			l.SyncOnce()
+		case <-kick:
 			l.SyncOnce()
 		}
 	}

@@ -108,6 +108,7 @@ func sidecarConfig() sidecar.Config {
 	}
 	return sidecar.Config{
 		Dir:             envOr("BRAMBLE_SIDECAR_DIR", "../sidecar"),
+		Binary:          os.Getenv("BRAMBLE_SIDECAR_BIN"),
 		Port:            port,
 		TailnetName:     os.Getenv("BRAMBLE_TAILNET_NAME"),
 		TailnetRegistry: os.Getenv("BRAMBLE_TAILNET_REGISTRY"),
@@ -243,8 +244,9 @@ func resolvePeerMeshIPs(resolver admission.Resolver, ownLabel, localAddr string,
 // check already handles that correctly for a statically-listed peer (it's
 // just never admitted), so doing it here too would only be able to get it
 // wrong in one direction: excluding a peer that gets un-revoked or
-// re-enrolled later, for the life of this process, since the peer list
-// itself is fixed at startup.
+// re-enrolled later, for the life of this process. serve calls this at
+// startup and, with auto-discovery on, again every -rediscover interval
+// (peerTracker.discoverNew) to pick up devices enrolled after startup.
 // deviceLister is satisfied by *sidecar.Manager — kept as a small interface,
 // separate from admission.Resolver, so discoverAllPeers can be tested
 // without a live sidecar.
@@ -916,6 +918,7 @@ func runServe(args []string) error {
 	stunServers := fs.String("stun-servers", os.Getenv("BRAMBLE_STUN_SERVERS"), "comma-separated STUN host:port servers; empty disables public endpoint discovery")
 	listenPort := fs.Uint("listen-port", 51820, "UDP port this node's WireGuard transport binds to")
 	ttl := fs.Duration("ttl", 30*time.Second, "how often to re-resolve ENS state for tracked peers")
+	rediscover := fs.Duration("rediscover", defaultRediscoverInterval, "with auto-discovery (no -peer flags), how often to re-list the tailnet and start tracking devices enrolled after startup, without a restart (docs/adr/0010); 0 turns rediscovery off. Admission and ACL checks for a new device are unchanged")
 	maxStale := fs.Duration("max-stale", 2*time.Minute, "remove a peer if resolving it keeps failing for this long (sidecar/RPC down) instead of leaving it admitted indefinitely; defaults to a bounded 2 minutes rather than unbounded fail-open — pass 0 explicitly to disable this and fail open forever (see admission package doc)")
 	keepaliveSeconds := fs.Int("keepalive", 0, "send an unsolicited WireGuard packet to every authorized peer this often (seconds) so NAT mappings/roaming state don't go stale on an otherwise-idle connection; 0 disables this (existing behavior — a data-relay pool already arms its own keepalive independently of this flag, see dataRelayKeepaliveSeconds)")
 	privateKeyHex := fs.String("private-key", os.Getenv("BRAMBLE_PRIVATE_KEY"), "hex-encoded WireGuard private key (generated ephemerally if unset — not persisted)")
@@ -1212,10 +1215,9 @@ func runServe(args []string) error {
 		go node.RunSTUN(ctx, discoveryServers)
 	}
 
-	peerLabels := make(map[netip.Addr]string, len(peers))
-	for _, p := range peers {
-		peerLabels[p.AllowedIP.Addr()] = p.Label
-	}
+	// tracker is the live tracked set the gateway maps tunnel addresses
+	// with. Rediscovery (below) adds to it; startup peers are in it now.
+	tracker := newPeerTracker(*ownLabel, prefix.Addr(), peers)
 
 	// Gate 4.3 failover (docs/adr/0008): one watcher per -relay-peer,
 	// started once ctx exists so Ctrl+C stops them cleanly. Each blocks
@@ -1236,28 +1238,29 @@ func runServe(args []string) error {
 	// so a plain direct-peer setup with no relay involved anywhere keeps
 	// its old behavior exactly (no extra re-exchange traffic on an
 	// ordinary idle connection).
-	if len(dataRelays) > 0 && len(rendezvousRelays) > 0 {
-		for _, p := range peers {
-			if relayPeers[p.Label] {
-				continue
-			}
-			p := p
-			go func() {
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					case <-time.After(time.Second):
-					}
-					pubkey, ok := relState.getPubkey(p.Label)
-					if !ok {
-						continue
-					}
-					watchDataRelayAdopt(ctx, node, m, p.Label, ownPubkey, pubkey, *myCandidate, p.AllowedIP, rendezvousRelays)
-					return
-				}
-			}()
+	adoptWatching := len(dataRelays) > 0 && len(rendezvousRelays) > 0
+	startAdoptWatcher := func(p admission.Peer) {
+		if !adoptWatching || relayPeers[p.Label] {
+			return
 		}
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(time.Second):
+				}
+				pubkey, ok := relState.getPubkey(p.Label)
+				if !ok {
+					continue
+				}
+				watchDataRelayAdopt(ctx, node, m, p.Label, ownPubkey, pubkey, *myCandidate, p.AllowedIP, rendezvousRelays)
+				return
+			}
+		}()
+	}
+	for _, p := range peers {
+		startAdoptWatcher(p)
 	}
 
 	var gwListener net.Listener
@@ -1277,7 +1280,7 @@ func runServe(args []string) error {
 		PrivateKeyHex: *privateKeyHex,
 		OwnLabel:      *ownLabel,
 		Services:      services,
-		PeerLabels:    peerLabels,
+		LookupPeer:    tracker.lookup,
 		OnDecision:    status.OnGatewayDecision,
 	}
 	go func() {
@@ -1332,7 +1335,19 @@ func runServe(args []string) error {
 	if iface := node.InterfaceName(); iface != "" {
 		fmt.Fprintf(os.Stderr, "interface: %s (check with `ifconfig %s` / `netstat -rn | grep %s`)\n", iface, iface, prefix.Masked())
 	}
-	fmt.Fprintf(os.Stderr, "serving on %s:%d (pubkey %s), tracking %d peer(s), ttl=%s (Ctrl+C to stop)\n", prefix.Addr(), *listenPort, ownPubkey, len(peers), *ttl)
+	// Rediscovery (docs/adr/0010): only with auto-discovery. An explicit
+	// -peer list stays exactly what was typed. A new peer goes through the
+	// same admission.Loop checks and gateway ACL as a startup peer.
+	if autoDiscovering && *rediscover > 0 {
+		go rediscoverPeers(ctx, *rediscover, tracker, m, m, os.Stderr, func(added []admission.Peer) {
+			for _, p := range loop.AddPeers(added) {
+				fmt.Fprintf(os.Stderr, "serve: rediscovered peer %s (%s), now tracking it\n", p.Label, p.AllowedIP)
+				startAdoptWatcher(p)
+			}
+		})
+	}
+
+	fmt.Fprintf(os.Stderr, "serving on %s:%d (pubkey %s), tracking %d peer(s), ttl=%s, rediscover=%s (Ctrl+C to stop)\n", prefix.Addr(), *listenPort, ownPubkey, len(peers), *ttl, *rediscover)
 	err = loop.Run(ctx)
 	if err == context.Canceled {
 		return nil

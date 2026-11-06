@@ -64,10 +64,10 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 
 export async function scanLogsChunked(
   client: PublicClient,
-  params: { address: `0x${string}`; event: AbiEvent; fromBlock: bigint },
+  params: { address: `0x${string}`; event: AbiEvent; fromBlock: bigint; toBlock?: bigint },
   retryDelaysMs: readonly number[] = RETRY_DELAYS_MS
 ): Promise<ScannedLog[]> {
-  const head = await client.getBlockNumber()
+  const head = params.toBlock ?? (await client.getBlockNumber())
   const logs: ScannedLog[] = []
   for (let start = params.fromBlock; start <= head; start += MAX_BLOCK_RANGE) {
     const end = start + MAX_BLOCK_RANGE - 1n > head ? head : start + MAX_BLOCK_RANGE - 1n
@@ -75,7 +75,7 @@ export async function scanLogsChunked(
       try {
         // After a failure, the window that ends at head asks for "latest": each backend then resolves the
         // bound against its own head, so a lagging backend cannot reject it (see RETRY_DELAYS_MS).
-        const toBlock = attempt > 0 && end === head ? 'latest' : end
+        const toBlock = attempt > 0 && end === head && params.toBlock === undefined ? 'latest' : end
         const chunk = await client.getLogs({
           address: params.address,
           event: params.event,

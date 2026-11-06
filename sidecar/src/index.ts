@@ -5,8 +5,24 @@ import { devicesRoute } from './routes/devices'
 import { paymentsRoute } from './routes/payments'
 import { relaysRoute } from './routes/relays'
 import { requireTorReady, torStatusRoute } from './routes/tor'
+import { runSelfTest } from './selftest'
 import { withoutIdleTimeout } from './serve'
 import { getTorStatus, startTor } from './tor'
+
+// Runs before the server starts, and exits, so a release smoke test can check
+// the executable without a tailnet, a port or a key (docs/reference/node-release.md).
+if (process.argv.includes('--self-test')) {
+  await runSelfTest().then(
+    () => {
+      console.log('self-test ok: x402 Hedera payment signing')
+      process.exit(0)
+    },
+    (err) => {
+      console.error(`self-test failed: ${err instanceof Error ? err.message : String(err)}`)
+      process.exit(1)
+    }
+  )
+}
 
 const app = new Hono()
 
