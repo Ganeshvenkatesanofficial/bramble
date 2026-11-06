@@ -35,3 +35,8 @@ Paths written:
 ## ETH-217: merge `hackathon` into PR #38
 
 Merge-conflict resolution (AI-assisted): `brambled/main.go` (the hackathon `startAdoptWatcher` refactor now passes `payer` and `adoptPace`), `README.md` (status table: the W5 rows merged, ETH-177 T6 and ETH-177e rows kept), `.gitignore`, `docs/ai-usage/net-claude.md` (both sides kept), `pnpm-lock.yaml` (regenerated with `pnpm install`).
+
+## Earlier entries from `hackathon`
+
+- ETH-35 (live activity feed, beats 1, 3 and 5): `approval/src/lib/activity.ts`, `approval/src/lib/explorer.ts`, `approval/src/lib/payments-handler.ts`, `approval/src/hooks/use-activity.ts`, `approval/src/components/activity-feed.tsx`, `approval/src/components/approval-console.tsx`, `approval/src/components/request-card.tsx`, `approval/src/lib/{api,service,contracts,console-api}.ts`, `approval/src/app/api/{[...path],payments}/route.ts`, `approval/src/app/globals.css`, `approval/test/activity.test.ts`, `approval/test/fixtures/activity-status.json`, `approval/e2e/{console.spec.ts,memory-server.ts}`, `approval/README.md`, `brambled/statusapi/{server.go,server_test.go,activity_contract_test.go}`, `dashboard/README.md`, `docs/how-to-test-approval-console.md` and this file. AI-assisted (Core-Claude). The feed adds read-only HTTP reads and no write path. Human H4 screenshot approval and a live two-machine cut-off measurement are still required.
+- ETH-223 (PR #24 review round 1 fixes): `approval/src/lib/activity.ts`, `approval/src/lib/api.ts`, `approval/test/activity.test.ts`, `approval/e2e/memory-server.ts`, `approval/README.md`, `docs/how-to-test-approval-console.md` and this file. AI-assisted (Core-Claude).

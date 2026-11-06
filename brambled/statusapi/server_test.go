@@ -3,6 +3,7 @@ package statusapi
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"os/exec"
 	"testing"
@@ -67,10 +68,67 @@ func TestActivityFeedCollectsAdmissionAndGatewayEvents(t *testing.T) {
 func TestActivityFeedIsBounded(t *testing.T) {
 	s := &Server{}
 	for i := 0; i < activityBufferSize+50; i++ {
-		s.OnAdmissionEvent(admission.Event{Label: "worker", Authorized: true})
+		s.OnGatewayDecision(gateway.Decision{RequesterLabel: "worker", Service: "web", Allowed: true, Detail: "proxying"})
 	}
 	if got := len(s.activity.snapshot()); got != activityBufferSize {
 		t.Fatalf("expected ring buffer capped at %d, got %d", activityBufferSize, got)
+	}
+}
+
+func TestActivityFeedRecordsAdmissionOnlyOnChange(t *testing.T) {
+	s := &Server{}
+	for i := 0; i < 5; i++ {
+		s.OnAdmissionEvent(admission.Event{Label: "worker", Authorized: true, PublicKey: "abc"})
+	}
+	if got := len(s.activity.snapshot()); got != 1 {
+		t.Fatalf("five identical sync passes must record one event, got %d: %+v", got, s.activity.snapshot())
+	}
+}
+
+func TestActivityFeedReportsPeerDroppedOnce(t *testing.T) {
+	s := &Server{}
+	s.OnAdmissionEvent(admission.Event{Label: "agent-1", Authorized: true, PublicKey: "abc"})
+	// A resolver error says nothing about admission, so it must not look like a drop.
+	s.OnAdmissionEvent(admission.Event{Label: "agent-1", Authorized: false, Err: errors.New("rpc timeout")})
+	s.OnAdmissionEvent(admission.Event{Label: "agent-1", Authorized: false})
+	s.OnAdmissionEvent(admission.Event{Label: "agent-1", Authorized: false})
+
+	var dropped []ActivityEvent
+	for _, e := range s.activity.snapshot() {
+		if e.Kind == "peer" {
+			dropped = append(dropped, e)
+		}
+	}
+	if len(dropped) != 1 || dropped[0].Label != "agent-1" || dropped[0].Outcome != "dropped" {
+		t.Fatalf("expected exactly one dropped event for agent-1, got %+v", dropped)
+	}
+}
+
+func TestActivityFeedDoesNotReportDropForFailedRemoval(t *testing.T) {
+	s := &Server{}
+	s.OnAdmissionEvent(admission.Event{Label: "agent-1", Authorized: true, PublicKey: "abc"})
+	s.OnAdmissionEvent(admission.Event{Label: "agent-1", Authorized: false, Err: errors.New("removing peer abc: failed")})
+	for _, e := range s.activity.snapshot() {
+		if e.Kind == "peer" {
+			t.Fatalf("a failed removal left the peer admitted, but the feed reported a drop: %+v", e)
+		}
+	}
+}
+
+func TestGatewayActivityCarriesOutcomeAndService(t *testing.T) {
+	s := &Server{}
+	s.OnGatewayDecision(gateway.Decision{RequesterLabel: "agent-1", Service: "staging-tasks", Allowed: false, Detail: "no matching granted digest"})
+	s.OnGatewayDecision(gateway.Decision{RequesterLabel: "agent-1", Service: "staging-tasks", Allowed: true, Detail: "proxying to 127.0.0.1:9000"})
+
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/activity", nil))
+	var got []ActivityEvent
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if len(got) != 2 || got[0].Outcome != "denied" || got[1].Outcome != "allowed" ||
+		got[0].Service != "staging-tasks" || got[1].Service != "staging-tasks" {
+		t.Fatalf("gateway events must carry outcome and service: %+v", got)
 	}
 }
 

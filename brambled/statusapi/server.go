@@ -36,13 +36,20 @@ type PeerTable interface {
 	Peers() ([]wgnode.PeerInfo, error)
 }
 
-// ActivityEvent is one entry in the activity feed — an admission decision
-// or a gateway CONNECT decision, whichever produced it.
+// ActivityEvent is one entry in the activity feed — an admission decision,
+// a gateway CONNECT decision, or a peer dropped from the WireGuard peer
+// table, whichever produced it.
 type ActivityEvent struct {
 	Time    time.Time `json:"time"`
-	Kind    string    `json:"kind"` // "admission" or "gateway"
+	Kind    string    `json:"kind"` // "admission", "gateway" or "peer"
 	Label   string    `json:"label"`
 	Message string    `json:"message"`
+	// Outcome is "allowed" or "denied" for a gateway event and "dropped" for
+	// a peer event. Admission events leave it empty. Consumers read this
+	// field instead of parsing Message.
+	Outcome string `json:"outcome,omitempty"`
+	// Service is the gateway's symbolic service name. Only gateway events set it.
+	Service string `json:"service,omitempty"`
 }
 
 const activityBufferSize = 200
@@ -78,15 +85,34 @@ func (b *activityBuffer) snapshot() []ActivityEvent {
 type admissionCache struct {
 	mu      sync.Mutex
 	byLabel map[string]admission.Event
+	// lastNote is the message last recorded to the activity feed per label.
+	// admission.Loop reports every peer on every sync pass; the feed records
+	// only changes so repeated passes do not push real events out of the ring.
+	lastNote map[string]string
+	// lastAuthorized is the last authorization state reached without an error.
+	// An error event says nothing about whether the peer is still admitted.
+	lastAuthorized map[string]bool
 }
 
-func (c *admissionCache) set(e admission.Event) {
+// set stores e and reports whether it changed the feed-visible state of its
+// label, and whether it moved a previously authorized peer out of the table.
+func (c *admissionCache) set(e admission.Event, note string) (changed, dropped bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.byLabel == nil {
 		c.byLabel = map[string]admission.Event{}
+		c.lastNote = map[string]string{}
+		c.lastAuthorized = map[string]bool{}
 	}
 	c.byLabel[e.Label] = e
+	prevNote, seen := c.lastNote[e.Label]
+	changed = !seen || prevNote != note
+	c.lastNote[e.Label] = note
+	if e.Err == nil {
+		dropped = c.lastAuthorized[e.Label] && !e.Authorized
+		c.lastAuthorized[e.Label] = e.Authorized
+	}
+	return changed, dropped
 }
 
 func (c *admissionCache) get(label string) (admission.Event, bool) {
@@ -124,12 +150,21 @@ type Server struct {
 
 // OnAdmissionEvent is meant to be assigned directly to admission.Loop.OnEvent.
 func (s *Server) OnAdmissionEvent(e admission.Event) {
-	s.admission.set(e)
 	msg := fmt.Sprintf("authorized=%v", e.Authorized)
 	if e.Err != nil {
 		msg = fmt.Sprintf("resolve error: %v", e.Err)
 	}
-	s.activity.add(ActivityEvent{Time: time.Now(), Kind: "admission", Label: e.Label, Message: msg})
+	changed, dropped := s.admission.set(e, msg)
+	now := time.Now()
+	if changed {
+		s.activity.add(ActivityEvent{Time: now, Kind: "admission", Label: e.Label, Message: msg})
+	}
+	if dropped {
+		s.activity.add(ActivityEvent{
+			Time: now, Kind: "peer", Label: e.Label, Outcome: "dropped",
+			Message: "dropped from the WireGuard peer table: no longer authorized",
+		})
+	}
 }
 
 // OnGatewayDecision is meant to be assigned directly to gateway.Server.OnDecision.
@@ -139,7 +174,10 @@ func (s *Server) OnGatewayDecision(d gateway.Decision) {
 		verb = "allowed"
 	}
 	msg := fmt.Sprintf("%s %q: %s (%s)", verb, d.Service, d.Detail, d.RequesterLabel)
-	s.activity.add(ActivityEvent{Time: time.Now(), Kind: "gateway", Label: d.RequesterLabel, Message: msg})
+	s.activity.add(ActivityEvent{
+		Time: time.Now(), Kind: "gateway", Label: d.RequesterLabel, Message: msg,
+		Outcome: verb, Service: d.Service,
+	})
 }
 
 // PeerStatus is one row of GET /peers.
