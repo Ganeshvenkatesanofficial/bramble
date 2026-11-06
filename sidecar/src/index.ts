@@ -4,8 +4,15 @@ import { deviceRoute } from './routes/device'
 import { devicesRoute } from './routes/devices'
 import { paymentsRoute } from './routes/payments'
 import { relaysRoute } from './routes/relays'
+import { requireTorReady, torStatusRoute } from './routes/tor'
+import { withoutIdleTimeout } from './serve'
+import { getTorStatus, startTor } from './tor'
 
 const app = new Hono()
+
+// Registered first so it gates every route below except /health and
+// /tor/status (see routes/tor.ts).
+app.use('*', requireTorReady)
 
 // Identity is included so brambled/sidecar.Manager's health check can tell
 // "my sidecar came up" from "some other process (a stray sidecar from
@@ -27,6 +34,7 @@ app.route('/device', deviceRoute)
 app.route('/', devicesRoute)
 app.route('/', paymentsRoute)
 app.route('/', relaysRoute)
+app.route('/', torStatusRoute)
 
 export default {
   port: SIDECAR_PORT,
@@ -34,7 +42,16 @@ export default {
   // process, never other hosts. Bun's default bind (all interfaces) would
   // otherwise expose the read endpoint to the network for no reason.
   hostname: '127.0.0.1',
-  fetch: app.fetch,
+  fetch: withoutIdleTimeout(app.fetch),
 }
 
 console.log(`bramble sidecar listening on 127.0.0.1:${SIDECAR_PORT}`)
+
+// Bootstrap Tor in the background so /health answers at once. A failed
+// attempt is recorded in /tor/status and retried after 30 s.
+const torStartedAt = Date.now()
+console.log('starting Tor (MemoryStorage, no snapshot; can take up to a minute)')
+startTor().then(
+  () => console.log(`Tor ready after ${((Date.now() - torStartedAt) / 1000).toFixed(1)} s`),
+  () => console.error(`Tor failed to start: ${getTorStatus().lastError}; retrying in 30 s`)
+)

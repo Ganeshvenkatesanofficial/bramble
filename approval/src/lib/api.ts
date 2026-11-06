@@ -15,6 +15,10 @@ export function createApprovalApi(options: ApiOptions) {
   const json = (value: unknown, status = 200) =>
     Response.json(value, { status, headers: { 'cache-control': 'no-store' } })
 
+  // 202 while a submitted transaction is unconfirmed: the write may still land.
+  const jsonWrite = (value: { status?: string } | undefined) =>
+    json(value, value?.status === 'approving' || value?.status === 'revoking' ? 202 : 200)
+
   return {
     async handle(request: Request): Promise<Response> {
       try {
@@ -32,12 +36,35 @@ export function createApprovalApi(options: ApiOptions) {
           return json(service.create(await readInput(request)), 201)
         }
         if (path === '/api/requests' && request.method === 'GET') return json({ requests: service.list() })
+        const identity = /^\/api\/identities\/([^/]+)$/.exec(path)
+        if (identity && request.method === 'GET') {
+          const name = label(identity[1], 'agentLabel')
+          if (!options.resolver) {
+            throw new ApiError(503, 'resolver_not_configured', 'Identity resolution is not configured.')
+          }
+          try {
+            const facts = await options.resolver.resolveIdentity(name)
+            return json({
+              identity: facts
+                ? {
+                    label: facts.label,
+                    pubkeyPublished: facts.pubkeyPublished,
+                    revoked: facts.revoked,
+                    expiry: facts.expiry,
+                  }
+                : null,
+            })
+          } catch {
+            throw new ApiError(502, 'identity_unavailable', 'ENS identity facts are temporarily unavailable.')
+          }
+        }
         const decision = /^\/api\/requests\/([^/]+)\/(approve|deny)$/.exec(path)
         if (decision && request.method === 'POST') {
-          return json(decision[2] === 'approve' ? await service.approve(decision[1]) : service.deny(decision[1]))
+          if (decision[2] === 'deny') return json(service.deny(decision[1]))
+          return jsonWrite(await service.approve(decision[1]))
         }
         const revoke = /^\/api\/grants\/([^/]+)\/revoke$/.exec(path)
-        if (revoke && request.method === 'POST') return json(await service.revoke(label(revoke[1], 'agentLabel')))
+        if (revoke && request.method === 'POST') return jsonWrite(await service.revoke(label(revoke[1], 'agentLabel')))
         const detail = /^\/api\/requests\/([^/]+)$/.exec(path)
         if (detail && request.method === 'GET') return json(service.get(detail[1]))
         throw new ApiError(404, 'route_not_found', 'Route not found.')

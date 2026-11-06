@@ -97,7 +97,7 @@ export function parseAclRecord(record: string | null | undefined): string[] {
   return parseServiceNames(record ?? '')
 }
 
-function deviceName(label: string, tailnetName: string): string {
+export function deviceName(label: string, tailnetName: string): string {
   return normalize(`${label}.${tailnetName}`)
 }
 
@@ -200,6 +200,33 @@ export async function revokeAcl(deps: LibDeps, params: GrantParams): Promise<Acl
   const txHash = await writeAcl(deps, deviceFullname, value)
   log(`done. ${deviceFullname}'s acl digests are now ${value === '' ? '(empty)' : value}.`)
   return { deviceFullname, granterFullname, gatewayFullname, digests, before, after: value, txHash }
+}
+
+export interface ClearAclResult {
+  deviceFullname: string
+  before: string
+  /** Always `''`. */
+  after: string
+  /** `undefined` when the record was already empty and no transaction was needed. */
+  txHash: string | undefined
+}
+
+/**
+ * Empties the device's `acl` record, removing every digest whoever granted it.
+ * Needs no granter key. Sends no transaction when the record is already empty.
+ */
+export async function clearAcl(deps: LibDeps, params: { deviceLabel: string }): Promise<ClearAclResult> {
+  const log = deps.log ?? noop
+  const deviceFullname = deviceName(params.deviceLabel, deps.tailnetName)
+  const before = (await deps.resolver.getText(deviceFullname, 'acl')) ?? ''
+  if (parseAclRecord(before).length === 0) {
+    log(`${deviceFullname}'s acl is already empty — nothing to do.`)
+    return { deviceFullname, before, after: '', txHash: undefined }
+  }
+  log(`clearing acl digests for ${deviceFullname}: ${before}`)
+  const txHash = await writeAcl(deps, deviceFullname, '')
+  log(`done. ${deviceFullname}'s acl is now empty.`)
+  return { deviceFullname, before, after: '', txHash }
 }
 
 /**

@@ -53,10 +53,27 @@ type Config struct {
 	// RendezvousToken (see client.go) is simply never called.
 	HederaClientAccountID  string
 	HederaClientPrivateKey string
+
+	// TorReadyTimeout bounds how long Start waits for the sidecar's Tor
+	// client after /health answers. Zero means DefaultTorReadyTimeout.
+	TorReadyTimeout time.Duration
+}
+
+// DefaultTorReadyTimeout covers a first bootstrap attempt that runs to its
+// full deadline and a second, complete attempt: the sidecar gives each
+// attempt 180 s and starts the next 30 s after a failure, so 390 s in all.
+// Tor was ready after 51 s under Bun with no snapshot (5 Nov 2026 spike).
+const DefaultTorReadyTimeout = 7 * time.Minute
+
+// torStatusResponse mirrors sidecar/src/routes/tor.ts's /tor/status payload.
+type torStatusResponse struct {
+	State     string `json:"state"`
+	LastError string `json:"lastError"`
+	Message   string `json:"message"`
 }
 
 // Start spawns the sidecar as a child process and blocks until it responds
-// to /health or the timeout elapses.
+// to /health and its Tor client is ready, or a timeout elapses.
 func Start(cfg Config) (*Manager, error) {
 	if cfg.Port == 0 {
 		cfg.Port = 7890
@@ -90,7 +107,66 @@ func Start(cfg Config) (*Manager, error) {
 		_ = m.Stop()
 		return nil, err
 	}
+	torTimeout := cfg.TorReadyTimeout
+	if torTimeout == 0 {
+		torTimeout = DefaultTorReadyTimeout
+	}
+	if err := m.waitTorReady(torTimeout, 500*time.Millisecond); err != nil {
+		_ = m.Stop()
+		return nil, err
+	}
 	return m, nil
+}
+
+// waitTorReady polls /tor/status until the sidecar's Tor client is ready.
+// The sidecar answers every data route with 503 "starting Tor" until then
+// (docs/adr/0013), and serve's startup reads (auto-discovery, mesh-ip
+// resolution) have no last-known state to fall back on, so they must wait
+// rather than fail. A 404 means a sidecar that predates the Tor client and
+// is treated as ready. A "failed" state keeps polling, because the sidecar
+// retries its bootstrap on its own.
+func (m *Manager) waitTorReady(timeout, interval time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	url := fmt.Sprintf("http://127.0.0.1:%d/tor/status", m.Port)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	start := time.Now()
+	announced := false
+	last := "no answer from /tor/status"
+	for {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return fmt.Errorf("building /tor/status request: %w", err)
+		}
+		if resp, err := http.DefaultClient.Do(req); err == nil {
+			var body torStatusResponse
+			decodeErr := json.NewDecoder(resp.Body).Decode(&body)
+			resp.Body.Close()
+			switch {
+			case resp.StatusCode == http.StatusNotFound:
+				return nil
+			case resp.StatusCode == http.StatusOK && decodeErr == nil && body.State == "ready":
+				if announced {
+					fmt.Fprintf(os.Stderr, "sidecar Tor ready after %s\n", time.Since(start).Round(time.Second))
+				}
+				return nil
+			case decodeErr == nil && body.Message != "":
+				last = body.Message
+			}
+		}
+		if !announced {
+			fmt.Fprintf(os.Stderr, "waiting for sidecar Tor client (%s)...\n", last)
+			announced = true
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("sidecar Tor client not ready within %s: %s", timeout, last)
+		case <-ticker.C:
+		}
+	}
 }
 
 // waitHealthy polls /health until it reports ok for *this* node's tailnet,
