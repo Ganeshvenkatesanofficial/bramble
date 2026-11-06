@@ -4,19 +4,24 @@ Goal: run the access lifecycle once, by hand, on the cloud nodes: denied (beat 1
 
 **This costs money while the nodes are up.** Each node buys a rendezvous token about every 37 s, which cost the Hedera payer `0.0.11334961` about 2.4 to 4 USDC per hour with both nodes up (measured on 6 Nov 2026; see "Cost"). Start the nodes in step 3 and stop them in step 9.
 
+**Open prerequisite before you spend: the Hedera audit record.** Beat 3's new HCS audit record will not appear until a human adds `HEDERA_AUDIT_TOPIC_ID`, `HEDERA_CLIENT_ACCOUNT_ID` and `HEDERA_CLIENT_PRIVATE_KEY` to the approval service's env file and restarts `bramble-approval` (details in step 6). Grant and revoke work without it. If you need the HashScan audit link in the console, fix this first, so you do not pay for a full dry run that cannot show it.
+
+**Open: the ETH read.** The operator's Sepolia balance in the ticket came from a public endpoint (`ethereum-sepolia-rpc.publicnode.com`), not the dedicated one, which was not configured where the author ran.
+
 **One driver at a time.** Two people or agents calling the worker's `:8080` forward, or restarting the node units, at once ruin each other's timings and ACL state. Before you start, make sure nobody else (including an agent ticket such as ETH-243 or ETH-244) owns the nodes.
 
 ## Evidence labels
 
 State on 6 Nov 2026, build `4928612` (merge of PR #39) on all three machines.
 
-| Label      | Meaning                                                                              |
-| ---------- | ------------------------------------------------------------------------------------ |
-| Verified   | The author ran it, or read its live output, on the real machines on 6 Nov 2026       |
-| Cited      | Run by another ticket; the note names the log or the page. The author did not run it |
-| UNVERIFIED | Not run by anyone on these machines. Check the output yourself and report a mismatch |
+| Label      | Meaning                                                                                                                                                     |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Verified   | The author ran it, or read its live output, on the real machines on 6 Nov 2026                                                                              |
+| UNVERIFIED | The author did not run it. Check the output yourself and report a mismatch. A "Cited" note after the label names the log or page of another run, as support |
 
-The author could not start or stop the nodes while writing this page: the nodes belonged to another ticket's run (ETH-244, 12:20Z to about 13:05Z). Steps that start and stop them are Cited, not Verified.
+"Cited" is supporting evidence only. It never upgrades a step to Verified.
+
+The author could not start or stop the nodes while writing this page: the nodes belonged to another ticket's run (ETH-244, 12:20Z to about 13:05Z). Starting, stopping, the denied call, the request, approve, successful call and revoke steps are therefore **UNVERIFIED**.
 
 ## Where to run each command
 
@@ -59,7 +64,7 @@ ssh bramble-worker  'systemctl is-active bramble-worker'
 
 Expected: `inactive` twice. If a node is `active`, someone is running it. Ask who, or stop it in step 9 and start clean. Verified that the command works (both returned `active` on 6 Nov 2026 during another ticket's run).
 
-Then check the starting chain state. The console must show no active grant for `mumbai-worker`: open the console URL and read "Active grants". Expected: "No active grants in this queue." If a grant is listed, click **Revoke access** and wait for "Revoke confirmed" before you continue. Verified: the console serves the page and the request list.
+The starting grant state is checked in step 2, after you have the token. Do not trust the console's "Granted access" list for this: it shows only requests held in the approval service's memory, so a grant on ENS can survive a service restart with no card in the list.
 
 ## 2. Get the demo token without displaying it
 
@@ -83,7 +88,25 @@ BASE=https://console.13-233-181-104.sslip.io
 AUTH="Authorization: Bearer $TOKEN"
 ```
 
+**Unlock the console.** Open `https://console.13-233-181-104.sslip.io`. In "Operator authorization", paste the token into the "Demo token" field and click **Unlock**. Pasting alone does nothing: the Approve and Revoke buttons stay disabled until you click Unlock. Expected: the text changes to "Decision controls unlocked" and the button becomes **Lock console**. Reloading the page locks it again. Read from source (`approval/src/components/approval-console.tsx`); UNVERIFIED in a browser.
+
+**Remove any grant left from an earlier run.** Always do this, even when the console list is empty. The call revokes by agent label and works without a console card:
+
+```sh
+curl -sS -m 120 -w '\nHTTP %{http_code}\n' -X POST "$BASE/api/grants/mumbai-worker/revoke" -H "$AUTH"
+```
+
+Two outcomes are fine. HTTP 200 with `"status":"revoked"`: a grant existed and is gone; wait 45 s for the gateway to see it. HTTP 409 `not_granted`: there was no grant. Anything else: see "When a step fails". The revoke transaction costs a little Sepolia ETH only. UNVERIFIED: the 409 path is read from source (`approval/src/lib/service.ts`, `revoke`), not run by the author. Beat 1 (step 4) is the real check: it must be denied before you go on.
+
 ## 3. Start the nodes
+
+First record the clock on each node. Every journal query below starts from these, so lines from an earlier run cannot be mistaken for this one:
+
+```sh
+GW_T0=$(ssh bramble-gateway "date '+%Y-%m-%d %H:%M:%S'")
+WK_T0=$(ssh bramble-worker  "date '+%Y-%m-%d %H:%M:%S'")
+echo "$GW_T0 / $WK_T0"
+```
 
 Start the gateway first, then the worker:
 
@@ -92,13 +115,13 @@ ssh bramble-gateway 'sudo systemctl start bramble-demo-service bramble-gateway'
 ssh bramble-worker  'sudo systemctl start bramble-worker'
 ```
 
-Cited (ETH-205 and ETH-244 runs started the units this way; the gateway unit's start time on 6 Nov 2026 was 12:02:27 UTC).
+UNVERIFIED (the author did not run it). Cited: the ETH-205 and ETH-244 runs started the units this way; the gateway unit's start time on 6 Nov 2026 was 12:02:27 UTC.
 
 Wait about 2 minutes. A node needs 40 to 60 s to log `serving on` because relay discovery reads the registry over Tor. Check readiness:
 
 ```sh
-ssh bramble-gateway "sudo journalctl -u bramble-gateway --no-pager -o cat | grep -E 'serving on|adopted new candidate' | tail -3"
-ssh bramble-worker  "sudo journalctl -u bramble-worker  --no-pager -o cat | grep -E 'serving on|adopted new candidate' | tail -3"
+ssh bramble-gateway "sudo journalctl -u bramble-gateway --since '$GW_T0' --no-pager -o cat | grep -E 'serving on|adopted new candidate' | tail -3"
+ssh bramble-worker  "sudo journalctl -u bramble-worker  --since '$WK_T0' --no-pager -o cat | grep -E 'serving on|adopted new candidate' | tail -3"
 ```
 
 Expected on each node, two lines like:
@@ -108,7 +131,7 @@ serving on 10.77.0.2:51820 (pubkey 6364ee19…), tracking 1 peer(s), ttl=30s, re
 data-relay: mumbai-worker adopted new candidate 13.233.32.174:51820
 ```
 
-The gateway shows `mumbai-worker adopted …` and the worker shows `mumbai-gateway adopted …`. Both lines on both nodes mean the nodes found each other. Verified (read from the live journals on 6 Nov 2026).
+The gateway shows `mumbai-worker adopted …` and the worker shows `mumbai-gateway adopted …`. Both lines on both nodes mean the nodes found each other. The expected output is Verified (the same query without `--since` read from the live journals on 6 Nov 2026); the `--since` form is UNVERIFIED. If a node prints nothing, it has not got there yet: wait and run it again.
 
 Do not continue until both nodes show `adopted new candidate`. If they do not after 3 minutes, see "When a step fails".
 
@@ -120,13 +143,13 @@ Call the private service as the `agent` user on the worker:
 ssh bramble-worker "sudo -u agent curl -sS -m 150 -w '\nHTTP %{http_code} after %{time_total}s\n' http://127.0.0.1:8080/task"
 ```
 
-Expected: the call fails with `curl: (56) Recv failure: Connection reset by peer` and `HTTP 000`. It takes 15 to 84 s: the gateway resolves three ENS records over Tor before it decides (the first call after a start is the slowest). Cited (README Part G measured 83.7 s and 15.6 s on 6 Nov 2026).
+Expected: the call fails with `curl: (56) Recv failure: Connection reset by peer` and `HTTP 000`. It takes 15 to 84 s: the gateway resolves three ENS records over Tor before it decides (the first call after a start is the slowest). UNVERIFIED. Cited: README Part G measured 83.7 s and 15.6 s on 6 Nov 2026.
 
-Check why it was denied:
+Check why it was denied. These use the start times from step 3, so only this run's lines show:
 
 ```sh
-ssh bramble-gateway "sudo journalctl -u bramble-gateway --no-pager -o cat | grep 'denied for service' | tail -2"
-ssh bramble-worker  "sudo journalctl -u bramble-worker  --no-pager -o cat | grep 'denied by gateway' | tail -2"
+ssh bramble-gateway "sudo journalctl -u bramble-gateway --since '$GW_T0' --no-pager -o cat | grep 'denied for service' | tail -2"
+ssh bramble-worker  "sudo journalctl -u bramble-worker  --since '$WK_T0' --no-pager -o cat | grep 'denied by gateway' | tail -2"
 ```
 
 Expected:
@@ -136,9 +159,9 @@ gateway: mumbai-worker denied for service "task" (no matching granted digest)
 forward: 127.0.0.1:<port>: "task" denied by gateway
 ```
 
-Verified (both lines read from the live journals at 12:14 to 12:16 UTC on 6 Nov 2026).
+The expected lines are Verified (both read from the live journals at 12:14 to 12:16 UTC on 6 Nov 2026); the `--since` form is UNVERIFIED.
 
-If the call returns the task JSON instead, a grant still exists. Stop and fix it (see "When a step fails").
+If the call returns the task JSON instead, a grant still exists. Do not go on: repeat the revoke in step 2, wait 45 s and repeat this step.
 
 ## 5. Beat 2: request and approve
 
@@ -149,16 +172,15 @@ curl -sS -X POST "$BASE/api/requests" -H "$AUTH" -H 'content-type: application/j
   -d '{"agentLabel":"mumbai-worker","gatewayLabel":"mumbai-gateway","service":"task","note":"manual dry-run"}'
 ```
 
-Expected: HTTP 201 and JSON with `"status":"pending"` and an `id`. It takes under 1 s. Keep the id: `ID=<the id>`. Cited (ETH-244's driver script created requests this way; the live request list shows them).
+Expected: HTTP 201 and JSON with `"status":"pending"` and an `id`. It takes under 1 s. Keep the id: `ID=<the id>`. UNVERIFIED. Cited: ETH-244's driver script created requests this way, and the live request list shows them.
 
 Approve in the console:
 
-1. Open `https://console.13-233-181-104.sslip.io`.
-2. In "Operator authorization", paste the token into the "Demo token" field.
-3. The request appears under "Awaiting decision" ("Human approval required"). Read the agent, gateway and service.
-4. Click **Approve**.
+1. Open `https://console.13-233-181-104.sslip.io`. If you reloaded it since step 2, repeat the Unlock in step 2 first (paste the token, click **Unlock**).
+2. The request appears under "Request queue" ("Human approval required"), with the status "Awaiting decision". Read the agent, gateway and service.
+3. Note the clock, then click **Approve**.
 
-Expected: the card shows the pending transaction, then "Grant confirmed" with a Sepolia transaction hash that links to Etherscan. Approval confirms in 12 to 15 s. Cited (README Part G: 12.2 s and 12.5 s on 6 Nov 2026; ETH-244 run 1 measured 15.3 s at 12:06 UTC).
+Expected: the card shows the pending transaction, then "Grant confirmed" with a Sepolia transaction hash that links to Etherscan. Approval confirms in 12 to 15 s. UNVERIFIED. Cited: README Part G (12.2 s and 12.5 s on 6 Nov 2026) and ETH-244 run 1 (15.3 s at 12:06 UTC).
 
 Or approve from the shell, which makes the same API call as the button:
 
@@ -166,17 +188,23 @@ Or approve from the shell, which makes the same API call as the button:
 curl -sS -m 120 -X POST "$BASE/api/requests/$ID/approve" -H "$AUTH"
 ```
 
-Expected: HTTP 200, `"status":"approved"` and a `grantTransaction.transactionHash`. Cited (ETH-244 run 1).
+Expected: HTTP 200, `"status":"approved"` and a `grantTransaction.transactionHash`. UNVERIFIED. Cited: ETH-244 run 1.
 
 ## 6. Beat 3: the call works and pays
 
-Repeat the call from step 4. Do not restart anything:
+Repeat the call from step 4. Do not restart anything. First note the clock on the worker, so the payment evidence below is bounded to this call:
+
+```sh
+CALL_T0=$(ssh bramble-worker "date '+%Y-%m-%d %H:%M:%S'")
+```
+
+Then call:
 
 ```sh
 ssh bramble-worker "sudo -u agent curl -sS -m 150 -w '\nHTTP %{http_code} after %{time_total}s\n' http://127.0.0.1:8080/task"
 ```
 
-Expected: HTTP 200 and a JSON body like `{"host":"ip-172-31-41-92","observedAt":"…","status":"healthy","task":"report-private-service-health"}`. The first successful call comes 24 to 43 s after the approval was confirmed: the gateway must see the new ENS record through Tor, and a call lasts 27 to 32 s. If the first call after approval is still denied, repeat it up to four times. Cited (README Part G: 24.1 s and 43.1 s).
+Expected: HTTP 200 and a JSON body like `{"host":"ip-172-31-41-92","observedAt":"…","status":"healthy","task":"report-private-service-health"}`. The first successful call comes 24 to 43 s after the approval was confirmed: the gateway must see the new ENS record through Tor, and a call lasts 27 to 32 s. If the first call after approval is still denied, repeat it up to four times. UNVERIFIED. Cited: README Part G (24.1 s and 43.1 s).
 
 The gateway's own endpoint returns the same JSON body, which shows what the private service looks like. Verified on 6 Nov 2026:
 
@@ -187,8 +215,10 @@ ssh bramble-gateway 'curl -sS http://127.0.0.1:9100/task'
 **Payment evidence.** Each node's journal prints a HashScan link for every payment: `rendezvous: paid mumbai-relay for a rendezvous token (tx 0.0.…)` followed by `https://hashscan.io/testnet/transaction/…`. Verified. Show one:
 
 ```sh
-ssh bramble-worker "sudo journalctl -u bramble-worker --no-pager -o cat | grep -A1 'paid mumbai-relay' | tail -2"
+ssh bramble-worker "sudo journalctl -u bramble-worker --since '$CALL_T0' --no-pager -o cat | grep -A1 'paid mumbai-relay' | tail -2"
 ```
+
+If this prints nothing, the worker bought no new token since the call started. Tokens are bought about every 37 s, so run it again after a minute. Do not use a payment line older than `CALL_T0` as evidence for this call. The line format is Verified (without `--since`); the `--since` form is UNVERIFIED.
 
 **The Hedera audit record does not show up yet.** The console's "HCS audit trail" panel needs `HEDERA_AUDIT_TOPIC_ID`, `HEDERA_CLIENT_ACCOUNT_ID` and `HEDERA_CLIENT_PRIVATE_KEY` in `~/.config/bramble/approval.env`, and the file has none of them. Every approve and revoke therefore adds an audit row with `"status":"failed","error":"audit_not_configured"`. Verified: `curl -sS "$BASE/api/audit"` on 6 Nov 2026 at 12:16 UTC showed three such rows, and the file's variable names were listed (names only). The grant and revoke themselves work. A human must supply the topic id and the payer key and restart `bramble-approval`; this page does not cover that.
 
@@ -202,7 +232,7 @@ In the console, click **Revoke access** on the active grant. Expected: "Revoke c
 curl -sS -m 120 -X POST "$BASE/api/grants/mumbai-worker/revoke" -H "$AUTH"
 ```
 
-Expected: HTTP 200 and `"status":"revoked"`. Cited (README Part G: 11.4 s and 15.8 s; ETH-244 run 1: 6.8 s).
+Expected: HTTP 200 and `"status":"revoked"`. UNVERIFIED. Cited: README Part G (11.4 s and 15.8 s) and ETH-244 run 1 (6.8 s).
 
 Then call again until it fails:
 
@@ -210,13 +240,13 @@ Then call again until it fails:
 ssh bramble-worker "sudo -u agent curl -sS -m 150 -w '\nHTTP %{http_code} after %{time_total}s\n' http://127.0.0.1:8080/task"
 ```
 
-Expected: `Connection reset by peer` and `HTTP 000`. The first failed call comes 27 to 46 s after the revoke started. Cited (README Part G: 27.5 s and 45.6 s). A call that started before the revoke confirmed can still succeed; call again.
+Expected: `Connection reset by peer` and `HTTP 000`. The first failed call comes 27 to 46 s after the revoke started. UNVERIFIED. Cited: README Part G (27.5 s and 45.6 s). A call that started before the revoke confirmed can still succeed; call again.
 
 Record two numbers for the demo log: revoke confirmed at, and first failed call at.
 
 ## 8. Run it again
 
-Repeat steps 4 to 7 without restarting the nodes. Creating a second request for the same agent works after the first is `revoked`. Cited (README Part G: two runs in a row).
+Repeat steps 4 to 7 without restarting the nodes. Creating a second request for the same agent works after the first is `revoked`. UNVERIFIED. Cited: README Part G (two runs in a row).
 
 ## 9. Stop the nodes (always)
 
@@ -260,9 +290,9 @@ Verified (mirror node and Blockscout, 6 Nov 2026). Budget at most 15 minutes of 
 | Worker journal: `dial tcp 10.77.0.2:7892: connect: connection timed out`                                                                         | Same as above: the worker cannot reach the gateway's listener over the mesh                                                                                                                      | Same as above                                                                                                                                                                                                         |
 | Call prints `Failed to connect to 127.0.0.1 port 8080`                                                                                           | The worker node is stopped, or is still starting                                                                                                                                                 | `ssh bramble-worker 'systemctl is-active bramble-worker'`; if `active`, wait for `serving on` in the journal (step 3)                                                                                                 |
 | Call hangs, then `curl: (28) Operation timed out` after 150 s                                                                                    | The gateway decision or the rendezvous is stuck                                                                                                                                                  | Look at the gateway journal for the last 20 lines. Retry once. If it repeats, treat it as the rendezvous failure above                                                                                                |
-| Beat 1 returns the task JSON                                                                                                                     | A grant from an earlier run still exists                                                                                                                                                         | Open the console, click **Revoke access**, wait for "Revoke confirmed", wait 45 s, repeat beat 1                                                                                                                      |
+| Beat 1 returns the task JSON                                                                                                                     | A grant from an earlier run still exists                                                                                                                                                         | Run the revoke-by-label call from step 2 (the console may show no card for it), wait 45 s, repeat beat 1. HTTP 409 `not_granted` means the grant is already gone: wait longer for the gateway to see it               |
 | Beat 3 is still denied after four calls and 2 minutes                                                                                            | The grant did not confirm, or the gateway reads an old ENS record                                                                                                                                | Check the console card says "Grant confirmed" and open the Sepolia hash. Check `"$BASE/api/requests"` for `status`. Check `denied for service` lines in the gateway journal. Do not approve a second time             |
-| Approve or revoke returns `401 unauthorized`                                                                                                     | Wrong or missing token                                                                                                                                                                           | Repeat step 2. The console accepts the token in the "Demo token" field; reload the page and paste it again                                                                                                            |
+| Approve or revoke returns `401 unauthorized`                                                                                                     | Wrong or missing token                                                                                                                                                                           | Repeat step 2. In the console, paste the token into "Demo token" and click **Unlock** (pasting alone does not unlock); after a reload, unlock again                                                                   |
 | Approve or revoke returns `503 signer_not_configured`                                                                                            | The approval service has no signer configured                                                                                                                                                    | `systemctl --user status bramble-approval`; read `approval/README.md`, "Real signer runbook". Stop and report                                                                                                         |
 | HTTP 202 with `"status":"approving"` (or `revoking`), or `409 write_unresolved`                                                                  | The transaction was sent but its receipt is unknown                                                                                                                                              | Open `unresolvedWrite.transactionHash` on Sepolia. Wait: the service re-checks every 5 s. Do not approve or revoke again                                                                                              |
 | `409 request_not_pending`                                                                                                                        | The request was already approved or denied                                                                                                                                                       | Not an error. Read `"$BASE/api/requests/$ID"`                                                                                                                                                                         |
