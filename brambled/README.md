@@ -30,6 +30,11 @@ WireGuard device's peer table from it.
     (`docs/adr/0010-full-mesh-peer-discovery.md`); any `-peer` given at all
     disables this and uses exactly what was typed. A discovered device with
     no usable `mesh-ip` is skipped with a warning, not a startup failure.
+  - `-rediscover` — with auto-discovery, how often to re-list the tailnet
+    and start tracking devices enrolled after startup, with no restart
+    (default `15s`, `0` turns it off). A new device goes through the same
+    admission and ACL checks as a startup peer. A skipped device is retried
+    on every pass (`docs/adr/0010`, "Rediscovery").
   - `-local-addr` — this node's address and mesh subnet, CIDR. Omit to
     resolve it from `-label`'s own on-chain `mesh-ip` record instead
     (`docs/adr/0009`); an explicit value always wins.

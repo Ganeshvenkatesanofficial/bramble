@@ -33,9 +33,9 @@ type ScannedLog = Log & { args: Record<string, unknown> }
 
 export async function scanLogsChunked(
   client: PublicClient,
-  params: { address: `0x${string}`; event: AbiEvent; fromBlock: bigint }
+  params: { address: `0x${string}`; event: AbiEvent; fromBlock: bigint; toBlock?: bigint }
 ): Promise<ScannedLog[]> {
-  const head = await client.getBlockNumber()
+  const head = params.toBlock ?? (await client.getBlockNumber())
   const logs: ScannedLog[] = []
   for (let start = params.fromBlock; start <= head; start += MAX_BLOCK_RANGE) {
     const end = start + MAX_BLOCK_RANGE - 1n > head ? head : start + MAX_BLOCK_RANGE - 1n

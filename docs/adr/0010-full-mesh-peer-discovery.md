@@ -16,7 +16,17 @@ It's safe because admission and ACL are two separate boundaries, and this only t
 
 **A peer that can't be resolved is skipped, not fatal — but only when auto-discovered.** `resolvePeerMeshIPs` gained a `skipUnresolvable` argument: false (an operator explicitly typed `-peer that-label`) hard-errors on a missing mesh-ip or address collision, since silently dropping something the operator asked for by name would hide a real misconfiguration. true (auto-discovered) logs a warning and drops just that one peer. This matters in practice, immediately: this dev tailnet has real devices enrolled before ADR 0009 existed (`device1`, `device2`, `ledger-granter-test`, `ledger-signed-demo`, `laptop-demo`) with no `mesh-ip` record at all. Full-mesh-by-default would otherwise refuse to start on a tailnet with one old device on it.
 
-**Revoked/expired devices are intentionally not filtered out at discovery time.** `discoverAllPeers` includes them; `admission.Loop`'s existing authorization check (`pubkey != nil && expiry in future && !revoked`) is what actually excludes them, per-sync-cycle, the same as it always has for a hand-listed `-peer`. Filtering earlier would only be able to get it wrong in one direction — freezing a peer's exclusion for the life of the process even after it gets re-enrolled or un-revoked, since the peer list itself is fixed at startup.
+**Revoked/expired devices are intentionally not filtered out at discovery time.** `discoverAllPeers` includes them; `admission.Loop`'s existing authorization check (`pubkey != nil && expiry in future && !revoked`) is what actually excludes them, per-sync-cycle, the same as it always has for a hand-listed `-peer`. Filtering earlier would only be able to get it wrong in one direction — freezing a peer's exclusion for the life of the process even after it gets re-enrolled or un-revoked.
+
+## Rediscovery (amended 6 Nov 2026, ETH-189)
+
+The peer list is no longer fixed at startup. With auto-discovery on, `brambled serve` re-lists the tailnet every `-rediscover` interval (default `15s`, `0` turns it off) and starts tracking each new label without a restart. Before this, a gateway started before a device was approved never admitted that device (found by Keystone for demo beat 2).
+
+- `peerTracker.discoverNew` (`brambled/rediscover.go`) resolves each untracked label's `mesh-ip` with the same `resolveMeshIPPrefix` as startup and gives it a `/32`. A label with no `mesh-ip` yet, or with one that collides with a tracked address, is skipped and retried on the next pass. Each skip reason is logged once.
+- `admission.Loop.AddPeers` adds the new peers and asks the loop for an immediate sync pass. The new peer is admitted only if that pass finds its ENS record authorized, exactly like a startup peer. The gateway still checks the ACL (ADR 0005) on every CONNECT; it maps tunnel addresses through the tracker, so a new peer's address resolves to its label.
+- Peers are never removed by rediscovery. A revoked or expired device stays tracked and `admission.Loop` keeps it out of the WireGuard table.
+- An explicit `-peer` list is unchanged: no rediscovery.
+- The sidecar's `GET /devices` now scans incrementally (`incrementalDeviceLabels` in `sidecar/src/ens/devices.ts`). The first call scans from the deploy block. Later calls scan from 8,000 blocks behind the last head, which is one `getLogs` call. The margin covers reorgs and a lagging pool backend of up to 8,000 blocks. `enroll.ts` still uses the full scan.
 
 ## Verification
 
@@ -37,4 +47,5 @@ This is not a bug in `listDeviceLabels`, `discoverAllPeers`, or the allocation l
 ## Explicitly out of scope
 
 - **Role-based subset discovery** (e.g., "only mesh with devices tagged X") — full-mesh-or-explicit-list is the whole policy surface for now; ACL already gates service access, which is the dimension that actually matters for the demo's story.
-- **Retrying/re-resolving a peer that failed discovery-time resolution** — a peer skipped at startup (no mesh-ip, or a since-fixed collision) stays skipped for the life of the process, same limitation `EndpointResolver`'s own "once per pubkey for the life of the Loop" already has. A restart picks up the fix.
+- ~~Retrying a peer that failed discovery-time resolution~~ — done by rediscovery (above): a skipped peer is retried on every pass.
+- **Changing a tracked peer's mesh IP** — rediscovery only adds labels. A device whose `mesh-ip` changes after it is tracked keeps its old `/32` until restart.

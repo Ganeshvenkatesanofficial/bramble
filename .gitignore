@@ -18,3 +18,5 @@ todo.md
 !node-daemon/ui/dist
 node-daemon/ui/dist/*
 !node-daemon/ui/dist/.keep
+# Release tarballs
+release
