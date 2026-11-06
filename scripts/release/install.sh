@@ -6,8 +6,7 @@
 # Flags (or the BRAMBLE_* variable in brackets):
 #   --no-start   install only; do not start bramble       [BRAMBLE_NO_START=1]
 #   --no-open    start bramble but do not open a browser  [BRAMBLE_NO_OPEN=1]
-#   --tun        Linux: grant brambled cap_net_admin with sudo so it can create a
-#                real WireGuard interface (asks once; default is no root) [BRAMBLE_INSTALL_TUN=1]
+#   --tun        unsupported; warn and use the user-space stack [BRAMBLE_INSTALL_TUN=1]
 #   --help
 # Other variables: BRAMBLE_HOME (default ~/.bramble), BRAMBLE_INSTALL_BASE (override
 # the base URL, for tests; https only unless the host is 127.0.0.1 or localhost).
@@ -24,7 +23,6 @@ BIN_DIR="$HOME_DIR/bin"
 NO_START="${BRAMBLE_NO_START:-0}"
 NO_OPEN="${BRAMBLE_NO_OPEN:-0}"
 WANT_TUN="${BRAMBLE_INSTALL_TUN:-0}"
-USE_TUN=0
 
 say() { printf '%s\n' "$*"; }
 warn() { printf 'bramble install: %s\n' "$*" >&2; }
@@ -101,10 +99,9 @@ else
   say "  start      bramble in the background and open its local UI in your browser"
 fi
 if [ "$WANT_TUN" = 1 ]; then
-  say "  root       one sudo call to grant cap_net_admin (--tun)"
-else
-  say "  root       not needed; bramble uses a user-space network stack"
+  warn "TUN is unsupported until the ambient-capability fix lands after the demo; keeping the user-space network stack"
 fi
+say "  root       not needed; bramble uses a user-space network stack"
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/bramble-install.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT INT TERM HUP
@@ -172,22 +169,6 @@ printf '%s\n' bramble-install-v1 > "$TMP/install-marker"
 mv -f "$TMP/install-marker" "$HOME_DIR/.bramble-install"
 say "Installed to $BIN_DIR: $(cd "$BIN_DIR" && ls | tr '\n' ' ')"
 
-# --- The one place root is used, and only on request. ---
-if [ "$WANT_TUN" = 1 ]; then
-  CAP_TARGET="$BIN_DIR/brambled"
-  [ -f "$CAP_TARGET" ] || CAP_TARGET="$BIN_DIR/bramble"
-  if [ "$OS" != linux ]; then
-    warn "--tun only applies on Linux; macOS keeps the user-space network stack"
-  elif ! command -v setcap >/dev/null 2>&1; then
-    warn "setcap is not installed; keeping the user-space network stack"
-  else
-    say ""
-    say "Granting cap_net_admin to $CAP_TARGET so it can create the WireGuard interface bramble0."
-    say "This is the only step that uses sudo; it changes that one file and nothing else."
-    if sudo setcap cap_net_admin+ep "$CAP_TARGET"; then USE_TUN=1; say "Capability granted."; else warn "setcap failed; keeping the user-space network stack"; fi
-  fi
-fi
-
 # --- Start and open the UI. ---
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
@@ -200,7 +181,6 @@ if [ "$NO_START" = 1 ]; then
 else
   rm -f "$HOME_DIR/ui.url"
   set -- up -open=false
-  [ "$USE_TUN" = 0 ] || set -- "$@" -tun
   BRAMBLE_HOME="$HOME_DIR" nohup "$BIN_DIR/bramble" "$@" > "$HOME_DIR/logs/bramble.out" 2>&1 < /dev/null &
   BPID=$!
   say ""

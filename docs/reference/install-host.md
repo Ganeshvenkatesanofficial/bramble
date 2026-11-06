@@ -42,11 +42,11 @@ It uses no root by default. It does not edit shell profiles; it prints the `PATH
 | ------------ | ----------------------- | -------------------------------------------------------------------------------------------------------- |
 | `--no-start` | `BRAMBLE_NO_START=1`    | Install only                                                                                             |
 | `--no-open`  | `BRAMBLE_NO_OPEN=1`     | Start, print the address, do not open a browser                                                          |
-| `--tun`      | `BRAMBLE_INSTALL_TUN=1` | Linux: run `sudo setcap cap_net_admin+ep` on `brambled` once, so it can create the interface `bramble0` |
+| `--tun`      | `BRAMBLE_INSTALL_TUN=1` | Unsupported: print a warning and start with the user-space network stack |
 |              | `BRAMBLE_HOME`          | Data directory. Default `~/.bramble`                                                                     |
 |              | `BRAMBLE_INSTALL_BASE`  | Replace `https://<host>`. Plain `http` requires the exact authority `127.0.0.1` or `localhost`, optionally followed by a numeric port from 1 to 65535; no userinfo, path, query or fragment (used by tests)  |
 
-`--tun` is the only path that calls `sudo`. It says why before it asks. Without it, `bramble` uses the user-space network stack (ETH-180, decision D10).
+TUN is unsupported until Keystone option A, the ambient-capability fix, lands after the demo. Neither `--tun` nor `BRAMBLE_INSTALL_TUN=1` grants capabilities or passes `-tun` to `bramble up`. The installer uses no `sudo` and starts `bramble` with the user-space network stack (ETH-180, decision D10).
 
 Files the launcher and installer share, all under `~/.bramble/` (names from `node-daemon/internal/daemon/store.go`): `config.url` (written by the installer), `ui.url` and `bramble.pid` (written by `bramble` while it runs), `logs/`.
 

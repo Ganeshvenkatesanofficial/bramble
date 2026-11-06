@@ -155,19 +155,26 @@ for sh in "${shells[@]}"; do
   if [ "$rc" -eq 0 ] && [ ! -e "$home" ]; then ok "$sh: full uninstall after keep-data removes remaining installation"; else bad "$sh: full uninstall after keep-data failed"; fi
 done
 
-# TUN startup follows the capability result; these fixtures never call real sudo.
+# TUN stays unsupported even if a capability grant would succeed; no real sudo.
 if [ "$os" = linux ]; then
   mkdir -p "$work/fake-cap"
   printf '#!/bin/sh\nexec "$@"\n' > "$work/fake-cap/sudo"
   printf '#!/bin/sh\nexit "${FAKE_CAP_EXIT:-0}"\n' > "$work/fake-cap/setcap"
   chmod +x "$work/fake-cap/sudo" "$work/fake-cap/setcap"
-  for cap_exit in 0 1; do
-    home="$work/tun-$cap_exit"
-    PATH="$work/fake-cap:$PATH" FAKE_CAP_EXIT="$cap_exit" run_install sh "$home" --tun >/dev/null 2>&1
-    daemon_pids+=("$(cat "$home/bramble.pid")")
-    expected='up -open=false'
-    [ "$cap_exit" -ne 0 ] || expected="$expected -tun"
-    if [ "$(cat "$home/start-args")" = "$expected" ]; then ok "TUN capability result $cap_exit selects correct startup mode"; else bad "TUN capability result $cap_exit selects wrong startup mode"; fi
+  for sh in "${shells[@]}"; do
+    for cap_exit in 0 1; do
+      for tun_input in flag env; do
+        home="$work/tun-${sh// /-}-$cap_exit-$tun_input"
+        args=()
+        tun_env=0
+        if [ "$tun_input" = flag ]; then args=(--tun); else tun_env=1; fi
+        out="$(PATH="$work/fake-cap:$PATH" FAKE_CAP_EXIT="$cap_exit" BRAMBLE_INSTALL_TUN="$tun_env" run_install "$sh" "$home" "${args[@]}" 2>&1)"; rc=$?
+        pid="$(cat "$home/bramble.pid" 2>/dev/null)"
+        [ -z "$pid" ] || daemon_pids+=("$pid")
+        if [ "$rc" -eq 0 ] && [ "$(cat "$home/start-args" 2>/dev/null)" = 'up -open=false' ]; then ok "$sh: TUN $tun_input with capability result $cap_exit starts without -tun"; else bad "$sh: TUN $tun_input with capability result $cap_exit changes startup mode (rc=$rc)"; fi
+        if echo "$out" | grep -q 'TUN is unsupported'; then ok "$sh: TUN $tun_input reports unsupported"; else bad "$sh: TUN $tun_input does not report unsupported"; fi
+      done
+    done
   done
 fi
 
