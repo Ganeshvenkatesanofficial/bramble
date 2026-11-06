@@ -117,7 +117,9 @@ export class ApprovalService {
       if (outcome === 'confirmed') {
         record.status = 'approved'
         record.grantTransaction = transaction
-        this.submitGrantAudit(record)
+        const digest = entry.error.serviceDigest
+        if (digest) this.digests.set(record.id, digest)
+        this.submitGrantAudit(record, digest)
         if (record.expiresAt) {
           record.expiryStatus = 'scheduled'
           this.scheduleExpiry(record, Math.max(0, Date.parse(record.expiresAt) - this.clock.now()))

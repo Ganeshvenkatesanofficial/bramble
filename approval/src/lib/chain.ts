@@ -1,5 +1,6 @@
 import {
   clearAcl,
+  computeGrantDigests,
   deviceName,
   grantAcl,
   parseAclRecord,
@@ -10,12 +11,12 @@ import {
 } from '../../../admincli/src/lib'
 import {
   UnresolvedWriteError,
+  type GrantReceipt,
   type GrantSigner,
   type IdentityFacts,
   type IdentityResolver,
   type RequestInput,
   type SettleOutcome,
-  type TransactionReceipt,
 } from './contracts'
 
 /** What a device read must report; `readDevice` in ens-reader.ts satisfies it. */
@@ -47,6 +48,8 @@ export interface ChainAdapters {
   signer: GrantSigner
   resolver: IdentityResolver
 }
+
+const withPrefix = (digest: string) => (digest.startsWith('0x') ? digest : `0x${digest}`)
 
 export function createChainAdapters(config: ChainConfig): ChainAdapters {
   const { resolver, tailnetName } = config
@@ -86,15 +89,16 @@ export function createChainAdapters(config: ChainConfig): ChainAdapters {
   async function settleAfterFailure(
     operation: 'grant' | 'revoke',
     hash: string,
-    original: unknown
-  ): Promise<TransactionReceipt> {
+    original: unknown,
+    serviceDigest?: string
+  ): Promise<GrantReceipt> {
     for (let attempt = 0; attempt < attempts; attempt++) {
       if (attempt > 0) await sleep(delayMs)
       const outcome = await settleOnce(hash)
-      if (outcome === 'confirmed') return { transactionHash: hash }
+      if (outcome === 'confirmed') return { transactionHash: hash, ...(serviceDigest ? { serviceDigest } : {}) }
       if (outcome === 'reverted') throw original
     }
-    throw new UnresolvedWriteError(operation, hash, () => settleOnce(hash))
+    throw new UnresolvedWriteError(operation, hash, () => settleOnce(hash), serviceDigest)
   }
 
   return {
@@ -129,11 +133,19 @@ export function createChainAdapters(config: ChainConfig): ChainAdapters {
         try {
           const change = await grantAcl(deps, params)
           if (!change.txHash) throw new Error('grant produced no transaction')
-          return { transactionHash: change.txHash }
+          return {
+            transactionHash: change.txHash,
+            ...(change.digests[0] ? { serviceDigest: withPrefix(change.digests[0]) } : {}),
+          }
         } catch (error) {
           const hash = tracked.submittedHash()
           if (!hash) throw error
-          return settleAfterFailure('grant', hash, error)
+          // The failure came after submission, so the digest the write carried is recomputed.
+          const digest = await computeGrantDigests(deps, params).then(
+            (computed) => computed.digests[0],
+            () => undefined
+          )
+          return settleAfterFailure('grant', hash, error, digest ? withPrefix(digest) : undefined)
         }
       },
 

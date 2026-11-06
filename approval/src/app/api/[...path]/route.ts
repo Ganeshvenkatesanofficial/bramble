@@ -1,6 +1,7 @@
 import { createApprovalApi } from '../../../lib/api'
 import { auditTrailFromEnv } from '../../../lib/audit-runtime'
 import { ConfigError, realAdaptersFromEnv } from '../../../lib/chain-env'
+import { createSettlementSource } from '../../../lib/payments'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -25,6 +26,10 @@ const api = createApprovalApi({
   resolver: chain?.resolver,
   auditTrail: auditTrailFromEnv(process.env),
   ensParent: process.env.APPROVAL_ENS_PARENT,
+  // Payments settle in the sidecar, which never calls this service. The mirror node is the observer.
+  settlements: process.env.APPROVAL_PAYMENT_AGENTS
+    ? createSettlementSource({ config: () => process.env.APPROVAL_PAYMENT_AGENTS })
+    : undefined,
 })
 
 export const GET = (request: Request) => api.handle(request)

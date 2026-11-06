@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
-import { HcsAuditTrail, parseMessage, verifyOpening, type TopicClient } from '@bramble/hedera-audit'
+import { HcsAuditTrail, parseMessage, verifyOpening } from '@bramble/hedera-audit'
 import { createApprovalApi } from '../src/lib/api'
 import { UnresolvedWriteError, type GrantSigner, type SettleOutcome } from '../src/lib/contracts'
 import { ManualClock } from './clock'
+import { FakeTopic } from './fake-topic'
 import { MemoryChain } from './memory-chain'
 
 const token = randomUUID()
@@ -29,9 +30,11 @@ class DigestChain extends MemoryChain implements GrantSigner {
 class UnresolvedChain extends DigestChain {
   unresolved?: 'grant' | 'revoke'
   outcome: SettleOutcome = 'unresolved'
+  /** The digest the late grant reports, as the real signer does; none reproduces a signer without one. */
+  lateDigest?: string
   override async grant(grantInput: Parameters<MemoryChain['grant']>[0]) {
     if (this.unresolved === 'grant') {
-      throw new UnresolvedWriteError('grant', 'late-grant-1', async () => this.outcome)
+      throw new UnresolvedWriteError('grant', 'late-grant-1', async () => this.outcome, this.lateDigest)
     }
     return super.grant(grantInput)
   }
@@ -40,24 +43,6 @@ class UnresolvedChain extends DigestChain {
       throw new UnresolvedWriteError('revoke', 'late-revoke-1', async () => this.outcome)
     }
     return super.revoke(label)
-  }
-}
-
-class FakeTopic implements TopicClient {
-  readonly submitted: Uint8Array[] = []
-  fail = false
-  gate?: Promise<void>
-  async createTopic() {
-    return { topicId: '0.0.9000' }
-  }
-  async submitMessage({ message }: { topicId: string; message: Uint8Array }) {
-    await this.gate
-    if (this.fail) throw new Error('sensitive Hedera diagnostic must never reach the feed')
-    this.submitted.push(message)
-    return {
-      transactionId: `0.0.1001@1700000000.${this.submitted.length}`,
-      sequenceNumber: String(this.submitted.length),
-    }
   }
 }
 
@@ -199,6 +184,95 @@ test('a grant that settles late shows in the feed, failed while the digest is un
   await other.api.audit.idle()
   expect((await (await other.call(`/requests/${request.id}`)).json()).status).toBe('pending')
   expect(await other.feed()).toEqual([])
+})
+
+test('a grant that settles late keeps its digest, so its confirmation and its later revoke each post once', async () => {
+  const clock = new ManualClock()
+  const chain = new UnresolvedChain()
+  chain.unresolved = 'grant'
+  chain.lateDigest = DIGEST
+  const { topic, api, call, feed } = setup({ clock, chain })
+  const created = await (await call('/requests', 'POST', input)).json()
+  await call(`/requests/${created.id}/approve`, 'POST')
+  await clock.advance(5000)
+  await api.audit.idle()
+  expect(topic.submitted).toEqual([])
+  chain.outcome = 'confirmed'
+  await clock.advance(5000)
+  await api.audit.idle()
+  chain.unresolved = undefined
+  chain.grants.add('agent-1')
+  await call('/grants/agent-1/revoke', 'POST')
+  await api.audit.idle()
+  expect(topic.submitted.map((bytes) => parseMessage(bytes)!.kind)).toEqual(['grant', 'revoke'])
+  const entries = await feed()
+  expect(entries.map((entry) => entry.status)).toEqual(['posted', 'posted'])
+  expect(api.audit.opening(entries[0].id as string)!.event).toMatchObject({
+    kind: 'grant',
+    serviceDigest: DIGEST,
+    txRef: 'late-grant-1',
+  })
+  expect(api.audit.opening(entries[1].id as string)!.event).toMatchObject({ kind: 'revoke', serviceDigest: DIGEST })
+})
+
+test('settlements the process observes post one commitment each and are not posted again by later polls', async () => {
+  const clock = new ManualClock()
+  const sources = [payment, { ...payment, txRef: '0.0.1001@1700000001.000000001' }]
+  let polls = 0
+  const topic = new FakeTopic()
+  const api = createApprovalApi({
+    token: () => token,
+    clock,
+    auditTrail: new HcsAuditTrail({ client: topic, topicId: '0.0.9000' }),
+    settlements: async () => {
+      polls += 1
+      // The mirror feed lists every settled payment in the window on each poll.
+      return [...sources, { ...payment, payee: 'not-an-account', txRef: '0.0.1001@1700000002.000000002' }]
+    },
+    settlementPollMs: 10_000,
+  })
+  await clock.advance(0)
+  await api.audit.idle()
+  await clock.advance(10_000)
+  await api.audit.idle()
+  await clock.advance(10_000)
+  await api.audit.idle()
+  expect(polls).toBe(3)
+  expect(topic.submitted.map((bytes) => parseMessage(bytes)!.kind)).toEqual(['payment', 'payment'])
+  // A payment also reported through the endpoint is the same event.
+  const reported = await api.handle(
+    new Request('http://localhost/api/payments/settled', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(payment),
+    })
+  )
+  expect(reported.status).toBe(202)
+  await api.audit.idle()
+  expect(topic.submitted).toHaveLength(2)
+})
+
+test('an unavailable settlement source posts nothing and the next poll retries', async () => {
+  const clock = new ManualClock()
+  let up = false
+  const topic = new FakeTopic()
+  const api = createApprovalApi({
+    token: () => token,
+    clock,
+    auditTrail: new HcsAuditTrail({ client: topic, topicId: '0.0.9000' }),
+    settlements: async () => {
+      if (!up) throw new Error('mirror down')
+      return [payment]
+    },
+    settlementPollMs: 10_000,
+  })
+  await clock.advance(0)
+  await api.audit.idle()
+  expect(topic.submitted).toEqual([])
+  up = true
+  await clock.advance(10_000)
+  await api.audit.idle()
+  expect(topic.submitted).toHaveLength(1)
 })
 
 test('a settled payment posts one commitment; a replay of the same transaction posts none', async () => {

@@ -77,7 +77,10 @@ const HEDERA_ID = /^\d{1,10}\.\d{1,10}\.\d{1,10}$/
 const HEDERA_TX_ID = /^\d{1,10}\.\d{1,10}\.\d{1,10}@\d{1,12}\.\d{9}$/
 
 export async function readPayment(request: Request): Promise<PaymentInput> {
-  const value = await readObject(request)
+  return parsePayment(await readObject(request))
+}
+
+export function parsePayment(value: Record<string, unknown>): PaymentInput {
   const fields = ['payer', 'payee', 'asset', 'amountAtomic', 'txRef']
   if (Object.keys(value).some((key) => !fields.includes(key))) {
     throw new ApiError(400, 'invalid_request', 'Request body contains unknown fields.')

@@ -127,7 +127,7 @@ configuration, the automatic relay payment trigger, and verification limits.
 
 The service posts one salted commitment to a Hedera Consensus Service (HCS) topic
 for each confirmed grant, each confirmed revoke (manual or duration expiry) and
-each settled payment reported to `POST /api/payments/settled`. The commitment format is in
+each settled payment, whether the mirror-node observer or `POST /api/payments/settled` reports it. The commitment format is in
 `docs/16_HCS_AUDIT_RECORD_FORMAT.md`. The topic never holds plaintext.
 
 The service captures the event while it holds the per-agent write lock, then the
@@ -145,14 +145,26 @@ A request also carries `grantAuditId` and `revokeAuditId`. The feed holds no eve
 field, no error text from Hedera, and no secret. A `failed` row is not retried.
 
 - `audit_event_unavailable`: the signer returned no `serviceDigest` (ADR 0005), or the revoke
-  has no matching request. The service never posts a plaintext service name instead.
+  has no matching request. The service never posts a plaintext service name instead. The real
+  signer (`chain.ts`) returns the `0x`-prefixed digest the grant wrote, including when the grant
+  is confirmed after a reconciliation retry or a later poll. A restart loses the request-to-digest
+  link, so a revoke of a grant made before the restart has no request and posts nothing.
 - `audit_not_configured`: no HCS trail is set. Decisions still succeed.
 - A repeated payment report with the same `txRef` returns the first row and posts nothing.
 - The grant event's `expiresAt` is `0` when the request has no duration.
 
+Payments settle in the sidecar, which does not call this service. When
+`APPROVAL_PAYMENT_AGENTS` is set, the service polls the Hedera testnet mirror node every 30 seconds
+(the same configuration and window as `GET /api/payments`) and posts one commitment for each
+successful outgoing USDC payment of a configured payer. The payee is the account credited the most
+in that transfer. The first poll starts with the first request to the API route and covers the whole
+`since` window; a poll that finds the mirror unavailable or incomplete posts nothing and retries.
+Replays are dropped by `txRef` in memory, so a restart posts the window's payments again. Set
+`since` to the start of the demo.
+
 `POST /api/payments/settled` takes `{ payer, payee, asset, amountAtomic, txRef }` with
-Hedera IDs and a decimal amount. It needs the bearer token. The service trusts the
-reporter that the payment settled; it does not read the mirror node.
+Hedera IDs and a decimal amount. It needs the bearer token and shares the `txRef` check with the
+observer. The service trusts that reporter's claim that the payment settled.
 
 The service keeps each opening (the event and its salt) in memory, in
 `audit.opening(entryId)`. No HTTP route returns it. A restart loses the openings,

@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
 import fixture from './fixtures/payments.json'
-import { createPaymentsApi } from '../src/lib/payments'
+import { createPaymentsApi, createSettlementSource } from '../src/lib/payments'
 
 const agent = { agentLabel: 'worker', payerAccountId: '0.0.123', budgetAtomic: '20000', since: '1700000000.000000000' }
 const servers: ReturnType<typeof Bun.serve>[] = []
@@ -203,4 +203,56 @@ test('concurrent polls share the fetch, cached bodies remain readable and a conf
   config = JSON.stringify([{ ...agent, budgetAtomic: '50000' }])
   expect((await (await api()).json()).agents[0].remainingAtomic).toBe('40000')
   expect(calls).toBe(2)
+})
+
+test('the settlement source reports each successful outgoing USDC payment with its payee and a well-formed txRef', async () => {
+  const server = Bun.serve({
+    port: 0,
+    fetch: () =>
+      Response.json({
+        transactions: [
+          ...fixture.transactions,
+          {
+            transaction_id: '0.0.123-1700000007-42',
+            consensus_timestamp: '1700000007.000000042',
+            result: 'SUCCESS',
+            token_transfers: [
+              { token_id: '0.0.429274', account: '0.0.123', amount: -3000 },
+              { token_id: '0.0.429274', account: '0.0.456', amount: 2900 },
+              { token_id: '0.0.429274', account: '0.0.789', amount: 100 },
+            ],
+          },
+          {
+            transaction_id: '0.0.123-1700000008-000000001',
+            consensus_timestamp: '1700000008.000000001',
+            result: 'INSUFFICIENT_PAYER_BALANCE',
+            token_transfers: [],
+          },
+        ],
+        links: { next: null },
+      }),
+  })
+  servers.push(server)
+  const settled = await createSettlementSource({
+    config: () => JSON.stringify([agent]),
+    mirrorUrl: server.url.origin,
+  })()
+  expect(settled).toContainEqual({
+    payer: '0.0.123',
+    payee: '0.0.456',
+    asset: '0.0.429274',
+    amountAtomic: '3000',
+    txRef: '0.0.123@1700000007.000000042',
+  })
+  expect(settled.every((payment) => /^0\.0\.\d+@\d+\.\d{9}$/.test(payment.txRef))).toBe(true)
+  expect(settled.some((payment) => payment.txRef.includes('1700000008'))).toBe(false)
+})
+
+test('the settlement source throws rather than report a partial read', async () => {
+  const server = Bun.serve({ port: 0, fetch: () => new Response('unavailable', { status: 503 }) })
+  servers.push(server)
+  await expect(
+    createSettlementSource({ config: () => JSON.stringify([agent]), mirrorUrl: server.url.origin })()
+  ).rejects.toThrow()
+  await expect(createSettlementSource({ config: () => undefined, mirrorUrl: server.url.origin })()).rejects.toThrow()
 })

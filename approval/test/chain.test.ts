@@ -1,12 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { x25519 } from '@noble/curves/ed25519'
+import { HcsAuditTrail, parseMessage, verifyOpening } from '@bramble/hedera-audit'
 import { bytesToHex } from '@noble/hashes/utils'
 import { aclDigestECDH } from '../../admincli/src/roles'
 import type { PendingTx, Resolver, Signer } from '../../admincli/src/lib'
 import { createApprovalApi } from '../src/lib/api'
 import { createChainAdapters, type DeviceFacts } from '../src/lib/chain'
 import { ManualClock } from './clock'
+import { FakeTopic } from './fake-topic'
 
 const TAILNET = 'mesh.eth'
 const token = randomUUID()
@@ -443,5 +445,88 @@ describe('a submitted revoke whose outcome stays unknown', () => {
     s.chain.receipts.set(`0x${'2'.padStart(64, '0')}`, 'reverted')
     await s.clock.advance(5000)
     expect((await (await s.api.handle(call(`/requests/${id}`))).json()).status).toBe('approved')
+  })
+})
+
+describe('commitments from the real chain adapter', () => {
+  function audited() {
+    const chain = memoryEns()
+    const clock = new ManualClock()
+    const topic = new FakeTopic()
+    const api = createApprovalApi({
+      token: () => token,
+      signer: chain.adapters.signer,
+      resolver: chain.adapters.resolver,
+      clock,
+      auditTrail: new HcsAuditTrail({ client: topic, topicId: '0.0.9000' }),
+    })
+    const send = (path: string, method = 'GET', body?: unknown) => api.handle(call(path, method, body))
+    const approve = async (requestedDuration?: number) => {
+      const created = await (await send('/requests', 'POST', { ...input, requestedDuration })).json()
+      return { id: created.id as string, response: await send(`/requests/${created.id}/approve`, 'POST') }
+    }
+    const feed = async () => ((await (await send('/audit')).json()) as { entries: Record<string, unknown>[] }).entries
+    const digest = `0x${chain.digest}`
+    return { chain, clock, topic, api, send, approve, feed, digest }
+  }
+
+  test('approve then revoke post one grant and one revoke commitment carrying the ACL digest', async () => {
+    const s = audited()
+    const { id } = await s.approve()
+    await s.send('/grants/agent-1/revoke', 'POST')
+    await s.api.audit.idle()
+    expect(s.topic.submitted.map((bytes) => parseMessage(bytes)!.kind)).toEqual(['grant', 'revoke'])
+    const entries = await s.feed()
+    expect(entries.map((entry) => entry.status)).toEqual(['posted', 'posted'])
+    const [grant, revoke] = entries.map((entry) => s.api.audit.opening(entry.id as string)!)
+    expect(grant.event).toMatchObject({ kind: 'grant', serviceDigest: s.digest, txRef: `0x${'1'.padStart(64, '0')}` })
+    expect(revoke.event).toMatchObject({ kind: 'revoke', serviceDigest: s.digest, txRef: `0x${'2'.padStart(64, '0')}` })
+    expect(verifyOpening(parseMessage(s.topic.submitted[0])!, grant)).toBe(true)
+    const raw = s.topic.submitted.map((bytes) => new TextDecoder().decode(bytes)).join('')
+    expect(raw).not.toContain(s.chain.digest)
+    expect(raw).not.toContain(input.service)
+    expect((await (await s.send(`/requests/${id}`)).json()).serviceDigest).toBeUndefined()
+  })
+
+  test('a confirmation error after the grant landed still posts its commitment with the digest', async () => {
+    const s = audited()
+    s.chain.state.wait = 'fail-but-landed'
+    expect((await s.approve()).response.status).toBe(200)
+    await s.api.audit.idle()
+    const [entry] = await s.feed()
+    expect(entry).toMatchObject({ kind: 'grant', status: 'posted' })
+    expect(s.api.audit.opening(entry.id as string)!.event).toMatchObject({ serviceDigest: s.digest })
+  })
+
+  test('a grant that is confirmed after the immediate checks posts its commitment with the digest, and a revert posts none', async () => {
+    const confirmed = audited()
+    confirmed.chain.state.wait = 'fail-but-landed'
+    confirmed.chain.state.receiptLag = 8
+    const { response } = await confirmed.approve()
+    expect(response.status).toBe(202)
+    await confirmed.api.audit.idle()
+    expect(confirmed.topic.submitted).toEqual([])
+    for (let i = 0; i < 7; i++) await confirmed.clock.advance(5000)
+    await confirmed.api.audit.idle()
+    const [entry] = await confirmed.feed()
+    expect(entry).toMatchObject({ kind: 'grant', status: 'posted' })
+    expect(confirmed.api.audit.opening(entry.id as string)!.event).toMatchObject({
+      serviceDigest: confirmed.digest,
+      txRef: `0x${'1'.padStart(64, '0')}`,
+    })
+    await confirmed.send('/grants/agent-1/revoke', 'POST')
+    await confirmed.api.audit.idle()
+    expect(confirmed.topic.submitted.map((bytes) => parseMessage(bytes)!.kind)).toEqual(['grant', 'revoke'])
+
+    const reverted = audited()
+    reverted.chain.state.wait = 'fail-but-landed'
+    reverted.chain.state.receiptLag = 8
+    await reverted.approve()
+    reverted.chain.state.receiptLag = 0
+    reverted.chain.receipts.set(`0x${'1'.padStart(64, '0')}`, 'reverted')
+    await reverted.clock.advance(5000)
+    await reverted.api.audit.idle()
+    expect(reverted.topic.submitted).toEqual([])
+    expect(await reverted.feed()).toEqual([])
   })
 })

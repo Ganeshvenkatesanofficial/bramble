@@ -64,6 +64,149 @@ function parseConfig(raw: string | undefined): AgentConfig[] {
   return configs
 }
 
+export interface SettledPayment {
+  payer: string
+  payee: string
+  asset: string
+  amountAtomic: string
+  /** Hedera transaction ID in `account@seconds.nanos` form. */
+  txRef: string
+}
+
+/** The credited USDC account with the largest amount, or undefined when the transfer credits nobody. */
+function usdcPayee(transfers: MirrorTransaction['token_transfers']): string | undefined {
+  let payee: string | undefined
+  let largest = 0
+  for (const transfer of transfers) {
+    if (transfer.token_id === USDC && transfer.amount > largest) {
+      largest = transfer.amount
+      payee = transfer.account
+    }
+  }
+  return payee
+}
+
+async function loadAgents(
+  mirror: URL,
+  configs: AgentConfig[],
+  perPaymentCapAtomic: string,
+  until: string
+): Promise<{ agents: AgentPayments[]; settled: SettledPayment[] }> {
+  const settled: SettledPayment[] = []
+  const agents = await Promise.all(
+    configs.map(async (config) => {
+      let next: URL | null = new URL('/api/v1/transactions', mirror)
+      next.searchParams.set('account.id', config.payerAccountId)
+      next.searchParams.set('order', 'asc')
+      next.searchParams.set('limit', '100')
+      next.searchParams.append('timestamp', `gte:${config.since}`)
+      next.searchParams.append('timestamp', `lte:${until}`)
+      const seenPages = new Set<string>()
+      const transactions = new Map<string, MirrorTransaction>()
+      // One deadline for all pages. Partial totals must never look complete.
+      const signal = AbortSignal.timeout(8_000)
+      while (next) {
+        if (
+          next.origin !== mirror.origin ||
+          next.pathname !== '/api/v1/transactions' ||
+          seenPages.has(next.href) ||
+          seenPages.size >= 100
+        )
+          throw new Error('invalid pagination')
+        seenPages.add(next.href)
+        const response = await fetch(next, { cache: 'no-store', signal, redirect: 'error' })
+        if (!response.ok) throw new Error('mirror unavailable')
+        const body = (await response.json()) as {
+          transactions: MirrorTransaction[]
+          links: { next: string | null }
+        }
+        if (
+          !Array.isArray(body.transactions) ||
+          !body.links ||
+          !(body.links.next === null || typeof body.links.next === 'string')
+        )
+          throw new Error('invalid feed')
+        for (const tx of body.transactions) {
+          if (
+            !/^0\.0\.\d+-\d+-\d{1,9}$/.test(tx.transaction_id) ||
+            !timestampPattern.test(tx.consensus_timestamp) ||
+            !Array.isArray(tx.token_transfers)
+          )
+            throw new Error('invalid transaction')
+          if (
+            timestamp(tx.consensus_timestamp) >= timestamp(config.since) &&
+            timestamp(tx.consensus_timestamp) <= timestamp(until)
+          )
+            // Page overlap repeats the same consensus record. Retries and
+            // child records can share a transaction ID at different times.
+            transactions.set(timestamp(tx.consensus_timestamp).toString(), tx)
+        }
+        next = body.links.next ? new URL(body.links.next, mirror) : null
+      }
+      let spent = BigInt(0)
+      const payments: Payment[] = []
+      for (const tx of transactions.values()) {
+        if (tx.result !== 'SUCCESS') continue
+        let amount = BigInt(0)
+        for (const transfer of tx.token_transfers) {
+          if (transfer.token_id !== USDC || transfer.account !== config.payerAccountId) continue
+          if (!Number.isSafeInteger(transfer.amount)) throw new Error('unsafe amount')
+          amount -= BigInt(transfer.amount)
+        }
+        if (amount <= BigInt(0)) continue
+        spent += amount
+        const [account, seconds, nanos] = tx.transaction_id.split('-')
+        payments.push({
+          transactionId: tx.transaction_id,
+          consensusTimestamp: tx.consensus_timestamp,
+          amountAtomic: amount.toString(),
+          hashscanUrl: `https://hashscan.io/testnet/transaction/${account}@${seconds}.${nanos}`,
+        })
+        const payee = usdcPayee(tx.token_transfers)
+        if (payee)
+          settled.push({
+            payer: config.payerAccountId,
+            payee,
+            asset: USDC,
+            amountAtomic: amount.toString(),
+            txRef: `${account}@${seconds}.${nanos.padStart(9, '0')}`,
+          })
+      }
+      payments.sort((a, b) => (timestamp(a.consensusTimestamp) > timestamp(b.consensusTimestamp) ? -1 : 1))
+      const remaining = BigInt(config.budgetAtomic) - spent
+      return {
+        agentLabel: config.agentLabel,
+        payerAccountId: config.payerAccountId,
+        budgetAtomic: config.budgetAtomic,
+        since: config.since,
+        perPaymentCapAtomic,
+        spentAtomic: spent.toString(),
+        remainingAtomic: (remaining > BigInt(0) ? remaining : BigInt(0)).toString(),
+        payments,
+      }
+    })
+  )
+  return { agents, settled }
+}
+
+/**
+ * Settled USDC payments of the configured payers, read from the mirror node. This is the trusted
+ * observer of settlements: nothing the payer or relay reports is believed. Throws when the mirror
+ * feed or the configuration is unusable, so a caller never mistakes a partial read for a complete one.
+ */
+export function createSettlementSource(options: {
+  config: () => string | undefined
+  mirrorUrl?: string
+}): () => Promise<SettledPayment[]> {
+  const mirror = new URL(options.mirrorUrl ?? MIRROR_URL)
+  return async () => {
+    const configs = parseConfig(options.config())
+    const until = `${Math.floor(Date.now() / 1000)}.999999999`
+    if (configs.some((config) => timestamp(config.since) > timestamp(until))) throw new Error('future window')
+    return (await loadAgents(mirror, configs, '0', until)).settled
+  }
+}
+
 export function createPaymentsApi(options: {
   config: () => string | undefined
   perPaymentCap: () => string | undefined
@@ -97,90 +240,7 @@ export function createPaymentsApi(options: {
       )
     }
     try {
-      const agents = await Promise.all(
-        configs.map(async (config) => {
-          let next: URL | null = new URL('/api/v1/transactions', mirror)
-          next.searchParams.set('account.id', config.payerAccountId)
-          next.searchParams.set('order', 'asc')
-          next.searchParams.set('limit', '100')
-          next.searchParams.append('timestamp', `gte:${config.since}`)
-          next.searchParams.append('timestamp', `lte:${until}`)
-          const seenPages = new Set<string>()
-          const transactions = new Map<string, MirrorTransaction>()
-          // One deadline for all pages. Partial totals must never look complete.
-          const signal = AbortSignal.timeout(8_000)
-          while (next) {
-            if (
-              next.origin !== mirror.origin ||
-              next.pathname !== '/api/v1/transactions' ||
-              seenPages.has(next.href) ||
-              seenPages.size >= 100
-            )
-              throw new Error('invalid pagination')
-            seenPages.add(next.href)
-            const response = await fetch(next, { cache: 'no-store', signal, redirect: 'error' })
-            if (!response.ok) throw new Error('mirror unavailable')
-            const body = (await response.json()) as {
-              transactions: MirrorTransaction[]
-              links: { next: string | null }
-            }
-            if (
-              !Array.isArray(body.transactions) ||
-              !body.links ||
-              !(body.links.next === null || typeof body.links.next === 'string')
-            )
-              throw new Error('invalid feed')
-            for (const tx of body.transactions) {
-              if (
-                !/^0\.0\.\d+-\d+-\d{1,9}$/.test(tx.transaction_id) ||
-                !timestampPattern.test(tx.consensus_timestamp) ||
-                !Array.isArray(tx.token_transfers)
-              )
-                throw new Error('invalid transaction')
-              if (
-                timestamp(tx.consensus_timestamp) >= timestamp(config.since) &&
-                timestamp(tx.consensus_timestamp) <= timestamp(until)
-              )
-                // Page overlap repeats the same consensus record. Retries and
-                // child records can share a transaction ID at different times.
-                transactions.set(timestamp(tx.consensus_timestamp).toString(), tx)
-            }
-            next = body.links.next ? new URL(body.links.next, mirror) : null
-          }
-          let spent = BigInt(0)
-          const payments: Payment[] = []
-          for (const tx of transactions.values()) {
-            if (tx.result !== 'SUCCESS') continue
-            let amount = BigInt(0)
-            for (const transfer of tx.token_transfers) {
-              if (transfer.token_id !== USDC || transfer.account !== config.payerAccountId) continue
-              if (!Number.isSafeInteger(transfer.amount)) throw new Error('unsafe amount')
-              amount -= BigInt(transfer.amount)
-            }
-            if (amount <= BigInt(0)) continue
-            spent += amount
-            const [account, seconds, nanos] = tx.transaction_id.split('-')
-            payments.push({
-              transactionId: tx.transaction_id,
-              consensusTimestamp: tx.consensus_timestamp,
-              amountAtomic: amount.toString(),
-              hashscanUrl: `https://hashscan.io/testnet/transaction/${account}@${seconds}.${nanos}`,
-            })
-          }
-          payments.sort((a, b) => (timestamp(a.consensusTimestamp) > timestamp(b.consensusTimestamp) ? -1 : 1))
-          const remaining = BigInt(config.budgetAtomic) - spent
-          return {
-            agentLabel: config.agentLabel,
-            payerAccountId: config.payerAccountId,
-            budgetAtomic: config.budgetAtomic,
-            since: config.since,
-            perPaymentCapAtomic,
-            spentAtomic: spent.toString(),
-            remainingAtomic: (remaining > BigInt(0) ? remaining : BigInt(0)).toString(),
-            payments,
-          }
-        })
-      )
+      const { agents } = await loadAgents(mirror, configs, perPaymentCapAtomic, until)
       return json({ agents, observedAt } satisfies PaymentsFeed)
     } catch {
       return json(

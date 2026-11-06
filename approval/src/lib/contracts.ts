@@ -64,7 +64,9 @@ export class UnresolvedWriteError extends Error {
   constructor(
     readonly operation: 'grant' | 'revoke',
     readonly transactionHash: string,
-    readonly settle: () => Promise<SettleOutcome>
+    readonly settle: () => Promise<SettleOutcome>,
+    /** For a grant, the 0x-prefixed ADR 0005 digest it wrote, so a late confirmation can still be audited. */
+    readonly serviceDigest?: string
   ) {
     super(`${operation} transaction ${transactionHash} is not confirmed`)
   }

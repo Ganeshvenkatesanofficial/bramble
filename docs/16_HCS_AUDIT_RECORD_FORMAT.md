@@ -89,7 +89,7 @@ To verify, a reader recomputes `c` from the opening and compares it with the pos
 | `serviceDigest`                   | `serviceDigest` on the signer's grant receipt (ADR 0005). The request's plaintext `service` is never posted |
 | `grant.expiresAt`                 | Unix seconds of the request's `expiresAt`; `0` when the request has no duration                             |
 | `grant.txRef`, `revoke.txRef`     | `transactionHash` of the signer's confirmed receipt                                                         |
-| `payment.*`                       | The body of `POST /api/payments/settled`                                                                    |
+| `payment.*`                       | A successful USDC payment read from the mirror node, or the body of `POST /api/payments/settled`            |
 
 One event key gets one commitment: `grant` and `revoke` per request, `payment` per `txRef`. The service posts
 nothing when the signer fails, and it posts nothing for a grant retired by an external revoke, because no
