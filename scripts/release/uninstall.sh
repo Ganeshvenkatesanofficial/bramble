@@ -51,7 +51,9 @@ else
 fi
 
 if [ "$ASSUME_YES" != 1 ]; then
-  if [ -r /dev/tty ] && : < /dev/tty 2>/dev/null; then
+  # Probe in a subshell: dash and busybox exit the whole script when a redirect on the
+  # `:` special builtin fails, which would skip the --yes hint below.
+  if [ -r /dev/tty ] && (: < /dev/tty) 2>/dev/null; then
     printf 'Continue? [y/N] ' > /dev/tty
     read -r answer < /dev/tty || answer=
     case "$answer" in y | Y | yes | YES) ;; *) say "Cancelled; nothing removed."; exit 0 ;; esac

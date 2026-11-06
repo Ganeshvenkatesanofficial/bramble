@@ -116,11 +116,13 @@ out="$(HOME="$work" BRAMBLE_HOME="$home" BRAMBLE_INSTALL_BASE="http://example.co
 
 # Uninstall without a terminal needs --yes.
 mkdir -p "$work/home-yes"
-out="$(HOME="$work" BRAMBLE_HOME="$work/home-yes" sh "$here/uninstall.sh" </dev/null 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && [ -d "$work/home-yes" ]; then ok "uninstall without --yes and without a terminal removes nothing"; else
-  # A controlling terminal may exist when this test runs interactively; that case is not a failure.
-  [ -r /dev/tty ] && : < /dev/tty 2>/dev/null && ok "uninstall prompt skipped: a terminal is attached" || bad "uninstall deleted without confirmation"
-fi
+# setsid drops the controlling terminal so this also holds when the test is run by hand.
+detach=; command -v setsid >/dev/null 2>&1 && detach=setsid
+for sh in sh dash; do
+  command -v "$sh" >/dev/null 2>&1 || continue
+  out="$(HOME="$work" BRAMBLE_HOME="$work/home-yes" $detach "$sh" "$here/uninstall.sh" </dev/null 2>&1)"; rc=$?
+  if [ "$rc" -eq 1 ] && [ -d "$work/home-yes" ] && echo "$out" | grep -q -- "--yes"; then ok "$sh: uninstall without --yes and without a terminal removes nothing and says to use --yes"; else bad "$sh: uninstall without a terminal gave rc=$rc: $out"; fi
+done
 
 # Uninstall refuses HOME itself.
 out="$(HOME="$work" BRAMBLE_HOME="$work" sh "$here/uninstall.sh" --yes 2>&1)"; rc=$?
