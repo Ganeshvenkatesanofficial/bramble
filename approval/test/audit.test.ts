@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { HcsAuditTrail, parseMessage, verifyOpening, type TopicClient } from '@bramble/hedera-audit'
 import { createApprovalApi } from '../src/lib/api'
-import type { GrantSigner } from '../src/lib/contracts'
+import { UnresolvedWriteError, type GrantSigner, type SettleOutcome } from '../src/lib/contracts'
 import { ManualClock } from './clock'
 import { MemoryChain } from './memory-chain'
 
@@ -25,6 +25,24 @@ class DigestChain extends MemoryChain implements GrantSigner {
   }
 }
 
+/** A signer whose next write is submitted but not yet confirmed; `outcome` is what its receipt later says. */
+class UnresolvedChain extends DigestChain {
+  unresolved?: 'grant' | 'revoke'
+  outcome: SettleOutcome = 'unresolved'
+  override async grant(grantInput: Parameters<MemoryChain['grant']>[0]) {
+    if (this.unresolved === 'grant') {
+      throw new UnresolvedWriteError('grant', 'late-grant-1', async () => this.outcome)
+    }
+    return super.grant(grantInput)
+  }
+  override async revoke(label: string) {
+    if (this.unresolved === 'revoke') {
+      throw new UnresolvedWriteError('revoke', 'late-revoke-1', async () => this.outcome)
+    }
+    return super.revoke(label)
+  }
+}
+
 class FakeTopic implements TopicClient {
   readonly submitted: Uint8Array[] = []
   fail = false
@@ -43,8 +61,9 @@ class FakeTopic implements TopicClient {
   }
 }
 
-function setup(options: { clock?: ManualClock; ensParent?: string } = {}) {
-  const chain = new DigestChain()
+function setup(options: { clock?: ManualClock; ensParent?: string; chain?: DigestChain } = {}) {
+  const { chain = new DigestChain(), ...rest } = options
+
   const topic = new FakeTopic()
   const trail = new HcsAuditTrail({ client: topic, topicId: '0.0.9000' })
   const api = createApprovalApi({
@@ -52,7 +71,7 @@ function setup(options: { clock?: ManualClock; ensParent?: string } = {}) {
     signer: chain,
     resolver: chain,
     auditTrail: trail,
-    ...options,
+    ...rest,
   })
   const call = (path: string, method = 'GET', body?: unknown) =>
     api.handle(
@@ -128,6 +147,58 @@ test('a duration expiry posts one revoke commitment and a failed signer revoke p
   await clock.advance(5000)
   await api.audit.idle()
   expect(topic.submitted.map((bytes) => parseMessage(bytes)!.kind)).toEqual(['grant', 'revoke'])
+})
+
+test('a revoke that settles late posts its one commitment only once it is confirmed', async () => {
+  const clock = new ManualClock()
+  const chain = new UnresolvedChain()
+  const { topic, api, call, feed } = setup({ clock, chain })
+  const created = await (await call('/requests', 'POST', input)).json()
+  await call(`/requests/${created.id}/approve`, 'POST')
+  chain.unresolved = 'revoke'
+  const revoking = await (await call('/grants/agent-1/revoke', 'POST')).json()
+  expect(revoking.unresolvedWrite).toEqual({ operation: 'revoke', transactionHash: 'late-revoke-1' })
+  await clock.advance(5000)
+  await api.audit.idle()
+  expect(topic.submitted.map((bytes) => parseMessage(bytes)!.kind)).toEqual(['grant'])
+  chain.outcome = 'confirmed'
+  await clock.advance(5000)
+  await api.audit.idle()
+  await clock.advance(5000)
+  await api.audit.idle()
+  expect(topic.submitted.map((bytes) => parseMessage(bytes)!.kind)).toEqual(['grant', 'revoke'])
+  const entries = await feed()
+  const opening = api.audit.opening(entries[1].id as string)!
+  expect(opening.event).toEqual({ kind: 'revoke', subject: 'agent-1', serviceDigest: DIGEST, txRef: 'late-revoke-1' })
+  expect((await (await call(`/requests/${created.id}`)).json()).revokeAuditId).toBe(entries[1].id)
+})
+
+test('a grant that settles late shows in the feed, failed while the digest is unknown, and a revert posts nothing', async () => {
+  const clock = new ManualClock()
+  const chain = new UnresolvedChain()
+  chain.unresolved = 'grant'
+  const { topic, api, call, feed } = setup({ clock, chain })
+  const created = await (await call('/requests', 'POST', input)).json()
+  const approved = await (await call(`/requests/${created.id}/approve`, 'POST')).json()
+  expect(approved.unresolvedWrite).toMatchObject({ operation: 'grant' })
+  expect(await feed()).toEqual([])
+  chain.outcome = 'confirmed'
+  await clock.advance(5000)
+  await api.audit.idle()
+  expect(topic.submitted).toEqual([])
+  expect(await feed()).toMatchObject([{ kind: 'grant', status: 'failed', error: 'audit_event_unavailable' }])
+
+  const reverted = new UnresolvedChain()
+  reverted.unresolved = 'grant'
+  const otherClock = new ManualClock()
+  const other = setup({ clock: otherClock, chain: reverted })
+  const request = await (await other.call('/requests', 'POST', input)).json()
+  await other.call(`/requests/${request.id}/approve`, 'POST')
+  reverted.outcome = 'reverted'
+  await otherClock.advance(5000)
+  await other.api.audit.idle()
+  expect((await (await other.call(`/requests/${request.id}`)).json()).status).toBe('pending')
+  expect(await other.feed()).toEqual([])
 })
 
 test('a settled payment posts one commitment; a replay of the same transaction posts none', async () => {

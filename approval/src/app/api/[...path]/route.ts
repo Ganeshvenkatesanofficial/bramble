@@ -1,12 +1,28 @@
 import { createApprovalApi } from '../../../lib/api'
 import { auditTrailFromEnv } from '../../../lib/audit-runtime'
+import { ConfigError, realAdaptersFromEnv } from '../../../lib/chain-env'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// One long-lived Node process owns the queue and timers. ETH-30 wires real adapters here.
+function adapters() {
+  try {
+    return realAdaptersFromEnv()
+  } catch (error) {
+    // Only ConfigError messages are safe to log: they name a variable, never a value.
+    console.error(
+      `approval: real signer disabled: ${error instanceof ConfigError ? error.message : 'invalid configuration'}`
+    )
+    return undefined
+  }
+}
+
+// One long-lived Node process owns the queue and timers; the real signer runs only on the admin machine.
+const chain = adapters()
 const api = createApprovalApi({
   token: () => process.env.APPROVAL_DEMO_TOKEN,
+  signer: chain?.signer,
+  resolver: chain?.resolver,
   auditTrail: auditTrailFromEnv(process.env),
   ensParent: process.env.APPROVAL_ENS_PARENT,
 })

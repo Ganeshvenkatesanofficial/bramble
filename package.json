@@ -21,7 +21,7 @@
     "demo": "pnpm --filter @bramble/demo-ops run launch",
     "demo:preflight": "pnpm --filter @bramble/demo-ops run preflight",
     "demo:reset": "pnpm --filter @bramble/demo-ops run reset",
-    "test:access-flow": "cd brambled && go test ./gateway -run TestGate2_3_AgentCannotReachOutsideACL -v",
+    "test:access-flow": "cd brambled && go test ./gateway -run TestGate2_3_AgentCannotReachOutsideACL -count=1 -v && cd .. && pnpm --filter @bramble/agent-mcp test:access-flow",
     "check:no-endpoints": "node scripts/check-no-endpoints.mjs",
     "check:no-local-state": "node scripts/check-no-local-state.mjs",
     "verify": "pnpm format:check && pnpm check:no-endpoints && pnpm check:no-local-state && pnpm typecheck && pnpm lint && pnpm build && pnpm test"

@@ -30,7 +30,10 @@ export interface GrantReceipt extends TransactionReceipt {
   serviceDigest?: string
 }
 
-/** Implementations return only after confirmation and reconcile ambiguous write failures. */
+/**
+ * Implementations return only after confirmation. A submitted write whose outcome stays unknown
+ * throws UnresolvedWriteError; a definitively failed write throws any other error.
+ */
 export interface GrantSigner {
   grant(input: Pick<RequestInput, 'agentLabel' | 'gatewayLabel' | 'service'>): Promise<GrantReceipt>
   /** Clear this agent's ACL grants. Device enrollment remains unchanged. */
@@ -48,6 +51,23 @@ export interface PaymentInput {
   amountAtomic: string
   /** Hedera transaction ID, for example `0.0.1234@1700000000.123456789`. */
   txRef: string
+}
+
+export type SettleOutcome = 'confirmed' | 'reverted' | 'unresolved'
+
+/**
+ * Thrown by a signer when a transaction was submitted but its outcome could not be established.
+ * The write may still land, so callers must not resubmit or treat it as a clean failure;
+ * `settle()` re-checks the submitted transaction's receipt.
+ */
+export class UnresolvedWriteError extends Error {
+  constructor(
+    readonly operation: 'grant' | 'revoke',
+    readonly transactionHash: string,
+    readonly settle: () => Promise<SettleOutcome>
+  ) {
+    super(`${operation} transaction ${transactionHash} is not confirmed`)
+  }
 }
 
 export interface Clock {
@@ -69,6 +89,8 @@ export interface AccessRequest extends RequestInput {
   /** Feed row ids of the commitments posted for this request's grant and revoke. */
   grantAuditId?: string
   revokeAuditId?: string
+  /** A submitted transaction whose outcome is not yet known. Cleared when it settles. */
+  unresolvedWrite?: { operation: 'grant' | 'revoke'; transactionHash: string }
 }
 
 export class ApiError extends Error {
