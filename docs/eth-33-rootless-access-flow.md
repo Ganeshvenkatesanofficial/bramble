@@ -11,13 +11,16 @@ then `agent-mcp/test/access-flow.test.ts`. The latter also runs under
 
 The test starts:
 
-- The real approval API and `createChainAdapters`, using an in-memory ENS
+- The real approval application programming interface (API) and
+  `createChainAdapters`, using an in-memory Ethereum Name Service (ENS)
   text-record store and a signer that confirms writes in memory.
-- The real MCP stdio server and SDK client. The agent calls both public tools.
+- The real Model Context Protocol (MCP) stdio server and software development
+  kit (SDK) client. The agent calls both public tools.
 - Two userspace WireGuard peers, the gateway CONNECT server, the local
-  forwarder, and a loopback HTTP backend in a test-only Go subprocess.
+  forwarder, and a loopback Hypertext Transfer Protocol (HTTP) backend in a
+  test-only Go subprocess.
 
-The approval signer computes the ACL digest through the admincli library.
+The approval signer computes the access control list (ACL) digest through the admincli library.
 The Go gateway independently verifies that digest against the requesting
 peer's public key, the gateway key, service and trusted granter. The fixture
 shares only public keys with the TypeScript driver. Test identities and the
@@ -56,6 +59,8 @@ Live Sepolia/Hedera, Tor revocation latency and cloud topology remain **Open**.
 
 **Verified:** `pnpm verify` passes on the integrated branch. The MCP package
 runs 32 tests, including this flow; the approval package runs 44 tests.
+`CI=true TURBO_FORCE=true pnpm verify` also passes with zero Turbo cache hits
+in every stage. That run records a separate revocation sample of **2.91 ms**.
 The branch stacks ETH-30 (`33f6abd`), ETH-32 (`25a6cb8`), and the ETH-86
 verification fixes (`dc03b86`). ETH-86's cross-family review remains pending;
 its changes are separate from the ETH-33 test implementation.
