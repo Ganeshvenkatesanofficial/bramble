@@ -120,3 +120,15 @@ read-only testnet mirror feed attributed through `APPROVAL_PAYMENT_AGENTS`.
 The panel refreshes every two seconds; the node's sidecar remains the payer.
 See [`docs/16_AGENT_PAYMENTS_FLOW.md`](../docs/16_AGENT_PAYMENTS_FLOW.md) for
 configuration, the automatic relay payment trigger, and verification limits.
+
+## HCS audit panel (beat 3)
+
+The approval console shows the HCS audit panel below the request queue. Unlock it with the demo token to read `/api/audit/verification`. This read requires bearer authorization, sends `Cache-Control: no-store`, and returns verification summaries. Openings, salts and event fields stay in process.
+
+`/audit/fixtures` is an explicitly labeled offline preview. It reads synthetic, independently calculated mirror-response fixtures and recomputes their commitments with the merged `hedera-audit` verifier. It never submits transactions or queries a network. Its HashScan links show the format; the synthetic records do not exist on testnet.
+
+The verifier looks up the receipt's exact topic and sequence, checks the message kind and commitment, then opens it with the retained event and salt. A match means the configured mirror returned matching bytes. It does not independently prove consensus, the source transaction, or completeness. Missing openings, malformed records, mismatches, post failures, mirror delays and mirror failures have separate labels. Failed refreshes mark retained results stale. Locking clears the panel. The view checks up to the latest 50 retained rows.
+
+The `createApprovalApi` option `auditSource` accepts ETH-48's structural `AuditRecorder` interface (`list()` and `opening(id)`). The current base does not contain that recorder, so the live path returns 503 until integration passes the same in-process recorder to this option. No fallback fixture enters the live route. After ETH-48 merges, wire its recorder into this option in the process that owns the queue. Durable opening retention and live HashScan browser verification remain open. H4 screenshot approval remains required.
+
+Run `bun test approval/test/audit-verification.test.ts` from the root for the verification boundary, and `pnpm --filter @bramble/approval test:ui` after the production build for screenshots and stale/lock behavior at 1280 px and 390 px. Public-console testing by a different Sol tester and human H4 approval are separate gates.

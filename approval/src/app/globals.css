@@ -521,3 +521,106 @@ main {
   border-left: 3px solid;
   padding-left: 0.75rem;
 }
+
+/* HCS records share the approval console palette and wrap full commitments on phones. */
+.hcs-panel {
+  margin-top: 32px;
+}
+.hcs-panel > .section-heading {
+  margin-bottom: 10px;
+}
+.hcs-panel .section-heading h2 {
+  margin-top: 5px;
+  font-size: 20px;
+}
+.hcs-fixture {
+  margin-top: 20px;
+  border-left: 3px solid var(--primary);
+}
+.hcs-check {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 12px;
+  font-size: 12px;
+}
+.hcs-entries {
+  display: grid;
+  gap: 14px;
+}
+.hcs-entry {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 24px;
+  min-width: 0;
+}
+.hcs-entry h3 {
+  font-size: 16px;
+  margin-top: 0;
+  font-weight: 600;
+}
+.hcs-detail {
+  font-size: 12px;
+  margin-top: 6px;
+}
+.hcs-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr 2fr;
+  gap: 14px;
+  margin: 18px 0;
+  font-size: 12px;
+}
+.hcs-meta dt {
+  color: var(--muted-foreground);
+}
+.hcs-meta dd {
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+.hcs-commitment {
+  background: var(--muted);
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+.hcs-commitment code {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  margin-top: 5px;
+}
+.hcs-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  color: var(--primary);
+  font-size: 12px;
+  margin-top: 14px;
+}
+.hcs-limit {
+  font-size: 12px;
+  margin-top: 20px;
+  max-width: 800px;
+}
+@media (max-width: 600px) {
+  .hcs-entry {
+    padding: 18px;
+  }
+  .hcs-meta {
+    grid-template-columns: 1fr 1fr;
+  }
+  .hcs-meta > div:last-child {
+    grid-column: 1 / -1;
+  }
+  .hcs-panel .section-heading {
+    gap: 12px;
+  }
+  .hcs-check {
+    flex-wrap: wrap;
+  }
+  .hcs-check > span {
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+}

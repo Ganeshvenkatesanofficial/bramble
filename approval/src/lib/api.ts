@@ -2,8 +2,10 @@ import { timingSafeEqual } from 'node:crypto'
 import { ApiError, type GrantSigner, type IdentityResolver, type Clock } from './contracts'
 import { ApprovalService } from './service'
 import { readInput, label } from './validation'
+import { createAuditVerificationApi, type AuditSource } from './audit-verification'
 
 interface ApiOptions {
+  auditSource?: AuditSource
   signer?: GrantSigner
   resolver?: IdentityResolver
   clock?: Clock
@@ -11,6 +13,7 @@ interface ApiOptions {
 }
 
 export function createApprovalApi(options: ApiOptions) {
+  const verifyAudit = createAuditVerificationApi({ token: options.token, source: () => options.auditSource })
   const service = new ApprovalService(options.signer, options.resolver, options.clock)
   const json = (value: unknown, status = 200) =>
     Response.json(value, { status, headers: { 'cache-control': 'no-store' } })
@@ -32,6 +35,7 @@ export function createApprovalApi(options: ApiOptions) {
           }
         }
         const path = new URL(request.url).pathname.replace(/\/$/, '')
+        if (path === '/api/audit/verification' && request.method === 'GET') return verifyAudit(request)
         if (path === '/api/requests' && request.method === 'POST') {
           return json(service.create(await readInput(request)), 201)
         }
