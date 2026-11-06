@@ -857,8 +857,8 @@ const failoverMaxBackoff = 3 * time.Minute
 // ports were coincidentally identical across calls — see docs/adr/0008).
 const dataRelayAdoptExchangeTimeout = 3 * time.Second
 
-// watchDataRelayAdopt does not gate on WaitForStall the way
-// watchDataRelayFailover does: it stays continuously present at the relay
+// On the paid path (pace nil), watchDataRelayAdopt does not gate on
+// WaitForStall the way watchDataRelayFailover does: it stays continuously present at the relay
 // instead, cycling a short Exchange every few seconds for as long as ctx
 // lives. Tested this way, not gated on its own stall detection — Exchange
 // is one-shot rendezvous, not a subscription, so this side has to keep
@@ -883,7 +883,7 @@ const (
 	dataRelayAdoptMaxBackoff   = 30 * time.Second
 )
 
-// pace is nil on the paid path. A sponsored node passes the shared limiter
+// watchDataRelayAdopt's pace is nil on the paid path. A sponsored node passes the shared limiter
 // from sponsor.PollLimiter, because the relay limits sponsored tokens per
 // label per hour: polling every few seconds would use the whole allowance
 // in about 90 seconds. With pace set, the loop polls only while the peer's
