@@ -16,6 +16,10 @@ AI assistance also covered implementation and tests, not only the planning docum
 - **`dashboard/`** — the read-only application UI and API routes.
 - **`rpc-proxy/` and `deploy/rpc-proxy/`** — the W11 memory-only logging JSON-RPC proxy, its tests, and its deployment recipe (`rpc-proxy/src/`, `rpc-proxy/test/server.test.ts`, `deploy/rpc-proxy/README.md`).
 
+Mumbai-hackathon agent work (paths written by agents; commits use each agent's own git identity):
+
+- **`docs/W9a_NETWORK_CALL_AUDIT.md`, `sidecar/test/hedera-signer-network.test.ts`, `sidecar/test/helpers/network-guard.ts`** — W9a network-call audit of the Hedera client signer and `brambled` (ETH-40), written by Tor-Claude (Claude Sonnet 5.5).
+
 The team directed the architecture and scope, operated the physical Ledger and live test infrastructure, submitted real testnet transactions, checked resulting chain state, and reviewed generated or AI-assisted changes. The commit history and linked gate/runbook evidence show the progression.
 
 Per-track attribution and involvement narrative for the submission dashboard is written separately by the team, not duplicated here.
