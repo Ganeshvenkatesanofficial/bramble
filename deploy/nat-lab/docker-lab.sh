@@ -68,16 +68,32 @@ role() { # role <ns> <role> <priv> <peer-pub> <label> [extra env...]
 echo "== control: both nodes point WireGuard at the other's NAT address (symmetric NAT, no relay)"
 role nodeB cloud "$cloud_priv" "$dev_pub" cloud1 NETLAB_MODE=direct-control NETLAB_DIRECT_ENDPOINT=192.0.2.2:51820 >/out/cloud-control.log 2>&1 &
 cloud_pid=$!
-sleep 1
-# The control must fail to connect. A working direct path, or a crashed
-# control run, means the relay result below would prove nothing.
+# The control must fail to connect, against a cloud side that is up and
+# listening for the whole attempt. A working direct path, a crashed device
+# run, or a cloud side that never came up or died means the relay result
+# below would prove nothing.
 status=0
-role nodeA device "$dev_priv" "$cloud_pub" device1 NETLAB_MODE=direct-control NETLAB_DIRECT_ENDPOINT=192.0.2.6:51820 >/out/device-control.log 2>&1 || status=1
-grep -E '^NETLAB|^(---|FAIL|ok|PASS)' /out/device-control.log || true
-grep -q 'NETLAB_RESULT direct-control: no handshake' /out/device-control.log || status=1
+cloud_ready=0
+for _ in $(seq 40); do
+  if grep -q '^NETLAB_READY cloud' /out/cloud-control.log; then cloud_ready=1; break; fi
+  kill -0 "$cloud_pid" 2>/dev/null || break
+  sleep 0.5
+done
+if [ "$cloud_ready" -ne 1 ]; then
+  echo "control: the cloud side did not come up; see /out/cloud-control.log" >&2
+  status=1
+else
+  role nodeA device "$dev_priv" "$cloud_pub" device1 NETLAB_MODE=direct-control NETLAB_DIRECT_ENDPOINT=192.0.2.6:51820 >/out/device-control.log 2>&1 || status=1
+  grep -E '^NETLAB|^(---|FAIL|ok|PASS)' /out/device-control.log || true
+  grep -q 'NETLAB_RESULT direct-control: no handshake' /out/device-control.log || status=1
+  if ! kill -0 "$cloud_pid" 2>/dev/null; then
+    echo "control: the cloud side exited during the device attempt; see /out/cloud-control.log" >&2
+    status=1
+  fi
+fi
 kill "$cloud_pid" 2>/dev/null || true; wait "$cloud_pid" 2>/dev/null || true
 if [ "$status" -ne 0 ]; then
-  echo "control failed: the direct path connected or the control run did not finish; see /out/device-control.log" >&2
+  echo "control failed: the direct path connected, or one side of the control did not run to the end; see /out/*-control.log" >&2
   bash "$LAB" down >/dev/null
   exit 1
 fi

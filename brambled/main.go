@@ -890,7 +890,8 @@ const (
 // traffic has stalled (the same RxBytes signal the buying side's
 // watchDataRelayFailover acts on; keepalives move it every
 // dataRelayKeepaliveSeconds on a healthy link), and each cycle waits for
-// the limiter first.
+// the limiter. If it had to wait for a token, it checks for the stall again
+// before polling (datarelay.WaitForStallWithToken).
 //
 // A cycle that fails fast (a refused token, an unreachable sidecar) still
 // takes dataRelayAdoptExchangeTimeout, so a failing relay is not hammered.
@@ -905,10 +906,7 @@ func watchDataRelayAdopt(ctx context.Context, node *wgnode.Node, m relayPayer, p
 		default:
 		}
 		if pace != nil {
-			if err := datarelay.WaitForStall(ctx, node, peerPubkey, dataRelayPollInterval, dataRelayStallTimeout); err != nil {
-				return
-			}
-			if err := pace.Wait(ctx); err != nil {
+			if err := datarelay.WaitForStallWithToken(ctx, node, peerPubkey, dataRelayPollInterval, dataRelayStallTimeout, pace); err != nil {
 				return
 			}
 		}

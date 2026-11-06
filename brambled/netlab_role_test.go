@@ -121,6 +121,8 @@ func TestNetlabRole(t *testing.T) {
 	if err := node.AddPeer(peerPub, netip.PrefixFrom(peerIP, 32), endpoint); err != nil {
 		t.Fatal(err)
 	}
+	// docker-lab.sh waits for this line before it trusts a negative control.
+	fmt.Printf("NETLAB_READY %s\n", role)
 
 	if role == "cloud" {
 		time.Sleep(90 * time.Second) // the script kills this process when the device is done
