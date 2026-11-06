@@ -264,9 +264,12 @@ def main():
     parser.add_argument('--poll', type=positive, default=2, help='Poll interval in seconds')
     args = parser.parse_args()
     for value in (args.agent, args.gateway, args.service):
-        require(re.fullmatch(r'[a-z0-9][a-z0-9-]{0,62}', value), 'Invalid agent, gateway or service label.')
-    require(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._@-]*', args.worker), 'Invalid worker SSH alias.')
-    require(re.fullmatch(r'http://127\.0\.0\.1:\d{1,5}/[A-Za-z0-9/_-]*', args.forward), 'Forward must be a worker loopback HTTP URL.')
+        if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,62}', value):
+            parser.error('Invalid agent, gateway or service label.')
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._@-]*', args.worker):
+        parser.error('Invalid worker SSH alias.')
+    if not re.fullmatch(r'http://127\.0\.0\.1:\d{1,5}/[A-Za-z0-9/_-]*', args.forward):
+        parser.error('Forward must be a worker loopback HTTP URL.')
     print('SIMULATED: offline fixtures; no live access, payment or chain verification.' if args.offline
           else 'LIVE: uses the prepared pair; node lifecycle remains with the ETH-244 operator.', flush=True)
     return Rehearsal(args, OfflinePair(args) if args.offline else Pair(args)).run()
