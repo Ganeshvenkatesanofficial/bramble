@@ -199,6 +199,35 @@ for invalid_pid in 0 -1 000; do
   wait "$native_pid" 2>/dev/null || true
 done
 
+# A daemon that outlives an update runs from a replaced (deleted) binary. Install
+# replaces files with cp then mv -f, so mimic that. Linux-only: needs /proc.
+if [ -d /proc ]; then
+  home="$work/deleted-binary"
+  mkdir -p "$home/bin"
+  cp "$(command -v sh)" "$home/bin/bramble"
+  echo "$base/.well-known/bramble.json" > "$home/config.url"
+  "$home/bin/bramble" -c 'while :; do sleep 1; done' &
+  deleted_pid=$!
+  daemon_pids+=("$deleted_pid")
+  sleep 0.1
+  cp "$(command -v sh)" "$home/bin/bramble.new" && mv -f "$home/bin/bramble.new" "$home/bin/bramble"
+  case "$(readlink "/proc/$deleted_pid/exe" 2>/dev/null)" in
+    *" (deleted)") ;;
+    *) bad "deleted-binary fixture precondition: exe link was not marked deleted" ;;
+  esac
+  echo "$deleted_pid" > "$home/bramble.pid"
+  # An unrelated process whose PID is not under bin/ must survive the same run.
+  sh -c 'while :; do sleep 1; done' &
+  bystander_pid=$!
+  daemon_pids+=("$bystander_pid")
+  HOME="$work" BRAMBLE_HOME="$home" sh "$here/uninstall.sh" --yes >/dev/null 2>&1; rc=$?
+  for _ in {1..20}; do kill -0 "$deleted_pid" 2>/dev/null || break; sleep 0.1; done
+  if [ "$rc" -eq 0 ] && ! kill -0 "$deleted_pid" 2>/dev/null && [ ! -e "$home" ]; then ok "uninstall stops a daemon running from a replaced (deleted) binary"; else bad "uninstall left a daemon running from a replaced (deleted) binary"; fi
+  if kill -0 "$bystander_pid" 2>/dev/null; then ok "uninstall leaves an unrelated process alone in the deleted-binary case"; else bad "uninstall killed an unrelated process in the deleted-binary case"; fi
+  kill "$deleted_pid" "$bystander_pid" 2>/dev/null || true
+  wait "$deleted_pid" "$bystander_pid" 2>/dev/null || true
+fi
+
 home="$work/script-ownership"
 run_install sh "$home" --no-start >/dev/null 2>&1
 printf '#!/bin/sh\nwhile :; do sleep 1; done\n' > "$work/outside-helper"

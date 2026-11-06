@@ -86,8 +86,12 @@ owned_process() {
   kill -0 "$1" 2>/dev/null || return 1
   if [ -d /proc ]; then
     executable="$(readlink "/proc/$1/exe" 2>/dev/null || true)"
+    # install.sh replaces binaries by rename, so a daemon that survived an update
+    # reports "<path> (deleted)". It is still ours if the path is under bin/.
+    deleted=0
+    case "$executable" in *" (deleted)") executable="${executable% (deleted)}"; deleted=1 ;; esac
     case "$executable" in
-      "$BIN_DIR/"*) [ -f "$executable" ] && return 0 ;;
+      "$BIN_DIR/"*) { [ "$deleted" = 1 ] || [ -f "$executable" ]; } && return 0 ;;
     esac
     # Shell-script bundles are used by the public-host smoke test. A shell must
     # have our script as its first argument; an arbitrary argument is not proof.

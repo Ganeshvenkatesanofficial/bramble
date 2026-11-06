@@ -66,7 +66,7 @@ It resolves `BRAMBLE_HOME` and `$HOME` through physical paths before removal. It
 
 ## Test
 
-`scripts/release/install.test.sh` serves a stub bundle on loopback and checks `install.sh` and `uninstall.sh` under `sh`, `dash` and `busybox sh`: install, reinstall over a running process, uninstall, checksum mismatch, missing checksum entry, nested archive paths, a host without a tailnet, plain `http` to a remote host, the confirmation rules, stale PID preservation, native executable ownership, protected path aliases, installation evidence, and `--keep-data`. It needs `python3`, `curl`, `tar` and `sha256sum`, and no network or root.
+`scripts/release/install.test.sh` serves a stub bundle on loopback and checks `install.sh` and `uninstall.sh` under `sh`, `dash` and `busybox sh`: install, reinstall over a running process, uninstall, checksum mismatch, missing checksum entry, nested archive paths, a host without a tailnet, plain `http` to a remote host, the confirmation rules, stale PID preservation, installation evidence, and `--keep-data`. The native executable ownership (including a daemon running from a replaced binary, Linux only), protected path aliases, nonpositive PID, HTTP authority, and dot-segment probes run under `sh` only. It needs `python3`, `curl`, `tar` and `sha256sum`, and no network or root.
 
 ## Generator: environment to node config
 
