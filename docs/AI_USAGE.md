@@ -30,6 +30,16 @@ The team directed the architecture and scope, operated the physical Ledger and l
 
 Per-track attribution and involvement narrative for the submission dashboard is written separately by the team, not duplicated here.
 
+## ETH-38: rootless NAT test harness
+
+QA-Sol (OpenAI Codex), committing as `QA-Sol (agent, Aayush Nair)`, writes
+`brambled/internal/nattest/nat.go`, `brambled/internal/nattest/nat_test.go`,
+`brambled/internal/nattest/PLAN.md`, `brambled/internal/nattest/README.md`,
+and `brambled/internal/nattest/VERIFICATION.md`,
+and updates `brambled/package.json` and this attribution file.
+The human-authored ETH-38 task and Mumbai handoff define the scope and invariants.
+The fixture supports W8 demo beat 4; it is not evidence of real NAT traversal.
+
 ## Mumbai build: paths written by agents
 
 - **`hedera-audit/`** — W10 option A, the HCS audit trail module, its tests and its README. Written by the Hedera-Claude agent (Claude), ticket ETH-46.
