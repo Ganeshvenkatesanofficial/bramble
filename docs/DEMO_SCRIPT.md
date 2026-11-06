@@ -32,9 +32,9 @@ Use the newest cloud timings when selecting a script. These are individual obser
 | Beat 5: revoke transaction confirmed | 10.0 s | 10.9 / 6.1 s |
 | Beat 5: first failed call, measured from starting revoke | 29.2 s | 36.6 / 37.0 s |
 
-ETH-205 uses node build `daa18a9` and console `a7117d6`. Its first cold pass takes 136 s for deny and 96 s for success. ETH-244 uses `4928612` on the cloud machines and console. Its accepted runs A and B occur at 12:24 and 12:26 UTC after startup; the overlapping earlier pass is void. Each call includes the gateway's ENS reads over Tor. The reports describe these observations as upper bounds on the decision, not isolated Tor overhead.
+ETH-205 uses node build `daa18a9` and console `a7117d6`. Its first cold pass takes 136 s for deny and 96 s for success. ETH-244 uses `4928612` on the cloud machines and console. Its accepted runs A and B occur at 12:24 and 12:26 UTC, about 21–23 minutes after the initial 12:03 UTC node start (the worker restarted at 12:12:32 UTC); the overlapping earlier pass is void. Each call includes the gateway's ENS reads over Tor. The reports describe these observations as upper bounds on the decision, not isolated Tor overhead.
 
-Do not add the revoke-confirmation row to the first-failure row: the latter already starts when revoke begins. Record transaction confirmation and first observed failed call separately in your rehearsal.
+Do not add the revoke-confirmation row to the first-failure row: the latter already starts when revoke begins. Record transaction confirmation and first observed failed call separately in your rehearsal. ETH-205 warm run 2 follows a full lifecycle. One denied warm-up call is not shown to make beat 3 warm: the first ETH-205 success still took 96 s after its 136 s denial.
 
 The separate [Tor measurement](measurements/2026-11-06-revocation-over-tor.md) replays a real RPC trace on one machine. Its 7.0–11.5 s median range and 29 s worst observation exclude transaction confirmation. Do not substitute those numbers for the live cloud revoke measurement.
 
@@ -49,34 +49,36 @@ The commands below are **Read from source / unverified by this author**. Run the
 - [ ] Have the human enter the existing demo token in the console's password field and click **Unlock**, before recording. Reloading locks the console. Keep secret files, headers, shell tracing and agent configuration off screen. Do not give the operator token to an agent to perform this script.
 - [ ] Remove any previous grant through the existing operator revoke-by-label flow for `mumbai-worker`, even if no console card exists. Requests live in process memory; a restart can hide the card while ENS keeps the grant. HTTP 409 `not_granted` means no grant to remove. Verify the next denied call against a new gateway journal line.
 - [ ] Check current Sepolia ETH, Hedera testnet HBAR and USDC balances through the existing operator balance check. Historical balances are not current funds. Testnet USDC is token `0.0.429274`; the reported payer is `0.0.11334961`. Confirm the actual payer mapping before attributing spend to a worker.
-- [ ] Plan for roughly 2.5 USDC/hour in ETH-244 and up to about 4 USDC/hour in the ETH-204 retry-loop observation, both with two nodes up. Nine minutes (three-minute warmup plus six-minute presentation) is about 0.38–0.60 testnet USDC at those rates; fifteen minutes is about 0.63–1.00. These estimates are not caps and exclude extra work and HCS fees. Check the configured per-payment cap against the sidecar; the displayed demo budget is advisory and does not stop payments.
+- [ ] Plan for roughly 2.5 USDC/hour in ETH-244 and up to about 4 USDC/hour in the ETH-204 retry-loop observation, both with two nodes up. Nine minutes (three-minute warmup plus six-minute presentation) is about 0.38–0.60 testnet USDC at those rates; fifteen minutes is about 0.63–1.00. Budget the rehearsals separately: 17 minutes of node uptime, as in the two ETH-205 runs, costs an estimated 0.71–1.13 testnet USDC at 2.5–4 USDC/hour. Add the presentation and any extra warmup time. ETH-244 also reports a burst of token purchases at startup. These estimates are not caps and exclude HCS fees. Check the configured per-payment cap against the sidecar; the displayed demo budget is advisory and does not stop payments.
 - [ ] Check HCS readiness before promising it: a real topic, payer configuration and a fresh mirror-verified record must exist. If missing, report the missing names `HEDERA_AUDIT_TOPIC_ID`, `HEDERA_CLIENT_ACCOUNT_ID`, `HEDERA_CLIENT_PRIVATE_KEY` to the operator; never inspect their values. Use the disclosure line below until resolved.
 - [ ] Rehearse twice before the presentation slot. Record build, warmup, start/end times, request ID, approve/revoke hashes, each curl result, payment reference, and HCS sequence/consensus time or its failure. After each run, check the final grant is gone. Two prior cloud runs do not verify your spoken timing or current deployment.
 
-### Start three minutes early and warm the denied call
+### Start at least three minutes early and rehearse the full path
 
-Start at T−3:00, after the slot owner releases the machines:
+Reserve time for a full off-stage lifecycle before T−3:00 when possible. The cited warm timings follow a full lifecycle or extended uptime (about 20 minutes since the initial start, with a worker restart in between); three minutes and one denied call do not establish the same conditions. Start the nodes no later than T−3:00, after the slot owner releases the machines:
 
 ```sh
 ssh bramble-gateway 'sudo systemctl start bramble-demo-service bramble-gateway'
 ssh bramble-worker 'sudo systemctl start bramble-worker'
 ```
 
-Wait for current-start `serving on` and peer `adopted new candidate` messages on both nodes. Use the unit start times to bound any journal view. `pnpm demo:preflight` is available with role/connection settings in the [launcher how-to](../scripts/demo/README.md); investigate any failure. The relay check's five-second deadline can be shorter than a Tor read, so a timeout alone does not establish a broken relay.
+Wait for current-start `serving on` and peer `adopted new candidate` messages on both nodes. Use the unit start times to bound any journal view. `pnpm demo:preflight` is available with role/connection settings in the [launcher how-to](../scripts/demo/README.md); investigate any failure. The five-second checks probe direct TCP connectivity to rendezvous relays and HTTP `/health` on payment sidecars. They do not measure a Tor read. Investigate a failed probe before using the paid path; the separate `/relays` query uses `CURL_TIMEOUT_SECONDS`.
 
-Once ready, call beat 1 once off stage to warm the path:
+Once ready, call beat 1 once off stage to warm the denied path:
 
 ```sh
 ssh bramble-worker "sudo -u agent curl -sS -m 150 -w '\nHTTP %{http_code} after %{time_total}s\n' http://127.0.0.1:8080/task"
 ```
 
-Expect a reset and HTTP 000, with a matching new gateway `denied for service "task" (no matching granted digest)` line. A timeout or reset without that denial line is not proof of enforcement. If readiness and the warmup do not finish before the slot, delay the start or use the labeled recording. Three minutes is a preparation target, not a cold-start guarantee.
+Expect a reset and HTTP 000, with a matching new gateway `denied for service "task" (no matching granted digest)` line. A timeout or reset without that denial line is not proof of enforcement. If readiness and the warmup do not finish before the slot, delay the start or use the labeled recording. Three minutes is a preparation target, not a cold-start guarantee. ETH-205 also reports peer adoption about a minute after start, before the 136 s cold denial.
+
+When time allows, continue off stage through approve, successful call, revoke and a fresh denied call, using the operator actions below. Record each duration and remove the rehearsal grant. If you only warm beat 1, warn that beat 3 may still run cold: the cited cold success took 96 s. Use the six-minute script or labeled recording unless your own full rehearsal fits the short schedule.
 
 ### Set up the operator actions
 
 Use this exact same worker curl for beats 1, 3 and 5. Do not change the endpoint or restart nodes between them. The command runs curl as Unix user `agent`; it does not demonstrate an AI agent session.
 
-For beat 2, the operator submits one pending request through the existing authenticated request flow, with this JSON body:
+For beat 2, the operator submits one pending request through the existing authenticated request flow, with this JSON body. In the three-minute script, create it off stage after warmup and leave it pending; inspect and approve it on stage. In the six-minute script, create it on stage:
 
 ```json
 {
@@ -93,21 +95,20 @@ For beat 3, keep a journal payment URL ready from this run, with its timestamp, 
 
 ## Present in three minutes
 
-The times include the waits. Start the next action as soon as its preceding result appears; use spare time to point at the evidence. If a result misses its allocated window, use the failure playbook instead of rushing more writes.
+Use this schedule only after a full rehearsal fits it, with the request already pending. The times include the waits and operator actions. Start the next action as soon as its preceding result appears. The four action windows allow 35 / 30 / 55 / 50 seconds; the slowest cited observations leave about 7 / 14 / 12 / 13 seconds respectively for operator work. That margin is unverified, not a guarantee. Show payment evidence during the successful-call wait. If a window ends with the result still pending, switch to labeled evidence; keep the closing five seconds even if an action started late.
 
 | Clock | Operator action | Say |
 | --- | --- | --- |
 | 0:00–0:05 | Show worker terminal and console. | “Bramble gives a worker scoped access to a private service. The gateway checks authorization from ENS.” |
-| 0:05–0:35 | Run the warmed curl. Show the reset and matching denial. | “This worker is enrolled, but it has no grant for `task`. The gateway reads ENS over Tor before deciding. This pause is part of the live check.” When denial arrives: “Denied. The private task stays behind the gateway.” |
-| 0:35–0:55 | Submit the prepared request. Read identity, gateway and `task`; click Approve once. Show the Sepolia receipt. | “I approve this worker for this service. The grant is written on Sepolia. This request lasts until I revoke it.” |
-| 0:55–1:40 | Repeat the same curl without restarting anything. Show HTTP 200 and task JSON. | “Same worker, same call. The gateway reads the changed ENS authorization through Tor.” Use the wait lines below. On success: “The private service now returns its task.” |
-| 1:40–2:20 | Click Revoke access; time from click. After confirmation, repeat curl and show the fresh denial. | “Now I remove the grant. Confirmation and the next observed denial are separate timestamps.” On denial: “That same call is refused again. The peer enforces the changed authorization.” |
-| 2:20–2:45 | Open a real payment reference, then the HCS panel if ready. | “Relays charge testnet USDC through x402 for rendezvous tokens or data allotments. This is a settled relay payment; approval itself is not a payment trigger.” If HCS works: “This new salted commitment has a Hedera consensus reference.” Otherwise: “The new HCS audit record is not configured in this deployment yet.” |
-| 2:45–3:00 | Return to denied call and console. | “ENS holds the authorization. Each peer enforces it. Tor carries the control-plane reads and payment requests. Scoped, revocable access, with no trusted coordinator.” |
+| 0:05–0:40 | Run the warmed curl. Show the reset and matching denial. | “This worker is enrolled, but it has no grant for `task`. The gateway reads ENS over Tor before deciding.” When denial arrives: “Denied. The private task stays behind the gateway.” |
+| 0:40–1:10 | Inspect the pending request's identity, gateway and `task`; click Approve once. Show the Sepolia receipt. | “The worker requested access before we started. I approve it now for this service, until I revoke it. The grant is written on Sepolia.” |
+| 1:10–2:05 | Repeat the same curl without restarting anything. Keep its pending state visible while opening the prepared settlement; then show HTTP 200 and task JSON. | “Same worker, same call; the gateway reads the changed authorization through Tor. While it checks, this is a real relay settlement with its payer and time. x402 charges testnet USDC for rendezvous tokens or data allotments; approval is not a payment trigger.” If HCS is ready, point to the new receipt; otherwise: “The new HCS audit record is not configured here yet.” On success: “The private service now returns its task.” |
+| 2:05–2:55 | Click Revoke access; time from click. After confirmation, repeat curl and show the fresh denial. | “Now I remove the grant. Confirmation and the next observed denial are separate timestamps.” On denial: “That same call is refused again. The peer enforces the changed authorization.” |
+| 2:55–3:00 | Keep the denied result visible, or label the fallback if still pending. | “Scoped, revocable access, enforced by peers from ENS.” |
 
 ## Present in six minutes
 
-Use the same prepared actions and evidence gates. Do not start a second lifecycle just to fill time.
+Use the same prepared actions and evidence gates. Do not start a second lifecycle just to fill time. If an action needs more time than its slot, shorten the later explanation and optional installer segment. Use the elapsed-action deadlines below and switch to labeled evidence if needed.
 
 | Clock | Operator action | Say |
 | --- | --- | --- |
@@ -149,7 +150,7 @@ These are **unverified spoken budgets**. At the measured latencies, a full live 
 
 - **0–15 s:** “Bramble combines ENSv2 authorization with a Tor control plane. Peers read names and authorization themselves, so a relay cannot grant membership.”
 - **15–30 s:** Show the grant and repeated call. “The sidecar routes ENS reads and payment HTTP through Tor with separate isolation keys. We do not publish private member endpoints in ENS.”
-- **30–45 s:** “Privacy has a measured cost: latest cloud calls took about 27 seconds to deny and 38 to 44 seconds to succeed. The first failed call came about 37 seconds after revoke started.”
+- **30–45 s:** “Cloud decisions, including ENS reads over Tor, took about 27 seconds to deny and 38 to 44 seconds to succeed. We have not isolated Tor’s share. The first failed call came about 37 seconds after revoke started.”
 - **45–60 s:** “The provider still sees queried records and timing. WireGuard and STUN stay outside Tor, and relays see peer addresses. The claim is control-plane protection and no trusted coordinator. A live before/after provider-log demonstration remains unverified here.”
 
 ### Hedera: paid relay service and HCS
@@ -168,7 +169,7 @@ Keep this segment **Open / unverified** until ETH-244 records all of these on a 
 3. The device installs, opens the local UI, requests membership, receives human approval, reaches `connected`, and `POST /api/test` returns `ok` through the real deployment. A manifest check or a mock UI is not this acceptance run.
 4. The operator records the exact command, tested OS/architecture, build, elapsed install/join time and result. Rehearse the segment within its 50-second slot; otherwise show a labeled recording or move it after the six-minute pitch.
 
-Candidate command from the [public distribution runbook](../deploy/README.md#h3-smoke-test-from-outside), **not proof the current public release is ready**:
+Candidate command from the [public distribution runbook](../deploy/README.md), **not proof the current public release is ready**:
 
 ```sh
 curl -fsSL https://console.13-233-181-104.sslip.io/install.sh | sh
@@ -178,16 +179,16 @@ Replace this candidate with the accepted command from ETH-244 if its flags chang
 
 ## Recover when a beat stalls
 
-Use these stage deadlines as **unverified presentation budgets**, not protocol timeouts. At the deadline, leave the pending state visible and switch to the prepared evidence. Keep the 150-second curl cap for an off-stage diagnosis. Do not issue repeated approve/revoke writes to hurry a pending transaction.
+Use these stage deadlines as **unverified presentation budgets**, not protocol timeouts. Count deny/success from starting curl, approval from clicking Approve, and revoke-to-failure from clicking Revoke access (including confirmation and the follow-up curl). The short script also stops each action at its clock-window end if that comes first; these deadlines do not extend the three-minute take. At the deadline, leave the pending state visible and switch to the prepared evidence. Keep the 150-second curl cap for an off-stage diagnosis. Do not issue repeated approve/revoke writes to hurry a pending transaction.
 
 | Symptom / stage deadline | Say | Do |
 | --- | --- | --- |
 | Nodes not ready by T0 | “The live nodes are still starting. This recording shows the tested build and its date.” | Use the labeled recording. Diagnose off stage with current-start readiness/adoption logs. Do not start another take against a warming path. |
-| Deny has no result at 30 s, or success has no result at 45 s in the short script | “This check is still pending. Today's runs vary, so I will show the earlier measured result with its timestamp.” | Stop narrating a live outcome. Switch to recording. A timeout, tunnel dial failure or missing adoption is not an access denial. Check fresh gateway logs off stage. |
+| Deny has no result after 35 s, or success has no result after 55 s | “This check is still pending. Today's runs vary, so I will show the earlier measured result with its timestamp.” | Stop narrating a live outcome. Switch to recording. A timeout, tunnel dial failure or missing adoption is not an access denial. Check fresh gateway logs off stage. |
 | Initial call succeeds before approval | “This worker still has access from an earlier run. We need to reset before showing denial.” | Stop the sequence. The operator removes the existing grant by label, waits for propagation and verifies a fresh denial before restarting. An empty console queue does not prove an empty ACL. |
-| Approval still pending after 20 s (short) / 35 s (long), HTTP 202, or `write_unresolved` | “The transaction receipt is not confirmed. I will not claim the grant is active yet.” | Inspect the request and its real Sepolia hash; let the service reconcile. Do not create another request or duplicate the write. Continue with labeled evidence. |
+| Approval still pending after 30 s, HTTP 202, or `write_unresolved` | “The transaction receipt is not confirmed. I will not claim the grant is active yet.” | Inspect the request and its real Sepolia hash; let the service reconcile. Do not create another request or duplicate the write. Continue with labeled evidence. |
 | Success still denied after approval | “The grant is confirmed, but this check has not observed access yet.” | Verify identity, service `task`, receipt and fresh gateway decision. Retry the call off stage within a bounded two-minute investigation; do not approve again. If still denied, report the failure and stop the paid nodes. |
-| Revoke has no failed-call evidence at 40 s (short) / 45 s (long), or a call succeeds | “Revocation is not yet demonstrated by this call. The confirmation and enforcement timestamps differ.” | Inspect receipt and fresh denial. A call already in flight can succeed. Recheck off stage; do not say “instant revoke” or count a timeout as denial. |
+| Revoke has no failed-call evidence after 50 s, or a call succeeds | “Revocation is not yet demonstrated by this call. The confirmation and enforcement timestamps differ.” | Inspect receipt and fresh denial. A call already in flight can succeed. Recheck off stage; do not say “instant revoke” or count a timeout as denial. |
 | Console 401 or disabled buttons | “The operator console is locked.” | Have the human unlock privately. Do not paste tokens into the shared terminal or agent session. |
 | Console unavailable or signer error | “The approval path is unavailable. I will show the recorded transaction and call sequence.” | Check the user units/tunnel off stage. Do not restart the approval service blindly: requests and revoke timers are in memory. |
 | Payment feed stale, empty or HashScan slow | “Settlement evidence is delayed or unavailable in this view.” | Use a real earlier transaction, explicitly labeled with its time, or state the gap. Do not report zero spend from a failed feed. Never substitute an HCS link for a payment. |

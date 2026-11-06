@@ -10,3 +10,5 @@ The agent used the merged HCS record format and verifier. A Python standard-libr
 
 - Wrote `docs/DEMO_SCRIPT.md`: three- and six-minute scripts, sponsor narration, rehearsal, recovery and conditional installer acceptance. Read repository sources and ETH-205/ETH-244 timing comments; did not run cloud lifecycle actions or inspect secrets.
 - Appended `docs/ai-usage/infra-sol-ui.md` to record these paths.
+
+- Addressed round-1 findings in `docs/DEMO_SCRIPT.md`: full-lifecycle warmup evidence, more operating time with a pre-created pending request, action-relative stall deadlines, Tor attribution, preflight probes, installer link and rehearsal/startup cost. Appended this usage record. No live rehearsal or cloud changes.
