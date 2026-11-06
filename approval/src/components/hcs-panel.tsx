@@ -152,7 +152,9 @@ export function HcsPanel({ token = '', fixtureFeed }: { token?: string; fixtureF
                       {visibleError ? 'Stale · recheck needed' : state.label}
                     </span>
                   </div>
-                  <p className="muted hcs-detail">{visibleError ? 'Last successful check; recheck needed.' : state.detail}</p>
+                  <p className="muted hcs-detail">
+                    {visibleError ? 'Last successful check; recheck needed.' : state.detail}
+                  </p>
                   <dl className="hcs-meta">
                     <div>
                       <dt>Topic</dt>
