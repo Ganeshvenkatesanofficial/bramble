@@ -243,6 +243,47 @@ test('posting starts only after the per-agent write lock is released', async () 
   expect(probes).toEqual([200])
 })
 
+test("one agent's lock release never starts another agent's post while that agent still holds its lock", async () => {
+  const chain = new DigestChain()
+  chain.identities.set('agent-2', { label: 'agent-2', pubkeyPublished: true, revoked: false, expiry: 4_102_444_800 })
+  const topic = new FakeTopic()
+  const real = new HcsAuditTrail({ client: topic, topicId: '0.0.9000' })
+  const probes: Record<string, number> = {}
+  const api = createApprovalApi({
+    token: () => token,
+    signer: chain,
+    resolver: chain,
+    auditTrail: {
+      record: async (event) => {
+        if (event.kind === 'grant') {
+          const label = event.subject
+          probes[label] = (await call(`/grants/${label}/revoke`, 'POST')).status
+        }
+        return real.record(event)
+      },
+    },
+  })
+  function call(path: string, method = 'GET', body?: unknown) {
+    return api.handle(
+      new Request(`http://localhost/api${path}`, {
+        method,
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      })
+    )
+  }
+  const ids = await Promise.all(
+    ['agent-1', 'agent-2'].map(async (agentLabel) => {
+      const created = await (await call('/requests', 'POST', { ...input, agentLabel })).json()
+      return created.id as string
+    })
+  )
+  const statuses = await Promise.all(ids.map(async (id) => (await call(`/requests/${id}/approve`, 'POST')).status))
+  await api.audit.idle()
+  expect(statuses).toEqual([200, 200])
+  expect(probes).toEqual({ 'agent-1': 200, 'agent-2': 200 })
+})
+
 test('without a trail the decision still succeeds and the feed reports the audit as not configured', async () => {
   const chain = new DigestChain()
   const api = createApprovalApi({ token: () => token, signer: chain, resolver: chain })

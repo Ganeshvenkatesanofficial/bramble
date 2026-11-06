@@ -58,7 +58,7 @@ export class ApprovalService {
       return await action()
     } finally {
       this.busyAgents.delete(agentLabel)
-      this.audit?.flush()
+      this.audit?.flush(agentLabel)
     }
   }
 
@@ -124,6 +124,7 @@ export class ApprovalService {
       if (serviceDigest) this.digests.set(record.id, serviceDigest)
       const grantTransaction = record.grantTransaction
       record.grantAuditId = this.audit?.submit(
+        record.agentLabel,
         `grant:${record.id}`,
         'grant',
         () =>
@@ -149,8 +150,12 @@ export class ApprovalService {
   /** Posts one commitment for a settled payment. Reporting the same `txRef` again posts nothing. */
   recordPayment(payment: PaymentInput) {
     if (!this.audit) throw new ApiError(503, 'audit_not_configured', 'The audit trail is not configured.')
-    const entry = this.audit.submit(`payment:${payment.txRef}`, 'payment', () => ({ kind: 'payment', ...payment }))
-    this.audit.flush()
+    const group = `payment:${payment.txRef}`
+    const entry = this.audit.submit(group, `payment:${payment.txRef}`, 'payment', () => ({
+      kind: 'payment',
+      ...payment,
+    }))
+    this.audit.flush(group)
     return entry
   }
 
@@ -224,6 +229,7 @@ export class ApprovalService {
       }
       const digest = record ? this.digests.get(record.id) : undefined
       const entry = this.audit?.submit(
+        agentLabel,
         `revoke:${record?.id ?? transaction.transactionHash}`,
         'revoke',
         () =>

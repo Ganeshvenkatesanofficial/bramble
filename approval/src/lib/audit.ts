@@ -39,7 +39,7 @@ export class AuditRecorder {
 
   private readonly inflight = new Set<Promise<void>>()
 
-  private readonly queued: (() => void)[] = []
+  private readonly queued = new Map<string, (() => void)[]>()
 
   constructor(
     private readonly trail: AuditTrail | undefined,
@@ -47,10 +47,10 @@ export class AuditRecorder {
   ) {}
 
   /**
-   * Captures the event now and returns its feed row. Nothing is posted until `flush()`, so a
+   * Captures the event now and returns its feed row. Nothing is posted until `flush(group)`, so a
    * caller holding a lock can release it first. A repeated key returns the first row.
    */
-  submit(key: string, kind: AuditKind, build: EventBuilder, requestId?: string): AuditEntry {
+  submit(group: string, key: string, kind: AuditKind, build: EventBuilder, requestId?: string): AuditEntry {
     const existing = this.byKey.get(key)
     if (existing) return existing
     const entry: AuditEntry = {
@@ -63,16 +63,19 @@ export class AuditRecorder {
     this.rows.push(entry)
     this.byKey.set(key, entry)
     const event = this.capture(build)
-    this.queued.push(() => {
+    const start = () => {
       const work = this.post(entry, event).finally(() => this.inflight.delete(work))
       this.inflight.add(work)
-    })
+    }
+    this.queued.set(group, [...(this.queued.get(group) ?? []), start])
     return entry
   }
 
-  /** Starts every post captured by `submit` so far. */
-  flush() {
-    for (const start of this.queued.splice(0)) start()
+  /** Starts the posts captured by `submit` for this group only, so one lock holder never starts another's. */
+  flush(group: string) {
+    const starts = this.queued.get(group) ?? []
+    this.queued.delete(group)
+    for (const start of starts) start()
   }
 
   private capture(build: EventBuilder): AuditEvent | null {
@@ -115,7 +118,7 @@ export class AuditRecorder {
     return this.kept.get(entryId)
   }
 
-  /** Resolves when every post started by `flush()` so far has finished. */
+  /** Resolves when every post started by `flush` so far has finished. */
   async idle() {
     while (this.inflight.size > 0) await Promise.all([...this.inflight])
   }
