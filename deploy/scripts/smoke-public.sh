@@ -53,7 +53,7 @@ code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$base/dl/$version/
 [ "$code" = 404 ] && ok "unknown file under /dl returns 404" || bad "unknown file under /dl returned $code, expected 404"
 code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$base/dl/")"
 [ "$code" = 404 ] && ok "/dl/ has no directory listing" || bad "/dl/ returned $code, expected 404"
-code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$base/dl/../etc/passwd")"
+code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 --path-as-is "$base/dl/../etc/passwd")"
 case "$code" in 404|400) ok "path traversal under /dl returns $code";; *) bad "path traversal returned $code";; esac
 code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$base/api/requests")"
 case "$code" in 200|502) ok "console route still answers ($code; 502 means the admin tunnel is down)";; *) bad "console route /api/requests returned $code";; esac

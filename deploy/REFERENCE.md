@@ -34,7 +34,7 @@ Source of each port: `brambled/main.go` flags (`-listen-port` 51820, `-gateway-p
 | `systemd/bramble-console-tunnel.service` | Reverse SSH tunnel from admin to relays                        |
 | `systemd/bramble-nat-box.service`        | Creates the NAT box at boot                                    |
 | `systemd/nat-box.conf.example`           | Drop-in that moves a node unit into the NAT box                |
-| `caddy/Caddyfile`                        | HTTPS for the RPC proxy and the console                        |
+| `caddy/Caddyfile`                        | HTTPS for the RPC proxy, the console and the installer files   |
 | `stun/turnserver.conf`                   | coturn as a STUN-only server                                   |
 | `sysctl/90-bramble-relay.conf`           | Narrow ephemeral UDP range for relay sessions                  |
 | `scripts/install.sh`                     | Build and install one role                                     |
@@ -44,6 +44,10 @@ Source of each port: `brambled/main.go` flags (`-listen-port` 51820, `-gateway-p
 | `scripts/nat-box.sh`                     | NAT in a network namespace on a cloud machine                  |
 | `scripts/agent-in-box.sh`                | Run the agent as `agent` inside the NAT-box namespace          |
 | `scripts/stun-probe.py`                  | Classify NAT mapping from one UDP socket (needs `python3`)     |
+| `scripts/publish-release.sh`             | Upload a release and the tailnet config to the relays machine  |
+| `scripts/gen-tailnet-config.mjs`         | Build `/tailnets/<name>.json` from env (public values only)    |
+| `scripts/smoke-public.sh`                | Check the published installer over HTTPS                       |
+| `env/public.env.example`                 | Names for the operator's public env file (installer host)      |
 | `nat-lab/netns-lab.sh`                   | Full two-NAT lab on one machine                                |
 | `nat-lab/README.md`                      | Two-NAT test runbook                                           |
 
@@ -51,12 +55,13 @@ The logging proxy's own files (`deploy/rpc-proxy/`) arrive with ETH-44 (PR #2).
 
 ## Paths on the machines
 
-| Path                      | Content                                 |
-| ------------------------- | --------------------------------------- |
-| `/opt/bramble`            | Repository checkout and build outputs   |
-| `/etc/bramble/*.env`      | Env files, mode `0600`, owner `bramble` |
-| `/etc/systemd/system`     | Installed units                         |
-| `/etc/netns/bramble-node` | Resolver file for the NAT box           |
+| Path                      | Content                                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `/opt/bramble`            | Repository checkout and build outputs                                                                         |
+| `/etc/bramble/*.env`      | Env files, mode `0600`, owner `bramble`                                                                       |
+| `/etc/systemd/system`     | Installed units                                                                                               |
+| `/etc/netns/bramble-node` | Resolver file for the NAT box                                                                                 |
+| `/var/lib/bramble-dist`   | Installer, bundles and tailnet configs served by Caddy (relays machine; owned by the SSH user, read by Caddy) |
 
 ## Environment variable names
 

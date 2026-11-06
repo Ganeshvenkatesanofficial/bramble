@@ -252,6 +252,41 @@ Run these in order after parts B to F. They are the gate "agent denied, then suc
 
 Measured on the cloud nodes with the plain node units, 6 Nov 2026 (Verified; no `bramble-node` namespace existed on the worker, one run, driven through the public console URL): deny failed with `denied for service "task"`; approval confirmed in 12 s; the first call after approval returned the task in 31 s; revoke confirmed in 11 s and the first failed call came 32 s after the revoke started. Every ENS read goes through Tor at about 1.1 s per `eth_call`, one `/device` resolve is seven calls (about 9 s), and one gateway decision resolves three records in turn, so a call takes about 27 to 32 s. Narrate that wait in the demo. Atlas accepted it (ETH-173): the gateway's decision window is 90 s, and no cache or concurrency change is planned.
 
+## Part H: publish the installer (relays machine)
+
+Goal: `curl -fsSL https://<console-name>/install.sh | sh` works from any device. Caddy serves static files from `/var/lib/bramble-dist` on the relays machine. For the URLs and the JSON schema, see `docs/reference/tailnet-config.md`.
+
+### H1. Write the public env file. Open
+
+On the operator's machine (not on a cloud machine), copy `deploy/env/public.env.example` to a file outside the repository and fill in the public values: the two DNS names from item 4, the tailnet name and registry addresses from item 13, and the STUN, rendezvous and data-relay endpoints. The file holds no secret. The generator reads only the names in the template, so you can also pass a node env file.
+
+### H2. Publish a release. Verified (cloud, 6 Nov 2026, with a stub bundle)
+
+```sh
+deploy/scripts/publish-release.sh --release dist/release/<version> --version <version> \
+  --env <public.env> --init --caddy
+```
+
+`--init` creates `/var/lib/bramble-dist` on the first run (one `sudo`). `--caddy` installs the repository's `Caddyfile` with your two names, validates it on the machine first, keeps the old file as `/etc/caddy/Caddyfile.bak-<time>` and restores it if the reload fails. Drop both flags for later releases. `--dry-run` stages and checks without uploading.
+
+The script:
+
+1. checks `SHA256SUMS` against the tarballs;
+2. generates `/tailnets/<name>.json`;
+3. bakes the console name into `install.sh` (and `uninstall.sh` when present);
+4. refuses to upload if a staged file looks like it holds a secret;
+5. uploads tarballs first and `install.sh` last.
+
+Run on 6 Nov 2026 from the development machine with a stub bundle (two `.tar.gz` files holding one text file) and a stub `install.sh` that only prints a line: Caddy validated and reloaded the new file. The certificate for the console name (Let's Encrypt, issued 6 Nov 2026) served the new paths. The stub tailnet `smoke-test.eth` used placeholder addresses. The real `install.sh` comes from ETH-188 and the real bundles from its `scripts/release/build.sh`.
+
+### H3. Smoke-test from outside. Verified (cloud, 6 Nov 2026, with a stub bundle)
+
+```sh
+deploy/scripts/smoke-public.sh https://<console-name> <version> <tailnet-name> [--run-install]
+```
+
+The script checks, over verified TLS: the `install.sh` content type and cache header, the baked host, every tarball against `SHA256SUMS`, the tailnet JSON fields and a secret scan of it, 404 for unknown files, directory listings and path traversal, and that the console route still answers. With `--run-install` it also runs `curl -fsSL <base>/install.sh | sh` under a throwaway `HOME`. All 18 checks passed on 6 Nov 2026 against `https://console.13-233-181-104.sslip.io` with the stub bundle.
+
 ## Part N: two NATs
 
 See `nat-lab/README.md`. Short form, on the gateway and worker machines:
