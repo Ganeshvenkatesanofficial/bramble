@@ -101,7 +101,7 @@ test('unavailable or malformed upstream data cannot invent a live path', async (
   malformedPeers = true
   expect(await (await api.handle(apiRequest('/network'))).json()).toMatchObject({
     state: 'unavailable',
-    nodes: [],
+    nodes: [expect.objectContaining({ id: 'gateway', admission: 'unavailable', path: 'unavailable' })],
     links: [],
   })
 })
@@ -155,4 +155,117 @@ test('numeric WireGuard endpoints match DNS-named relays, and unresolved relays 
   resolved = false
   const uncertain = await (await api.handle(apiRequest('/network'))).json()
   expect(uncertain.nodes.find((node: { kind: string }) => node.kind === 'device').path).toBe('unknown')
+})
+
+test('without a status feed the approval API retains topology and probes only configured console-host targets', async () => {
+  const previous = {
+    status: process.env.BRAMBLED_STATUS_URL,
+    relays: process.env.BRAMBLE_DATA_RELAYS,
+    rendezvous: process.env.BRAMBLE_RENDEZVOUS_PAYMENT_URL,
+  }
+  let failed = false
+  const server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch: () => (failed ? new Response('unavailable', { status: 503 }) : Response.json({ ok: true })),
+  })
+  delete process.env.BRAMBLED_STATUS_URL
+  process.env.BRAMBLE_DATA_RELAYS = `relay-local=http://127.0.0.1:${server.port}`
+  process.env.BRAMBLE_RENDEZVOUS_PAYMENT_URL = `http://127.0.0.1:${server.port}`
+  try {
+    const api = createApprovalApi({ token: () => 'network-test-only', ensParent: 'bramble.eth' })
+    await api.handle(apiRequest('/requests', { agentLabel: 'agent-1', gatewayLabel: 'gateway-1', service: 'tasks' }))
+    await api.handle(apiRequest('/joins', { label: 'laptop', tailnet: 'bramble.eth', pubkey: 'ab'.repeat(32) }))
+    expect((await api.handle(apiRequest('/network', undefined, false))).status).toBe(401)
+    const view = await (await api.handle(apiRequest('/network'))).json()
+    expect(view.nodes).toContainEqual(expect.objectContaining({ id: 'gateway', label: 'bramble.eth', kind: 'gateway' }))
+    for (const label of ['agent-1.bramble.eth', 'laptop.bramble.eth']) {
+      const node = view.nodes.find((node: { label: string }) => node.label === label)
+      expect(node).toMatchObject({
+        admission: 'unavailable',
+        path: 'unavailable',
+        lastHandshake: null,
+        pingable: false,
+      })
+      expect(node.probeReason).toContain('No supported probe target')
+      expect(view.links).toContainEqual({ from: node.id, to: 'gateway', path: 'unavailable' })
+    }
+    expect(view.nodes).toContainEqual(expect.objectContaining({ id: 'relay:relay-local', pingable: true }))
+    const probe = await (await api.handle(apiRequest('/network/ping', { id: 'relay:relay-local' }))).json()
+    expect(probe).toMatchObject({ reachable: true, method: 'http' })
+    expect(probe.rttMs).toBeGreaterThanOrEqual(0)
+    expect(probe.detail).toContain('console host')
+    expect((await api.handle(apiRequest('/network/ping', { id: 'relay:rendezvous' }))).status).toBe(200)
+    expect((await api.handle(apiRequest('/network/ping', { id: 'relay:unknown' }))).status).toBe(404)
+    expect((await api.handle(apiRequest('/network/ping', { id: 'http://arbitrary.test' }))).status).toBe(400)
+    failed = true
+    expect(await (await api.handle(apiRequest('/network/ping', { id: 'relay:relay-local' }))).json()).toMatchObject({
+      reachable: false,
+      rttMs: null,
+    })
+    expect(JSON.stringify(view)).not.toMatch(/127\.0\.0\.1|https?:|pubkey|meshIp|endpoint/)
+  } finally {
+    server.stop(true)
+    for (const [key, value] of Object.entries({
+      BRAMBLED_STATUS_URL: previous.status,
+      BRAMBLE_DATA_RELAYS: previous.relays,
+      BRAMBLE_RENDEZVOUS_PAYMENT_URL: previous.rendezvous,
+    })) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  }
+})
+
+test('no-feed topology preserves ENS membership and granted and revoked requests without inventing admission', async () => {
+  const chain = new MemoryChain()
+  const api = createApprovalApi({
+    token: () => 'network-test-only',
+    signer: chain,
+    resolver: chain,
+    network: createNetworkSource({ baseUrl: () => undefined }),
+    joinChain: {
+      async labelTaken() {
+        return false
+      },
+      async enroll() {
+        throw new Error('Not used by this read-only fixture')
+      },
+      async revokeDevice() {
+        throw new Error('Not used by this read-only fixture')
+      },
+      async members() {
+        return [{ label: 'laptop', meshIp: '10.77.0.2', revoked: true, expiry: 4102444800 }]
+      },
+    },
+    ensParent: 'bramble.eth',
+  })
+  const created = await (
+    await api.handle(apiRequest('/requests', { agentLabel: 'agent-1', gatewayLabel: 'gateway-1', service: 'tasks' }))
+  ).json()
+  await api.handle(apiRequest(`/requests/${created.id}/approve`, {}))
+  let view = await (await api.handle(apiRequest('/network'))).json()
+  expect(view.nodes.find((node: { label: string }) => node.label === 'laptop.bramble.eth')).toMatchObject({
+    membership: 'revoked',
+    admission: 'unavailable',
+    path: 'unavailable',
+    lastHandshake: null,
+  })
+  expect(view.nodes.find((node: { label: string }) => node.label === 'agent-1.bramble.eth').grants).toEqual([
+    expect.objectContaining({ state: 'approved' }),
+  ])
+  await api.handle(apiRequest('/grants/agent-1/revoke', {}))
+  view = await (await api.handle(apiRequest('/network'))).json()
+  expect(view.nodes.find((node: { label: string }) => node.label === 'agent-1.bramble.eth').grants).toEqual([
+    expect.objectContaining({ state: 'revoked' }),
+  ])
+  expect(JSON.stringify(view)).not.toContain('10.77.')
+  const noParent = createApprovalApi({
+    token: () => 'network-test-only',
+    network: createNetworkSource({ baseUrl: () => undefined }),
+  })
+  await noParent.handle(apiRequest('/requests', { agentLabel: 'agent-1', gatewayLabel: 'gateway-1', service: 'tasks' }))
+  expect((await (await noParent.handle(apiRequest('/network'))).json()).nodes).toContainEqual(
+    expect.objectContaining({ id: 'gateway', label: 'gateway-1' })
+  )
 })

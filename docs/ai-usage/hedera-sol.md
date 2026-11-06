@@ -207,3 +207,22 @@ duplicated-validator smell. Spec found numeric peer endpoints were misclassified
 against DNS-named relays. A failing API test reproduces that issue; bounded
 server-side DNS resolution fixes it and keeps unresolved paths unknown.
 The network module also avoids importing browser fetch types into server consumers.
+
+
+## 2026-11-06 — ETH-317 requested no-feed revision
+
+Demo beats: 2, 4 and 5. Retains the same branch and PR #66. Builds topology from
+approval facts without the gateway tunnel and probes only server-known HTTP
+targets from the console host. Missing device probe targets remain unavailable.
+
+Paths written in the API revision:
+
+- `approval/src/lib/network.ts`
+- `approval/src/lib/api.ts`
+- `approval/src/app/api/[...path]/route.ts`
+- `approval/test/network.test.ts`
+- `docs/ai-usage/hedera-sol.md`
+
+Verified: the no-feed API regression fails before the revision and passes after
+it with `network` omitted and `BRAMBLED_STATUS_URL` unset. Seven network API tests
+pass, including real loopback HTTP checks, grant/revoke state and response redaction.

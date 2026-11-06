@@ -7,17 +7,18 @@ import { isIP } from 'node:net'
 
 type RequestView = ReturnType<ApprovalService['get']>
 
-type Path = 'direct' | 'relayed' | 'unknown' | 'none'
+type Path = 'direct' | 'relayed' | 'unknown' | 'none' | 'unavailable'
 export interface NetworkNode {
   id: string
   label: string
   kind: 'gateway' | 'device' | 'relay'
-  admission: 'authorized' | 'not_authorized' | 'unknown'
+  admission: 'authorized' | 'not_authorized' | 'unknown' | 'unavailable'
   membership?: JoinRecord['status']
   grants: { id: string; service: string; gateway: string; state: RequestView['status'] }[]
   lastHandshake: string | null
   path: Path
   pingable: boolean
+  probeReason?: string
 }
 export interface NetworkView {
   state: SourceState
@@ -63,9 +64,11 @@ function handshake(raw: unknown): string | null {
   return ms > 0 && ms <= Date.now() + 60_000 ? new Date(ms).toISOString() : null
 }
 
-/** Reads only the configured gateway's status surface. No private addresses reach the browser. */
+/** Reads configured probe targets and optional gateway observations. Private addresses stay server-side. */
 export function createNetworkSource(options: {
   baseUrl: () => string | undefined
+  dataRelays?: () => string | undefined
+  rendezvousUrl?: () => string | undefined
   fetchImpl?: (input: URL, init?: RequestInit) => Promise<Response>
   resolveHost?: (host: string) => Promise<string[]>
   timeoutMs?: number
@@ -92,6 +95,40 @@ export function createNetworkSource(options: {
     if (body === undefined) throw new Error('Status too large')
     return JSON.parse(body)
   }
+  function configuredRelays() {
+    const relays: { label: string; url: URL; hosts: string[] }[] = []
+    let state: SourceState = 'not_configured'
+    const entries = (options.dataRelays?.() ?? '')
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+    const rendezvous = options.rendezvousUrl?.()
+    if (rendezvous) entries.push(`rendezvous=${rendezvous}`)
+    for (const entry of entries.slice(0, 50)) {
+      try {
+        const equal = entry.indexOf('=')
+        const label = entry.slice(0, equal)
+        if (equal < 1 || !validLabel(label) || relays.some((relay) => relay.label === label))
+          throw new Error('Invalid relay')
+        relays.push({ label, url: httpUrl(entry.slice(equal + 1)), hosts: [] })
+        if (state !== 'unavailable') state = 'ok'
+      } catch {
+        state = 'unavailable'
+      }
+    }
+    if (entries.length > 50) state = 'unavailable'
+    return { relays, state }
+  }
+  const relayNode = (label: string): NetworkNode => ({
+    id: `relay:${label}`,
+    label,
+    kind: 'relay',
+    admission: 'unavailable',
+    grants: [],
+    lastHandshake: null,
+    path: 'unavailable',
+    pingable: true,
+  })
   async function snapshot() {
     const raw = options.baseUrl()
     if (!raw) return null
@@ -141,9 +178,9 @@ export function createNetworkSource(options: {
   }
   const empty = (state: SourceState): NetworkView => ({
     state,
-    relayState: state,
+    relayState: configuredRelays().state,
     observedAt: new Date().toISOString(),
-    nodes: [],
+    nodes: configuredRelays().relays.map((relay) => relayNode(relay.label)),
     links: [],
   })
   return {
@@ -156,25 +193,17 @@ export function createNetworkSource(options: {
             id: 'gateway',
             label: 'Gateway (status node)',
             kind: 'gateway',
-            admission: 'unknown',
+            admission: 'unavailable',
             grants: [],
             lastHandshake: null,
-            path: 'none',
+            path: 'unavailable',
             pingable: false,
+            probeReason: 'No supported probe target is known for this gateway.',
           },
         ]
         const links: NetworkView['links'] = []
-        for (const relay of data.relays)
-          nodes.push({
-            id: `relay:${relay.label}`,
-            label: relay.label,
-            kind: 'relay',
-            admission: 'unknown',
-            grants: [],
-            lastHandshake: null,
-            path: 'none',
-            pingable: true,
-          })
+        for (const relay of [...data.relays, ...configuredRelays().relays])
+          if (!nodes.some((node) => node.id === `relay:${relay.label}`)) nodes.push(relayNode(relay.label))
         const usedRelays = new Set<string>()
         for (const peer of data.peers) {
           const host = endpointHost(peer.endpoint)
@@ -209,17 +238,23 @@ export function createNetworkSource(options: {
       }
     },
     async ping(id) {
-      let data: Awaited<ReturnType<typeof snapshot>>
-      try {
-        data = await snapshot()
-      } catch {
-        throw new ApiError(502, 'network_unavailable', 'The gateway status service is unavailable.')
+      let relay = configuredRelays().relays.find((row) => `relay:${row.label}` === id)
+      let data: Awaited<ReturnType<typeof snapshot>> = null
+      if (!relay) {
+        try {
+          data = await snapshot()
+        } catch {
+          throw new ApiError(502, 'network_unavailable', 'The optional gateway status service is unavailable.')
+        }
+        relay = data?.relays.find((row) => `relay:${row.label}` === id)
       }
-      if (!data) throw new ApiError(503, 'network_not_configured', 'The gateway status service is not configured.')
-      const peer = data.peers.find((row) => `peer:${row.label}` === id && row.authorized)
-      const relay = data.relays.find((row) => `relay:${row.label}` === id)
+      const peer = data?.peers.find((row) => `peer:${row.label}` === id && row.authorized)
       if (!peer && !relay)
-        throw new ApiError(404, 'node_not_found', 'This node is not available for a probe. Refresh the network view.')
+        throw new ApiError(
+          404,
+          'node_not_found',
+          'No supported probe target is known for this node. Refresh the network view.'
+        )
       const method = relay ? 'http' : 'icmp'
       let result: Pick<NetworkPing, 'reachable' | 'rttMs' | 'detail'>
       try {
@@ -230,10 +265,12 @@ export function createNetworkSource(options: {
           result = {
             reachable,
             rttMs: reachable ? Math.round((performance.now() - start) * 100) / 100 : null,
-            detail: reachable ? 'Relay HTTP health check succeeded.' : 'Relay HTTP health check failed.',
+            detail: reachable
+              ? 'HTTP health check from the console host succeeded. This does not prove tunnel connectivity or forwarding.'
+              : 'HTTP health check from the console host failed.',
           }
         } else {
-          const raw = await get(new URL('/ping', data.base), {
+          const raw = await get(new URL('/ping', data!.base), {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ label: peer!.label }),
@@ -265,6 +302,21 @@ export function addNetworkFacts(
   parent?: string
 ): NetworkView {
   const nodes = view.nodes.map((node) => ({ ...node, grants: [...node.grants] }))
+  const links = [...view.links]
+  if (!nodes.some((node) => node.kind === 'gateway'))
+    nodes.unshift({
+      id: 'gateway',
+      label: parent ?? requests[0]?.gatewayLabel ?? 'Gateway',
+      kind: 'gateway',
+      admission: 'unavailable',
+      grants: [],
+      lastHandshake: null,
+      path: 'unavailable',
+      pingable: false,
+      probeReason: 'No supported probe target is known for this gateway.',
+    })
+  else if (parent || requests[0]?.gatewayLabel)
+    nodes.find((node) => node.kind === 'gateway')!.label = parent ?? requests[0].gatewayLabel
   const name = (label: string) =>
     `${label}${parent ? `.${parent.replace(/^\.+|\.+$/g, '').toLowerCase()}` : ''}`.toLowerCase()
   for (const member of members) {
@@ -281,18 +333,43 @@ export function addNetworkFacts(
         id: `member:${full}`,
         label: full,
         kind: 'device',
-        admission: 'unknown',
+        admission: 'unavailable',
         membership: member.status,
         grants: [],
         lastHandshake: null,
-        path: 'none',
+        path: 'unavailable',
         pingable: false,
+        probeReason:
+          'No supported probe target is known for this device. Membership does not identify a probe protocol or port.',
       }
       nodes.push(node)
     }
     node.membership = member.status
   }
+  for (const request of requests) {
+    if (
+      !nodes.some(
+        (node) =>
+          node.kind === 'device' &&
+          [name(request.agentLabel), request.agentLabel.toLowerCase()].includes(node.label.toLowerCase())
+      )
+    ) {
+      nodes.push({
+        id: `member:${name(request.agentLabel)}`,
+        label: name(request.agentLabel),
+        kind: 'device',
+        admission: 'unavailable',
+        grants: [],
+        lastHandshake: null,
+        path: 'unavailable',
+        pingable: false,
+        probeReason:
+          'No supported probe target is known for this device. Membership does not identify a probe protocol or port.',
+      })
+    }
+  }
   for (const node of nodes.filter((node) => node.kind === 'device')) {
+    if (node.path === 'unavailable') links.push({ from: node.id, to: 'gateway', path: 'unavailable' })
     node.grants = requests
       .filter(
         (request) =>
@@ -306,5 +383,5 @@ export function addNetworkFacts(
         state: request.status,
       }))
   }
-  return { ...view, nodes }
+  return { ...view, nodes, links }
 }

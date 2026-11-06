@@ -34,7 +34,11 @@ function joinAdapter() {
   }
 }
 const api = createApprovalApi({
-  network: createNetworkSource({ baseUrl: () => process.env.BRAMBLED_STATUS_URL }),
+  network: createNetworkSource({
+    baseUrl: () => process.env.BRAMBLED_STATUS_URL,
+    dataRelays: () => process.env.BRAMBLE_DATA_RELAYS,
+    rendezvousUrl: () => process.env.BRAMBLE_RENDEZVOUS_PAYMENT_URL,
+  }),
   joinChain: joinAdapter(),
   token: () => process.env.APPROVAL_DEMO_TOKEN,
   signer: chain?.signer,
