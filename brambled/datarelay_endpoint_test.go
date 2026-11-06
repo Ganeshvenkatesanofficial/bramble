@@ -678,7 +678,7 @@ func TestDataRelayFailover_SwitchesToBackupRelayWhenPrimaryStalls(t *testing.T) 
 	// runServe now wires for real (main.go's non-relay-peer watcher loop),
 	// not two independent buyers racing for the same lucky port.
 	go watchDataRelayFailover(ctx, alice, aliceM, aliceState, "bob", bobIP, pool, 1_000_000, unrestrictedDataRelayPurchasePolicy, relays, alicePub, 15*time.Second)
-	go watchDataRelayAdopt(ctx, bob, bobM, "alice", bobPub, alicePub, "", aliceIP, relays)
+	go watchDataRelayAdopt(ctx, bob, bobM, "alice", bobPub, alicePub, "", aliceIP, relays, nil)
 
 	// Kill "the primary relay process": both its data relay and its
 	// rendezvous listener together, matching a real relay/main.go process

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createSponsorRoute, type SponsorDeps } from '../src/sponsor'
 
 function setup(
@@ -78,23 +78,37 @@ describe('sponsored routes', () => {
     expect(reads).toEqual(['nobody'])
   })
 
-  it('returns 502 when the registry read fails', async () => {
+  // A viem error message includes the RPC URL, which can carry an API key.
+  const SECRET_URL = 'https://rpc.example/v2/SECRET-KEY-123?apikey=SECRET-QUERY'
+
+  it('returns a fixed 502 when the registry read fails and leaks nothing of the error', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { post } = setup({
       readEnrollment: async () => {
-        throw new Error('rpc down')
+        throw new Error(`HTTP request failed. URL: ${SECRET_URL} Status: 500`)
       },
     })
     const res = await post('/sponsored/data-relay-session', { label: 'alice' })
     expect(res.status).toBe(502)
+    const text = await res.text()
+    expect(text).not.toContain('SECRET')
+    expect(text).not.toContain('rpc.example')
+    expect(JSON.parse(text)).toEqual({ error: 'registry read failed' })
+    expect(log.mock.calls.flat().join(' ')).not.toContain('SECRET')
+    log.mockRestore()
   })
 
-  it('returns 502 when the relay allocation fails', async () => {
+  it('returns a fixed 502 when the relay allocation fails', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { post } = setup({
       allocate: async () => {
-        throw new Error('HTTP 403')
+        throw new Error(`fetch failed: ${SECRET_URL}`)
       },
     })
     const res = await post('/sponsored/data-relay-session', { label: 'alice' })
     expect(res.status).toBe(502)
+    expect(await res.json()).toEqual({ error: 'relay allocation failed' })
+    expect(log.mock.calls.flat().join(' ')).not.toContain('SECRET')
+    log.mockRestore()
   })
 })

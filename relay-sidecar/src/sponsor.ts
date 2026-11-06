@@ -43,6 +43,10 @@ export function allocateViaInternalAPI(internalAPIURL: () => string): SponsorDep
   }
 }
 
+function errorName(err: unknown): string {
+  return err instanceof Error ? err.name : typeof err
+}
+
 export function createSponsorRoute(deps: SponsorDeps): Hono {
   const now = deps.now ?? Date.now
   const uses = new Map<string, number[]>()
@@ -88,10 +92,11 @@ export function createSponsorRoute(deps: SponsorDeps): Hono {
     try {
       check = await enrolled(label)
     } catch (err) {
-      return {
-        status: 502 as const,
-        error: `registry read failed: ${err instanceof Error ? err.message : String(err)}`,
-      }
+      // The reader's error can carry the RPC URL, which may hold an API key
+      // in its path or query. Callers are unauthenticated: they get a fixed
+      // message, and the operator log gets only the error's class name.
+      console.error(`sponsor: registry read failed for ${label}: ${errorName(err)}`)
+      return { status: 502 as const, error: 'registry read failed' }
     }
     if (!check.enrolled) {
       return { status: 403 as const, error: `label is not enrolled: ${check.reason ?? 'unknown'}` }
@@ -114,7 +119,8 @@ export function createSponsorRoute(deps: SponsorDeps): Hono {
     try {
       return c.json(await deps.allocate(deps.bytes))
     } catch (err) {
-      return c.json({ error: `relay allocation failed: ${err instanceof Error ? err.message : String(err)}` }, 502)
+      console.error(`sponsor: relay allocation failed for ${g.label}: ${errorName(err)}`)
+      return c.json({ error: 'relay allocation failed' }, 502)
     }
   })
 
