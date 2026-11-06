@@ -5,6 +5,8 @@ Bramble forward. The session holds no backend credential. A human submits and
 approves access requests through trusted operator tooling. Tool and setting details
 are in [REFERENCE.md](./REFERENCE.md).
 
+To run the agent on Pi with a DeepSeek model instead of Claude Code, see [PI.md](./PI.md).
+
 Demo beats served: 1 (denied), 2 (request and approve), 3 (works after approval),
 and 5 (denied after revoke).
 
@@ -62,5 +64,27 @@ the MCP tool list does not restrict the token's authority.
 
 ## Check the server without Claude Code
 
-Run `pnpm --filter @bramble/agent-mcp test`. The tests use synthetic tokens and
-stub servers on loopback. They do not establish isolation of a live agent session.
+Run `pnpm --filter @bramble/agent-mcp test`. The tests use synthetic tokens, a stub
+approval API and a stub forward on loopback, and drive the server over the MCP
+protocol. They do not establish isolation of a live agent session.
+
+## Know the limits
+
+- Verified: the tools against stub servers.
+- Verified by hand, with no test in this repository: the tools against the approval API
+  handlers from ETH-29 (commit `8d5cb3b`) with in-memory chain adapters. Request,
+  approve and deny returned `granted` and `denied`.
+- Open: a real Claude Code session, a real `brambled` forward, and the live approval console.
+- Open: whether Claude Code's Bash tool inherits the exported `APPROVAL_DEMO_TOKEN`.
+- Reported by the ETH-102 review, reproduced there: `claude mcp add --env` writes the token in plaintext to Claude
+  Code's config file, which the agent can read.
+- Open: the shared demo token also authorizes `approve` and `revoke` in the current
+  approval API. This server only calls the create-request endpoint, but any process that
+  can read the token can approve its own request. Keep the token out of the agent's
+  reach for the real demo, or add a request-only token to the approval API.
+
+Verified Pi access lifecycle, worker, 6 November 2026 at 15:51–15:57 UTC:
+two isolated runs deny, request `task`, return `report-private-service-health`
+after operator approval, then deny after confirmed revoke. Revoke confirmation
+to Pi completion is 32.14 s and 32.31 s, including Pi startup. Full beat 3
+payment/feed acceptance remains Open on ETH-294. See [Pi measurements](./PI.md#shared-slot-measurements-6-november-2026).
