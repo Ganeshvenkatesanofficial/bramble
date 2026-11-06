@@ -14,6 +14,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+import uuid
 
 
 TAILNET = "bramble-dev-c91e55e9.eth"
@@ -118,7 +119,8 @@ def start(root, base, manual_start):
     (root / "home").mkdir(mode=0o700)
     (root / "tmp").mkdir(mode=0o700)
     (root / "marker").write_text(MARKER + "\n")
-    report(root, "run.json", {"base": base, "manualStart": manual_start})
+    report(root, "run.json", {"base": base, "manualStart": manual_start,
+                             "deviceLabel": "zephyrus-" + uuid.uuid4().hex[:12]})
     report(root, "config.json", cfg)
     env = clean_env(root)
     env["BRAMBLE_INSTALL_BASE"] = base
@@ -146,10 +148,10 @@ def start(root, base, manual_start):
 
 def join(root):
     url, st = state(root)
-    require(st["phase"] == "setup", "A join has already started; use status instead of submitting twice.")
-    label = "zephyrus-" + root.name.lower()[-16:]
-    label = "".join(c if c.isascii() and c.isalnum() else "-" for c in label).strip("-")
-    request(url + "/api/setup", {"name": label})
+    require(st["phase"] in ("setup", "ready", "error") and not st.get("joinId") and not st.get("tailnet"),
+            "A join has already started; use status instead of submitting twice.")
+    if not st.get("name"):
+        request(url + "/api/setup", {"name": load(root)["deviceLabel"]})
     st = request(url + "/api/join", {"tailnet": TAILNET})
     require(st["phase"] == "pending" and st.get("joinId"), "Expected a pending join request.")
     report(root, "pending.json", st)

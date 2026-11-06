@@ -98,15 +98,21 @@ python3 deploy/scripts/join-test.py request \
 UI running and prints its actual loopback URL; port 7777 is preferred, and
 the launcher tries the next available port if needed. The `request` command
 names the device and submits the real join request through the local API.
-It prints the unique label, join ID and fingerprint for the approver.
+It prints the unique label, join ID and fingerprint for the approver. If the
+join submission fails while status is `ready` or `error` without a join ID,
+rerun `request` with the same run directory; the script keeps the existing identity. Once a join ID exists,
+the script refuses a duplicate submission.
 If you use `request`, do not also click **Request to join** in the browser.
 
 Keep the second device free of admin credentials. Infra-Claude or the human
 uses the existing admin console session to find **that request**, compare
 its label and fingerprint, and approve it. Do not retrieve or print a console
 token. Approval enrolls the device; it does not grant access to a service.
-Ask Infra-Claude to coordinate a grant for one service listed in the public
+Ask Infra-Claude to coordinate a grant for the **first entry** in the public
 config's `services`, and to confirm that the cloud peers discover the device.
+The harness sends an empty test body, so the daemon selects that first target.
+Record its `peer` and `service` before requesting the grant. An empty `services`
+list cannot pass this service test.
 
 After the decision, run status again:
 
