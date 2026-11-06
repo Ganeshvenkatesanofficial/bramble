@@ -54,6 +54,10 @@ for a human, then `granted`, then `task result: ...`, and `denied: no grant` aga
 
 - The launcher starts Pi with `--no-builtin-tools`. The model sees only the two Bramble
   tools. It has no shell, so it cannot read the key files.
+- Pi normally loads a skill when the model reads `SKILL.md`. The agent has no read tool, so
+  the launcher passes the same file with `--append-system-prompt`. Without it the model
+  never sees the steps and guesses the service name (Verified: it asked for `staging` and
+  `staging-api` instead of `task`, 6 Nov 2026).
 - A command in `mcp.json` reads the token when Pi starts `agent-mcp`. The token is in
   no config file and not in Pi's environment.
 - `mcp.json` sets the MCP request timeout to 180 s. Pi's default is 60 s, shorter than
