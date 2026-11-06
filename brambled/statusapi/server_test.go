@@ -18,7 +18,7 @@ func (f fakePeerTable) Peers() ([]wgnode.PeerInfo, error) { return f, nil }
 
 func TestPeersJoinsAdmissionAndWireGuardState(t *testing.T) {
 	s := &Server{PeerTable: fakePeerTable{
-		{PublicKeyHex: "abc123", AllowedIPs: []string{"10.77.0.2/32"}, LastHandshakeUnixNs: 42, RxBytes: 1000},
+		{PublicKeyHex: "abc123", AllowedIPs: []string{"10.77.0.2/32"}, LastHandshakeUnixNs: 42, RxBytes: 1000, Endpoint: "203.0.113.7:51820"},
 	}}
 	s.OnAdmissionEvent(admission.Event{Label: "worker", Authorized: true, PublicKey: "abc123"})
 
@@ -35,6 +35,9 @@ func TestPeersJoinsAdmissionAndWireGuardState(t *testing.T) {
 	p := got[0]
 	if p.Label != "worker" || !p.Authorized || !p.Handshaked || p.RxBytes != 1000 {
 		t.Fatalf("peer status didn't join wireguard state correctly: %+v", p)
+	}
+	if p.Endpoint != "203.0.113.7:51820" {
+		t.Fatalf("expected the wireguard endpoint, got %q", p.Endpoint)
 	}
 	if len(p.AllowedIPs) != 1 || p.AllowedIPs[0] != "10.77.0.2/32" {
 		t.Fatalf("expected allowed-ip from wireguard state, got %+v", p.AllowedIPs)

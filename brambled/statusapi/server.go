@@ -146,6 +146,8 @@ type PeerStatus struct {
 	Handshaked          bool     `json:"handshaked"`
 	LastHandshakeUnixNs int64    `json:"lastHandshakeUnixNs"`
 	RxBytes             int64    `json:"rxBytes"`
+	// Endpoint is the peer's current WireGuard UDP endpoint, if known.
+	Endpoint string `json:"endpoint,omitempty"`
 }
 
 func (s *Server) wgPeersByPubkey() (map[string]wgnode.PeerInfo, error) {
@@ -179,6 +181,7 @@ func (s *Server) handlePeers(w http.ResponseWriter, _ *http.Request) {
 			ps.Handshaked = wp.Handshaked()
 			ps.LastHandshakeUnixNs = wp.LastHandshakeUnixNs
 			ps.RxBytes = wp.RxBytes
+			ps.Endpoint = wp.Endpoint
 		}
 		out = append(out, ps)
 	}
