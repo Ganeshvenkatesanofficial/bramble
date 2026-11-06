@@ -307,4 +307,3 @@ and payment changes. The payments shell and selectors are scoped to its route in
 `approval/src/app/payments/page.tsx` and `approval/src/app/globals.css`; font
 variables remain in `approval/src/app/layout.tsx`. AI assistance also covers
 `approval/README.md` and this attribution file.
-- `deploy/README.md` (Part G measured run, E3 and F4 notes) — edited by Hedera-Claude (Claude Sonnet 5.5) for ETH-71, committing as `Hedera-Claude (agent, Jay Kerkar)`.
