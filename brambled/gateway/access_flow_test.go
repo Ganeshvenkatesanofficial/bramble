@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/WhyAsh5114/bramble/brambled/internal/testport"
 	"github.com/WhyAsh5114/bramble/brambled/sidecar"
 	"github.com/WhyAsh5114/bramble/brambled/wgnode"
 )
@@ -52,14 +53,7 @@ func TestAccessFlowFixture(t *testing.T) {
 		if err != nil {
 			t.Fatal("generating fixture identity")
 		}
-		// Reserve an ephemeral UDP port instead of sharing the baseline test's
-		// fixed ports. Release it immediately before WireGuard binds it.
-		udp, err := net.ListenPacket("udp4", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		port := uint16(udp.LocalAddr().(*net.UDPAddr).Port)
-		udp.Close()
+		port := testport.FreeUDP(t)
 		node, err := wgnode.New(wgnode.Config{
 			PrivateKeyHex: priv, ListenPort: port,
 			LocalAddress: netip.MustParseAddr(addr), Netstack: true,

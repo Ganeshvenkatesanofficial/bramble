@@ -70,6 +70,12 @@ importers:
         specifier: 3.25.76
         version: 3.25.76
     devDependencies:
+      '@bramble/admincli':
+        specifier: workspace:*
+        version: link:../admincli
+      '@bramble/approval':
+        specifier: workspace:*
+        version: link:../approval
       '@noble/curves':
         specifier: 1.9.1
         version: 1.9.1
@@ -82,6 +88,9 @@ importers:
       '@types/node':
         specifier: ^26.4.1
         version: 26.4.1
+      brambled:
+        specifier: workspace:*
+        version: link:../brambled
       typescript:
         specifier: 6.0.3
         version: 6.0.3

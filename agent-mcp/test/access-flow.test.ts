@@ -99,7 +99,7 @@ test('deny -> request -> approve -> succeed -> revoke -> denied over userspace W
     const decoder = new TextDecoder()
     for await (const chunk of fixtureProcess.stdout) {
       output += decoder.decode(chunk, { stream: true })
-      const match = /^ACCESS_FLOW_READY (.+)$/m.exec(output)
+      const match = /^ACCESS_FLOW_READY ([^\n]+)\n/m.exec(output)
       if (match) readyResolve(JSON.parse(match[1]) as Fixture)
     }
     readyReject(new Error(`WireGuard fixture exited before ready: ${output}\n${await stderr}`))
