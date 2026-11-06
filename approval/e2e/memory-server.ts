@@ -42,6 +42,11 @@ Bun.serve({
     }
     if (url.pathname.startsWith('/api/')) return api.handle(request)
     url.port = '3001'
-    return fetch(new Request(url, request))
+    const upstream = await fetch(new Request(url, request))
+    // Bun decompresses upstream bodies; remove wire encoding/length before proxying.
+    const headers = new Headers(upstream.headers)
+    headers.delete('content-encoding')
+    headers.delete('content-length')
+    return new Response(upstream.body, { status: upstream.status, headers })
   },
 })
