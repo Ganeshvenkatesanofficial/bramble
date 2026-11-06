@@ -73,3 +73,13 @@ new HCS grant record), and 5 (revoke and measured denial).
 Verified: offline simulation and local fault checks. Open: ETH-244 owns execution
 against the existing shared cloud pair. This task does not start nodes or use the
 shared ACL during local verification.
+
+## ETH-319: publish the reviewed demo corrections (demo beats 1, 2, 3 and 5)
+
+Recovered Keystone's saved correction commits through `6e651b3` in an isolated
+Core-Sol worktree. The operator authorized one follow-up PR, one QA-Sol review
+and merge into `hackathon`.
+
+Paths written: `docs/ai-usage/core-sol.md`. The recovered paths remain recorded
+in `docs/ai-usage/keystone.md`. Live browser and public-route Pi acceptance remain
+Open in ETH-313; publication does not use the cloud nodes.
