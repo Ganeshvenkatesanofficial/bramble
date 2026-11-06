@@ -276,11 +276,11 @@ export class ApprovalService {
     return entry
   }
 
-  /** A payer transaction that is not a plain single-payee transfer is shown as a failed row and never committed. */
+  /** A payer transaction that is not a plain single-payee transfer is shown as a failed row and never committed. It shares the `txRef` key with `recordPayment`, so whichever report arrives first wins. */
   recordUnsupportedPayment(txRef: string) {
     if (!this.audit) return
     const group = `payment:${txRef}`
-    this.audit.submit(group, `unsupported-payment:${txRef}`, 'payment', () => null)
+    this.audit.submit(group, `payment:${txRef}`, 'payment', () => null)
     this.audit.flush(group)
   }
 

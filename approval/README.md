@@ -146,8 +146,8 @@ field, no error text from Hedera, and no secret. A `failed` row is not retried.
 
 - `audit_event_unavailable`: the signer returned no `serviceDigest` (ADR 0005), or the revoke
   has no matching request. The service never posts a plaintext service name instead. The real
-  signer (`chain.ts`) computes the `0x`-prefixed digest once, before it submits, from public keys and
-  a granter key it reads once and pins for that grant. It returns that same digest when the grant is
+  signer (`chain.ts`) reads the public keys and the granter key once, pins them for that grant, and
+  holds the `0x`-prefixed digest before it submits. It returns that same digest when the grant is
   confirmed after a reconciliation retry or a later poll, so unreadable ENS or a changed key after
   submission cannot change or lose it. A restart loses the request-to-digest
   link, so a revoke of a grant made before the restart has no request and posts nothing.

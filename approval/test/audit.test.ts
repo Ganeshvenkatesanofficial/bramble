@@ -259,6 +259,44 @@ test('settlements the process observes post one commitment each and are not post
   expect(topic.submitted).toHaveLength(2)
 })
 
+test.each([
+  ['the observer reports first', true],
+  ['the endpoint reports first', false],
+])('a txRef reported as unsupported and as settled is one row in either order (%s)', async (_name, observerFirst) => {
+  const clock = new ManualClock()
+  const topic = new FakeTopic()
+  let ready = observerFirst
+  const api = createApprovalApi({
+    token: () => token,
+    clock,
+    auditTrail: new HcsAuditTrail({ client: topic, topicId: '0.0.9000' }),
+    settlements: async () => (ready ? { settled: [], unsupported: [payment.txRef] } : { settled: [], unsupported: [] }),
+    settlementPollMs: 10_000,
+  })
+  const report = () =>
+    api.handle(
+      new Request('http://localhost/api/payments/settled', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify(payment),
+      })
+    )
+  if (observerFirst) {
+    await clock.advance(0)
+    await api.audit.idle()
+    expect((await report()).status).toBe(202)
+  } else {
+    expect((await report()).status).toBe(202)
+    await api.audit.idle()
+    ready = true
+    await clock.advance(0)
+    await clock.advance(10_000)
+  }
+  await api.audit.idle()
+  expect(api.audit.list()).toHaveLength(1)
+  expect(topic.submitted.length).toBe(observerFirst ? 0 : 1)
+})
+
 test('an unavailable settlement source posts nothing and the next poll retries', async () => {
   const clock = new ManualClock()
   let up = false
