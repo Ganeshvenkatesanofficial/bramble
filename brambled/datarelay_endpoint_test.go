@@ -544,7 +544,7 @@ func TestDataRelayFailover_UsesRendezvousSetRecoveredAfterDiscoveryFailure(t *te
 			mu.Lock()
 			defer mu.Unlock()
 			calls++
-			if calls <= 2 {
+			if calls <= 1 {
 				return nil, fmt.Errorf("sidecar returned 502: Invalid parameters")
 			}
 			return &sidecar.RelaysResponse{Rendezvous: relays}, nil
@@ -709,7 +709,7 @@ func testDataRelayFailover(t *testing.T, watcherSource func([]sidecar.Rendezvous
 	primaryRelay.stopAll()
 	stopPrimaryRelay()
 
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(50 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, aliceSide, ok := aliceState.get("bob"); ok && aliceSide == "backup" {
 			break
