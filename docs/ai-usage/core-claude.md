@@ -31,3 +31,7 @@ Open: the real-Sepolia, relay-only acceptance run (`connected`, then
 Paths written:
 
 - `docs/ai-usage/core-claude.md`
+
+## ETH-217: merge `hackathon` into PR #38
+
+Merge-conflict resolution (AI-assisted): `brambled/main.go` (the hackathon `startAdoptWatcher` refactor now passes `payer` and `adoptPace`), `README.md` (status table: the W5 rows merged, ETH-177 T6 and ETH-177e rows kept), `.gitignore`, `docs/ai-usage/net-claude.md` (both sides kept), `pnpm-lock.yaml` (regenerated with `pnpm install`).
