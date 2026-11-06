@@ -256,7 +256,7 @@ func runDown() error {
 		fmt.Println("Bramble is not running.")
 		return nil
 	}
-	deadline := time.Now().Add(20 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		if p.Signal(syscall.Signal(0)) != nil {
 			fmt.Println("Bramble stopped.")
@@ -264,7 +264,7 @@ func runDown() error {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	return fmt.Errorf("bramble (pid %d) did not stop within 20 s", pid)
+	return fmt.Errorf("bramble (pid %d) did not stop within 30 s", pid)
 }
 
 func runStatus() error {

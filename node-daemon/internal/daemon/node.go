@@ -249,6 +249,9 @@ func StartNode(spec NodeSpec) (*RunningNode, error) {
 	}
 	cmd.Stdout = out
 	cmd.Stderr = out
+	// brambled's sidecar inherits the output pipe. If the sidecar outlives
+	// brambled, Wait must not block on that pipe forever.
+	cmd.WaitDelay = 3 * time.Second
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("starting brambled: %w", err)
 	}
@@ -261,6 +264,10 @@ func StartNode(spec NodeSpec) (*RunningNode, error) {
 	}
 	go func() {
 		err := cmd.Wait()
+		// brambled stops its sidecar on a clean exit, but not when a signal
+		// kills it during startup (before it installs its handler). Reap
+		// whatever is left in its process group.
+		signalGroup(cmd.Process.Pid, syscall.SIGKILL)
 		n.mu.Lock()
 		n.exitErr = err
 		n.mu.Unlock()
@@ -288,18 +295,20 @@ func (n *RunningNode) ExitSummary() string {
 	}
 }
 
-// Stop sends SIGTERM, then kills the process after timeout.
+// Stop sends SIGTERM to brambled and its sidecar, then SIGKILL after
+// timeout.
 func (n *RunningNode) Stop(timeout time.Duration) {
 	select {
 	case <-n.done:
 		return
 	default:
 	}
-	_ = n.cmd.Process.Signal(syscall.SIGTERM)
+	pid := n.cmd.Process.Pid
+	signalGroup(pid, syscall.SIGTERM)
 	select {
 	case <-n.done:
 	case <-time.After(timeout):
-		_ = n.cmd.Process.Kill()
+		signalGroup(pid, syscall.SIGKILL)
 		<-n.done
 	}
 }

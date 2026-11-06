@@ -124,7 +124,7 @@ func (d *Daemon) Run(ctx context.Context) {
 	d.node = nil
 	d.mu.Unlock()
 	if node != nil {
-		node.Stop(15 * time.Second)
+		node.Stop(10 * time.Second)
 	}
 }
 
@@ -298,7 +298,7 @@ func (d *Daemon) Leave() {
 	}
 	d.mu.Unlock()
 	if node != nil {
-		node.Stop(15 * time.Second)
+		node.Stop(10 * time.Second)
 	}
 }
 
@@ -384,7 +384,7 @@ func (d *Daemon) reconcileNode(ctx context.Context) {
 		d.mu.Lock()
 		d.node = nil
 		d.mu.Unlock()
-		node.Stop(15 * time.Second)
+		node.Stop(10 * time.Second)
 	case want && node == nil:
 		d.mu.Lock()
 		wait := time.Now().Before(d.retryAt)
@@ -462,7 +462,7 @@ func (d *Daemon) launch(ctx context.Context) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if !d.m.WantsNode() {
-		go node.Stop(15 * time.Second)
+		go node.Stop(10 * time.Second)
 		return
 	}
 	d.node = node
