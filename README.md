@@ -31,6 +31,7 @@ This table is the index of new work. Each agent adds or updates its row in the s
 | W9         | Control plane over Tor: sidecar ENS reads and payment requests                                                                                    | partial, [PR #17](https://github.com/WhyAsh5114/bramble/pull/17): ENS and payment fetches routed, Tor-exit check Verified 6 Nov, revocation over Tor measured |
 | W10        | One new Hedera service on testnet: HCS audit trail with a salted commitment per grant, revoke and settled payment, posted by the approval service | in review ([PR #22](https://github.com/WhyAsh5114/bramble/pull/22))                                                                                           |
 | W11        | Demo infrastructure: cloud nodes, logging RPC proxy, public console, preflight                                                                    | planned                                                                                                                                                       |
+| ETH-177e   | Local web UI for the curl-install flow: join, status, peers, test connection and admin view, built against a mock of the local API                | in review (screenshots in `docs/screenshots/local-ui/`)                                                                                                       |
 
 W6 (this documentation) is a deliverable and not a feature. W7 (Ledger approval signing) is out of scope.
 
