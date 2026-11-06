@@ -3,125 +3,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { NetworkNode, NetworkPing, NetworkView } from '../lib/network'
 import { readJson } from '../lib/console-api'
+import { Laptop, RefreshCw, Server, Waypoints } from 'lucide-react'
+import { cn } from 'cn'
+import { Badge } from './ui/badge'
 import { Button } from './ui/button'
-
-const admissionText = {
-  authorized: 'Admitted',
-  not_authorized: 'Not admitted',
-  unknown: 'Admission unknown',
-  unavailable: 'Admission unavailable',
-}
-const pathText = {
-  direct: 'Direct',
-  relayed: 'Relayed',
-  unknown: 'Path unknown',
-  none: 'No observed link',
-  unavailable: 'Path unavailable',
-}
-const grantText = {
-  pending: 'Pending',
-  approving: 'Grant pending',
-  approved: 'Granted',
-  revoking: 'Revoke pending',
-  revoked: 'Revoked',
-  denied: 'Denied',
-}
-
-function NetworkGraph({ view }: { view: NetworkView }) {
-  // Keep the diagram legible on a phone. Every node remains in the detailed list.
-  const visible = view.nodes.slice(0, 24)
-  const gateway = visible.find((node) => node.kind === 'gateway')
-  const relays = visible.filter((node) => node.kind === 'relay')
-  const devices = visible.filter((node) => node.kind === 'device')
-  const relayRows = Math.ceil(relays.length / 3)
-  const points = new Map<string, { x: number; y: number }>()
-  if (gateway) points.set(gateway.id, { x: 180, y: 40 })
-  relays.forEach((node, i) => points.set(node.id, { x: 60 + (i % 3) * 120, y: 135 + Math.floor(i / 3) * 95 }))
-  devices.forEach((node, i) =>
-    points.set(node.id, { x: 60 + (i % 3) * 120, y: 140 + relayRows * 95 + Math.floor(i / 3) * 95 })
-  )
-  const height = 205 + relayRows * 95 + Math.max(0, Math.ceil(devices.length / 3) - 1) * 95
-  return (
-    <figure className="network-diagram">
-      <svg viewBox={`0 0 360 ${height}`} role="img" aria-labelledby="network-svg-title network-svg-desc">
-        <title id="network-svg-title">Observed tailnet connections</title>
-        <desc id="network-svg-desc">
-          Approval records with optional gateway observations. Solid lines indicate direct paths, dashed lines relayed
-          paths and dotted lines unknown or unavailable paths. Node details, state and handshake times follow in the
-          node list.
-        </desc>
-        {view.links.map((link) => {
-          const a = points.get(link.from),
-            b = points.get(link.to)
-          return a && b ? (
-            <line
-              key={`${link.from}:${link.to}`}
-              x1={a.x}
-              y1={a.y}
-              x2={b.x}
-              y2={b.y}
-              className={`graph-link ${link.path}`}
-            />
-          ) : null
-        })}
-        {visible.map((node) => {
-          const p = points.get(node.id)!
-          return (
-            <g key={node.id} transform={`translate(${p.x} ${p.y})`}>
-              <title>
-                {node.label} · {admissionText[node.admission]} · {pathText[node.path]}
-              </title>
-              {node.kind === 'relay' ? (
-                <rect x="-22" y="-22" width="44" height="44" rx="6" className="graph-node" />
-              ) : (
-                <circle r="22" className={`graph-node ${node.admission}`} />
-              )}
-              <text textAnchor="middle" dominantBaseline="central" className="graph-code">
-                {node.kind === 'gateway'
-                  ? 'G'
-                  : node.kind === 'relay'
-                    ? `R${relays.indexOf(node) + 1}`
-                    : `D${devices.indexOf(node) + 1}`}
-              </text>
-              <text textAnchor="middle" y="43" className="graph-label">
-                {node.kind === 'gateway' ? 'Gateway' : node.label.split('.')[0].slice(0, 13)}
-              </text>
-            </g>
-          )
-        })}
-      </svg>
-      <figcaption>
-        <ul className="graph-legend" aria-label="Connection legend">
-          <li>
-            <span className="legend-line direct" />
-            Direct
-          </li>
-          <li>
-            <span className="legend-line relayed" />
-            Relayed
-          </li>
-          <li>
-            <span className="legend-line unknown" />
-            Unknown
-          </li>
-          <li>
-            <span className="legend-line unavailable" />
-            Unavailable (approval records)
-          </li>
-        </ul>
-        <p className="muted">
-          Approval records connect devices to the gateway. Unavailable links have no live path source. Optional gateway
-          observations enrich paths; a line does not prove reachability.
-        </p>
-        {view.nodes.length > visible.length && (
-          <p>
-            Diagram shows {visible.length} of {view.nodes.length} nodes. All nodes appear below.
-          </p>
-        )}
-      </figcaption>
-    </figure>
-  )
-}
+import { Card } from './ui/card'
+import { NetworkGraph } from './network-graph'
+import { admissionText, grantText, pathText } from './network-labels'
 
 function NodeCard({ node, token, stale }: { node: NetworkNode; token: string; stale: boolean }) {
   const [result, setResult] = useState<NetworkPing | null>(null)
@@ -157,7 +45,7 @@ function NodeCard({ node, token, stale }: { node: NetworkNode; token: string; st
     }
   }
   return (
-    <article className="network-node-card" aria-label={`Network node ${node.label}`}>
+    <article className="network-node-card !border-0 !bg-transparent !p-0" aria-label={`Network node ${node.label}`}>
       <p className="eyebrow">{node.kind}</p>
       <h3 className="mono wrap">{node.label}</h3>
       {node.kind === 'device' && (
@@ -246,6 +134,7 @@ export function NetworkPanel({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(null)
   const [refresh, setRefresh] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   useEffect(() => {
     if (!token) return
     const controller = new AbortController()
@@ -279,24 +168,55 @@ export function NetworkPanel({ token }: { token: string }) {
       clearTimeout(timer)
     }
   }, [token, refresh])
+  const selected =
+    view?.nodes.find((node) => node.id === selectedId) ??
+    view?.nodes.find((node) => node.kind === 'gateway') ??
+    view?.nodes[0]
+  const stale = !!error || loading || view?.state === 'unavailable'
+  const counts = view && {
+    devices: view.nodes.filter((n) => n.kind === 'device').length,
+    admitted: view.nodes.filter((n) => n.kind === 'device' && n.admission === 'authorized').length,
+    relays: view.nodes.filter((n) => n.kind === 'relay').length,
+  }
   return (
-    <section className="network-panel" id="network" aria-labelledby="network-title">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Connectivity · approval records and observations</p>
-          <h2 id="network-title">Tailnet network</h2>
+    <section id="network" aria-labelledby="network-title">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 id="network-title" className="mr-2">
+            Tailnet network
+          </h2>
+          {counts && (
+            <>
+              <Badge variant="outline">
+                {counts.admitted}/{counts.devices} devices admitted
+              </Badge>
+              <Badge variant="outline">
+                {counts.relays} {counts.relays === 1 ? 'relay' : 'relays'}
+              </Badge>
+            </>
+          )}
         </div>
         {token && (
-          <Button
-            variant="outline"
-            onClick={() => {
-              setLoading(true)
-              setRefresh((value) => value + 1)
-            }}
-            disabled={loading}
-          >
-            Refresh network
-          </Button>
+          <div className="flex items-center gap-3">
+            {view && (
+              <span className="network-updated muted !m-0 text-xs">
+                {error ? 'Stale snapshot' : 'Last observed'}{' '}
+                <time dateTime={view.observedAt}>{new Date(view.observedAt).toLocaleTimeString()}</time> · refreshes
+                every 5 seconds
+              </span>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => {
+                setLoading(true)
+                setRefresh((value) => value + 1)
+              }}
+              disabled={loading}
+            >
+              <RefreshCw className={cn(loading && 'animate-spin')} aria-hidden="true" />
+              Refresh network
+            </Button>
+          </div>
         )}
       </div>
       {!token ? (
@@ -304,7 +224,7 @@ export function NetworkPanel({ token }: { token: string }) {
       ) : (
         <>
           {error && (
-            <p role="alert" className="notice negative">
+            <p role="alert" className="notice negative mb-4">
               {error}
             </p>
           )}
@@ -314,41 +234,60 @@ export function NetworkPanel({ token }: { token: string }) {
             </p>
           )}
           {view?.state === 'not_configured' && (
-            <p className="notice">
+            <p className="notice mb-4">
               Live peer admission, paths and handshakes are unavailable without the optional gateway feed. Approval
               records and configured console-host checks remain available.
             </p>
           )}
           {view?.relayState === 'unavailable' && (
-            <p className="notice">Relay discovery is unavailable. Unmatched paths remain unknown.</p>
+            <p className="notice mb-4">Relay discovery is unavailable. Unmatched paths remain unknown.</p>
           )}
           {view?.membershipState === 'unavailable' && (
-            <p className="notice">ENS membership is unavailable. Membership state is unknown.</p>
+            <p className="notice mb-4">ENS membership is unavailable. Membership state is unknown.</p>
           )}
           {view && view.nodes.length === 0 && view.state === 'ok' && (
             <p className="empty">No network nodes observed yet.</p>
           )}
-          {view && view.nodes.length > 0 && (
-            <div className={`network-layout ${error ? 'stale' : ''}`}>
-              <NetworkGraph view={view} />
-              <div className="network-node-list">
-                {view.nodes.map((node) => (
-                  <NodeCard
-                    key={node.id}
-                    node={node}
-                    token={token}
-                    stale={!!error || loading || view.state === 'unavailable'}
-                  />
-                ))}
+          {view && view.nodes.length > 0 && selected && (
+            <div className={cn('grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]', error && 'opacity-80')}>
+              <Card className="overflow-hidden py-0">
+                <div className="h-[30rem] min-h-[22rem] lg:h-[calc(100dvh-16rem)]">
+                  <NetworkGraph view={view} selectedId={selected.id} onSelect={setSelectedId} />
+                </div>
+              </Card>
+              <div className="grid gap-4 lg:sticky lg:top-0">
+                <Card className="gap-0 px-5">
+                  <NodeCard key={selected.id} node={selected} token={token} stale={stale} />
+                </Card>
+                <Card className="gap-0 overflow-hidden py-0">
+                  <p className="eyebrow border-b border-divider px-5 py-3">All nodes ({view.nodes.length})</p>
+                  <ul className="m-0 max-h-64 list-none overflow-y-auto p-1">
+                    {view.nodes.map((node) => {
+                      const Icon = node.kind === 'gateway' ? Server : node.kind === 'relay' ? Waypoints : Laptop
+                      return (
+                        <li key={node.id}>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedId(node.id)}
+                            aria-pressed={node.id === selected.id}
+                            className={cn(
+                              'flex w-full items-center gap-3 rounded-md border-0 bg-transparent px-3 py-2 text-left text-sm hover:bg-secondary',
+                              node.id === selected.id && 'bg-secondary'
+                            )}
+                          >
+                            <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                            <span className="mono min-w-0 flex-1 truncate">{node.label}</span>
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {node.kind === 'device' ? admissionText[node.admission] : node.kind}
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </Card>
               </div>
             </div>
-          )}
-          {view && (
-            <p className="network-updated muted">
-              {error ? 'Stale snapshot' : 'Last observed'}{' '}
-              <time dateTime={view.observedAt}>{new Date(view.observedAt).toLocaleString()}</time> · refreshes every 5
-              seconds
-            </p>
           )}
         </>
       )}

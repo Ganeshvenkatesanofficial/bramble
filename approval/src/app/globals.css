@@ -1021,3 +1021,18 @@
     }
   }
 }
+
+/* React Flow follows the console tokens, so the light and dark themes both apply to the graph. */
+.bramble-flow {
+  --xy-background-color: var(--background);
+  --xy-background-pattern-color: var(--divider);
+  --xy-node-border-radius: 12px;
+  --xy-controls-button-background-color: var(--card);
+  --xy-controls-button-background-color-hover: var(--secondary);
+  --xy-controls-button-color: var(--foreground);
+  --xy-controls-button-border-color: var(--divider);
+  --xy-attribution-background-color: transparent;
+}
+.bramble-flow .react-flow__attribution {
+  font-size: 10px;
+}
