@@ -33,6 +33,15 @@ type paySidecarConfig struct {
 	DataRelay      bool
 	InternalAPIURL string // e.g. http://127.0.0.1:7895 — loopback allocation API
 	PricePerByte   string // atomic USDC per byte, DynamicPrice input
+
+	// Operator-sponsored sessions (ETH-177 D11) — zero unless
+	// -sponsor-enrolled is set. relay-sidecar then mounts the unpaid
+	// /sponsored/* routes and checks enrollment against the tailnet registry
+	// using BRAMBLE_TAILNET_NAME / BRAMBLE_TAILNET_REGISTRY / SEPOLIA_RPC_URL
+	// from this process's own environment.
+	Sponsor           bool
+	SponsorBytes      int64
+	SponsorMaxPerHour int
 }
 
 // startPaySidecar generates a fresh HMAC secret, spawns relay-sidecar with
@@ -60,6 +69,14 @@ func startPaySidecar(cfg paySidecarConfig) (*paySidecar, error) {
 			"DATA_RELAY_ENABLED=1",
 			fmt.Sprintf("DATA_RELAY_INTERNAL_API_URL=%s", cfg.InternalAPIURL),
 			fmt.Sprintf("DATA_RELAY_PRICE_PER_BYTE=%s", cfg.PricePerByte),
+		)
+	}
+
+	if cfg.Sponsor {
+		env = append(env,
+			"SPONSOR_ENROLLED=1",
+			fmt.Sprintf("SPONSOR_BYTES=%d", cfg.SponsorBytes),
+			fmt.Sprintf("SPONSOR_MAX_PER_HOUR=%d", cfg.SponsorMaxPerHour),
 		)
 	}
 
@@ -115,4 +132,29 @@ func (p *paySidecar) Stop() error {
 		return nil
 	}
 	return p.cmd.Process.Kill()
+}
+
+const (
+	defaultSponsorBytes      int64 = 1 << 20 // 1 MiB
+	defaultSponsorMaxPerHour       = 30
+)
+
+// validateSponsorFlags fails fast, at startup, on a -sponsor-enrolled
+// configuration that could not work: enrollment is read from the tailnet
+// registry, so the three names below must be set, and the unpaid routes live
+// in relay-sidecar, so -meter and -data-relay must be on. Reports names only;
+// never a value.
+func validateSponsorFlags(meter, dataRelay bool, bytes int64, maxPerHour int, getenv func(string) string) error {
+	if !meter || !dataRelay {
+		return fmt.Errorf("-sponsor-enrolled requires -meter and -data-relay (the sponsored routes live in relay-sidecar)")
+	}
+	if bytes <= 0 || maxPerHour <= 0 {
+		return fmt.Errorf("-sponsor-bytes and -sponsor-max-per-hour must be positive")
+	}
+	for _, name := range []string{"BRAMBLE_TAILNET_NAME", "BRAMBLE_TAILNET_REGISTRY"} {
+		if getenv(name) == "" {
+			return fmt.Errorf("-sponsor-enrolled needs %s in the environment (the tailnet whose devices are sponsored)", name)
+		}
+	}
+	return nil
 }
