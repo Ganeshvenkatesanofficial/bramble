@@ -17,7 +17,7 @@ Run these commands as the admin user. Node.js, pnpm, Bun, OpenSSL and the
    ```
 
 2. Keep the operator-provided environment in `~/.config/bramble/approval.env`
-   with mode `600`. Use the variable names in `env/admin.env.example`. Preserve
+   with mode `600`. Use the variable names in `deploy/env/admin.env.example`. Preserve
    the existing `APPROVAL_DEMO_TOKEN` and Sepolia settings during migration;
    never print them or generate a replacement token. Set `PATH` to stable
    absolute directories containing Node.js and Bun, plus `/usr/bin:/bin`.
