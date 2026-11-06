@@ -30,18 +30,27 @@ type Service struct {
 // NodeConfig is the public node config served at /.well-known/bramble.json.
 // It holds public values only: no keys, no tokens.
 type NodeConfig struct {
-	Version       string            `json:"version"`
-	Tailnet       string            `json:"tailnet"`
-	ChainID       int64             `json:"chainId"`
-	RPCURL        string            `json:"rpcUrl"`
-	Registry      string            `json:"registry"`
-	RelayRegistry string            `json:"relayRegistry,omitempty"`
-	JoinAPI       string            `json:"joinApi"`
-	Rendezvous    string            `json:"rendezvous,omitempty"`
-	STUN          stringList        `json:"stun,omitempty"`
-	DataRelays    map[string]string `json:"dataRelays,omitempty"`
-	RelayPeers    []string          `json:"relayPeers,omitempty"`
-	Services      []Service         `json:"services,omitempty"`
+	Version       string `json:"version"`
+	Tailnet       string `json:"tailnet"`
+	ChainID       int64  `json:"chainId"`
+	RPCURL        string `json:"rpcUrl"`
+	Registry      string `json:"registry"`
+	RelayRegistry string `json:"relayRegistry,omitempty"`
+	// RegistryDeployBlock and RelayDeployBlock are where the sidecar starts
+	// its log scans (device discovery, relay discovery). The RPC behind
+	// rpcUrl must serve logs back to these blocks.
+	RegistryDeployBlock uint64            `json:"registryDeployBlock,omitempty"`
+	RelayDeployBlock    uint64            `json:"relayDeployBlock,omitempty"`
+	JoinAPI             string            `json:"joinApi"`
+	Rendezvous          string            `json:"rendezvous,omitempty"`
+	STUN                stringList        `json:"stun,omitempty"`
+	DataRelays          map[string]string `json:"dataRelays,omitempty"`
+	RelayPeers          []string          `json:"relayPeers,omitempty"`
+	// Peers, when set, limits the device to these peers (brambled -peer)
+	// instead of discovering every device on the tailnet (docs/adr/0010).
+	// Service and relay peers are always included.
+	Peers    []string  `json:"peers,omitempty"`
+	Services []Service `json:"services,omitempty"`
 }
 
 // stringList accepts either "a" or ["a","b"].
@@ -131,9 +140,9 @@ func ParseNodeConfig(data []byte) (*NodeConfig, error) {
 			return nil, fmt.Errorf("the node config's data relay %q: %w", label, err)
 		}
 	}
-	for _, p := range cfg.RelayPeers {
+	for _, p := range append(append([]string(nil), cfg.RelayPeers...), cfg.Peers...) {
 		if !LabelRE.MatchString(p) {
-			return nil, fmt.Errorf("the node config's relay peer %q is not a valid label", p)
+			return nil, fmt.Errorf("the node config's peer %q is not a valid label", p)
 		}
 	}
 	for i, s := range cfg.Services {

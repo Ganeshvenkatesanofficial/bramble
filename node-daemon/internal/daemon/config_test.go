@@ -17,6 +17,8 @@ const sampleConfig = `{
   "rendezvous": "203.0.113.1:7000",
   "stun": "203.0.113.1:3478",
   "dataRelays": {"relay-a": "http://203.0.113.1:7891"},
+  "registryDeployBlock": 11640407,
+  "relayDeployBlock": 11640500,
   "relayPeers": ["gateway"],
   "services": [{"peer": "gateway", "service": "health"}],
   "futureField": true
@@ -110,11 +112,22 @@ func TestServeArgsAndEnv(t *testing.T) {
 		"BRAMBLE_RELAY_REGISTRY=0x2222222222222222222222222222222222222222",
 		"BRAMBLE_SIDECAR_PORT=40002",
 		"SEPOLIA_RPC_URL=https://rpc.example.test/sepolia",
+		"BRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK=11640407",
+		"BRAMBLE_RELAY_REGISTRY_DEPLOY_BLOCK=11640500",
 	} {
 		if !strings.Contains(env, want) {
 			t.Errorf("env lacks %q", want)
 		}
 	}
+
+	if strings.Contains(args, " -peer ") {
+		t.Errorf("no peers in the config means discovery, got %q", args)
+	}
+	cfg.Peers = []string{"printer", "laptop"}
+	if a := strings.Join(ServeArgs(spec, ports), " "); !strings.Contains(a, "-peer printer -peer gateway") || strings.Contains(a, "-peer laptop") {
+		t.Errorf("explicit peers must include service and relay peers but not self: %q", a)
+	}
+	cfg.Peers = nil
 
 	spec.TUN = true
 	if strings.Contains(strings.Join(ServeArgs(spec, ports), " "), "-netstack") {

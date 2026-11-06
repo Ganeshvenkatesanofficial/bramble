@@ -64,6 +64,9 @@ func ServeArgs(spec NodeSpec, ports NodePorts) []string {
 	if !spec.TUN {
 		args = append(args, "-netstack")
 	}
+	for _, p := range explicitPeers(cfg, spec.Label) {
+		args = append(args, "-peer", p)
+	}
 	if cfg.Rendezvous != "" {
 		args = append(args, "-rendezvous", cfg.Rendezvous)
 	}
@@ -94,6 +97,33 @@ func ServeArgs(spec NodeSpec, ports NodePorts) []string {
 	return args
 }
 
+// explicitPeers is the -peer list: empty (discover every device) unless the
+// config names peers, in which case service and relay peers are added so
+// brambled accepts the -forward and -relay-peer flags for them.
+func explicitPeers(cfg *NodeConfig, own string) []string {
+	if len(cfg.Peers) == 0 {
+		return nil
+	}
+	seen := map[string]bool{own: true}
+	var out []string
+	add := func(p string) {
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	for _, p := range cfg.Peers {
+		add(p)
+	}
+	for _, s := range cfg.Services {
+		add(s.Peer)
+	}
+	for _, p := range cfg.RelayPeers {
+		add(p)
+	}
+	return out
+}
+
 // ServeEnv is the environment brambled serve needs on top of the daemon's
 // own environment.
 func ServeEnv(spec NodeSpec, ports NodePorts) []string {
@@ -107,8 +137,14 @@ func ServeEnv(spec NodeSpec, ports NodePorts) []string {
 	if cfg.RPCURL != "" {
 		env = append(env, "SEPOLIA_RPC_URL="+cfg.RPCURL)
 	}
+	if cfg.RegistryDeployBlock > 0 {
+		env = append(env, "BRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK="+strconv.FormatUint(cfg.RegistryDeployBlock, 10))
+	}
 	if cfg.RelayRegistry != "" {
 		env = append(env, "BRAMBLE_RELAY_REGISTRY="+cfg.RelayRegistry)
+	}
+	if cfg.RelayDeployBlock > 0 {
+		env = append(env, "BRAMBLE_RELAY_REGISTRY_DEPLOY_BLOCK="+strconv.FormatUint(cfg.RelayDeployBlock, 10))
 	}
 	return env
 }
