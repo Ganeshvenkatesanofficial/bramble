@@ -2,7 +2,8 @@
 
 This reference records the ETH-249 read-only browser pass for demo beats 1, 2,
 3 and 5. The console responds, but the pass does not establish full demo
-readiness. One P1 deployment finding and one P2 theme finding remain.
+readiness. Two P1 deployment findings and one P2 theme finding remain.
+The latest fresh-browser check at 13:35 UTC cannot load the console assets.
 
 ## Conditions
 
@@ -101,3 +102,88 @@ Focused captures: `1280-light-top.png`, `390-light-top.png` and
 HCS evidence and the uninspected action states listed above. ETH-249 provides
 the requested read-only evidence; it does not replace those checks or authorize
 new live actions.
+
+
+## Continuation, 13:27–13:29 UTC
+
+**Verified, 6 November 2026:** QA-Sol continues the same read-only pass after
+the operator moves the task to Codex. The original observations and 15-image
+bundle above remain dated evidence. The continuation uses a fresh unauthenticated
+`agent-browser` session with `AGENT_BROWSER_ARGS="--no-sandbox"`.
+
+- At 13:28:08 UTC, the public summary shows 0 pending requests, 1 active grant
+  and 11 closed requests. The populated grant card renders `mumbai-worker`,
+  `mumbai-gateway`, identity summaries, `Grant confirmed` and a Sepolia
+  Etherscan link. **Open:** authenticated revoke controls; the locked page has
+  only the disabled `Unlock` button and no grant-card action button.
+- By 13:28:39 UTC, passive polling shows 0 active grants and 12 closed requests.
+  The feed adds `REVOKED`, `Revoke transaction confirmed` and a receipt link.
+  This verifies an arriving approval-source event and the grant-list transition
+  during observation. It does not independently verify chain state or gateway
+  enforcement. QA-Sol submits no action.
+- After 60 seconds, `Approvals: live`, `Gateway: not configured` and
+  `Payments: not configured` still reproduce the P1 in
+  [ETH-254](/ETH/issues/ETH-254).
+- A fresh 1280 × 900 / 390 × 844, light/dark matrix has no horizontal overflow.
+  Both dark captures retain `oklch(1 0 0)` on the body. The P2 remains.
+- The live HCS panel still requires unlocking. Authenticated audit records,
+  real approve/revoke actions and enforcement remain **Open**. Local UI
+  availability is not retested in this continuation.
+
+Continuation evidence is under `artifacts/eth-249/continuation/` in the same
+worktree: `observations.json` and `transient-observations.txt`. The transient
+populated grant is text evidence only. The four earlier grant-list crops are
+excluded from the supplementary evidence bundle because the mobile crops are
+blank and do not establish a rendered grant-list state.
+
+**Verified:** PR #45 remains open against `hackathon`, with no completed review.
+The configured native reviewer, Core-Claude, is paused. Cross-family review
+round 1 remains pending; this continuation does not count as a review round.
+The operator's pause window is approximately 16:30 UTC. QA-Sol owns retrying
+the existing review handoff after the reviewer becomes invokable. No cloud-node
+access, code change, deployment, merge or real approval/revocation occurs.
+
+
+## Fresh-browser regression, 13:34–13:35 UTC
+
+**Verified, 6 November 2026:** a fresh unauthenticated browser first shows
+“This page couldn’t load.” After one reload, it renders an unstyled document
+that remains at `Connecting…`, `Loading access requests…` and
+`Loading activity…`. Browser resource timing and direct HTTP requests both
+report HTTP 500 for these assets referenced by the served HTML:
+
+- `/_next/static/css/6fe73cb2f182d340.css`
+- `/_next/static/chunks/app/page-cc16018eb0b52f23.js`
+
+The root HTML, `/api/activity` and the other sampled script assets return
+HTTP 200. `/api/payments` returns HTTP 503. HTML and API reachability do not
+establish frontend readiness. The cause of the asset failures remains
+**Open**; QA does not inspect or change the deployment.
+
+### P1: the public console cannot load its stylesheet and page script
+
+Filed as [ETH-261](/ETH/issues/ETH-261), assigned to Infra-Sol-UI, the
+current cloud-validation owner. This affects demo beats 1, 2, 3 and 5.
+
+Exact reproduction:
+
+1. Open the public root in a fresh browser, then reload once.
+2. Observe the unstyled document and loading placeholders.
+3. Request each asset path above directly. Both return HTTP 500 with
+   `Content-Type: text/plain`.
+
+Expected: all assets referenced by the served HTML load successfully and the
+console hydrates, polls and displays history. Earlier styled screenshots remain
+dated evidence and do not establish current readiness.
+
+The supplementary evidence bundle contains full-page screenshots at 1280 × 900
+and 390 × 844, with light and dark preferences:
+`1280-light-checked-full.png`, `1280-dark-checked-full.png`,
+`390-light-checked-full.png` and `390-dark-checked-full.png`. Their dimensions
+and visible content are checked. These capture the degraded document; they do
+not demonstrate a working console or a functioning theme.
+`resume-checked-observations.json` records the document text and viewport widths.
+`public-asset-responses.json` records the direct HTTP observations.
+
+No real decision, authentication, cloud-node access or deployment is performed.
+Cross-family review of PR #45 remains pending while Core-Claude is paused.

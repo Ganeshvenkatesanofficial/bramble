@@ -20,3 +20,24 @@ Written paths:
 
 Screenshots and generated delivery files remain outside the commit. No
 application code, credentials or cloud-node configuration changes are made.
+
+Continuation written paths (6 November 2026):
+
+- `docs/reference/eth-249-public-console-qa.md`: dated passive grant transition.
+- `docs/ai-usage/qa-sol-eth-249.md`: this path record.
+- `artifacts/eth-249/continuation/*.png`: four grant-list captures.
+- `artifacts/eth-249/continuation/observations.json`: viewport/theme matrix.
+- `artifacts/eth-249/continuation/transient-observations.txt`: earlier text observations.
+- `artifacts/eth-249/continuation/report.md`: updated report copy.
+- `artifacts/eth-249/continuation/evidence.zip`: supplementary evidence bundle.
+- `artifacts/eth-249/continuation/upload-receipts.txt`: upload receipts.
+
+Fresh-browser continuation written paths:
+
+- `artifacts/eth-249/continuation/*-checked-full.png`: validated full-page captures.
+- `artifacts/eth-249/continuation/resume-checked-observations.json`: rendered text and layout.
+- `artifacts/eth-249/continuation/public-asset-responses.json`: public asset HTTP statuses.
+- `artifacts/eth-249/continuation/*-live-full.png`: initial load-error captures, not delivered.
+- `artifacts/eth-249/continuation/resume-observations.json`: initial load-error text, not delivered.
+
+The supplementary bundle excludes the earlier blank mobile crops.
