@@ -236,7 +236,7 @@ export async function clearAcl(deps: LibDeps, params: { deviceLabel: string }): 
  */
 export async function setDeviceRevoked(
   deps: LibDeps,
-  params: { deviceLabel: string; value: boolean }
+  params: { deviceLabel: string; value: boolean; progress?: { txHash?: string } }
 ): Promise<SetRevokedResult> {
   const log = deps.log ?? noop
   const value = String(params.value)
@@ -247,6 +247,7 @@ export async function setDeviceRevoked(
   const pending = await deps.signer.setText(deviceFullname, 'revoked', value)
   log(`   tx: ${pending.hash}`)
   await pending.wait()
+  if (params.progress) params.progress.txHash = pending.hash
   const confirmedMs = Date.now() - startedAt
   log(`   confirmed ${confirmedMs}ms after submit`)
 

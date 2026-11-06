@@ -146,7 +146,8 @@ export class JoinService {
                   createdAt: '',
                   pubkey: member.pubkey ?? '',
                 }),
-            status: member.revoked ? 'revoked' : row?.status === 'pending' ? 'pending' : 'approved',
+            status:
+              member.revoked || row?.revokeTransaction ? 'revoked' : row?.status === 'pending' ? 'pending' : 'approved',
             ...(member.meshIp ? { meshIp: member.meshIp.split('/')[0] } : {}),
           }
         })

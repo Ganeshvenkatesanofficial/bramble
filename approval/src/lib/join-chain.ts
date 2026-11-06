@@ -9,8 +9,16 @@ export function createJoinChain(
     labelTaken: (label) => config.chain.isRegistered(label),
     enroll: (input, progress) => enrollDevice(config, { deviceLabel: input.label, pubkey: input.pubkey, progress }),
     async revokeDevice(label) {
-      const result = await setDeviceRevoked(config, { deviceLabel: label, value: true })
-      return { transactionHash: result.txHash }
+      const progress: { txHash?: string } = {}
+      try {
+        const result = await setDeviceRevoked(config, { deviceLabel: label, value: true, progress })
+        return { transactionHash: result.txHash }
+      } catch (error) {
+        // setText's own confirmed receipt is evidence even when a load-balanced read lags.
+        // Never turn a confirmed revoke into a failure that encourages another submission.
+        if (progress.txHash) return { transactionHash: progress.txHash }
+        throw error
+      }
     },
     members: config.members,
   }

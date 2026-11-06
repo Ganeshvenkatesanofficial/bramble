@@ -6,7 +6,7 @@ Recovered Core-Claude commit `37862fc` in branch `core-sol/eth-181-join-api`.
 
 Paths written:
 
-- `admincli/src/{lib.ts,lib.test.ts,enroll-chain-viem.ts,enroll-memory.ts}`
+- `admincli/src/{lib.ts,lib.test.ts,enroll.ts,enroll-chain-viem.ts,enroll-memory.ts}`
 - `approval/src/lib/{api.ts,chain-env.ts,contracts.ts,validation.ts,joins.ts,join-chain.ts}`
 - `approval/src/app/api/[...path]/route.ts`
 - `approval/test/joins.test.ts`
@@ -30,3 +30,5 @@ Additional paths written:
 - `README.md`
 
 Open: real Sepolia smoke requires administrator configuration; this run lacks `APPROVAL_ENS_PARENT`.
+
+Verified on 6 November 2026: `pnpm verify` passes (approval: 88 tests, 506 assertions). Browser checks pass in desktop and mobile layouts (8 tests), including join visibility under 2 seconds with the in-memory chain. Browser command uses `PLAYWRIGHT_BROWSERS_PATH=/home/anonjr/.cache/ms-playwright BRAMBLE_TEST_UI_PORT=13181 BRAMBLE_TEST_API_PORT=13182 pnpm --filter @bramble/approval test:ui` because the normal dev port is occupied.

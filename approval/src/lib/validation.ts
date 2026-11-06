@@ -1,4 +1,5 @@
 import { ApiError, type JoinInput, type PaymentInput, type RequestInput } from './contracts'
+import { normalize } from 'viem/ens'
 
 export function label(value: unknown, name: string): string {
   if (typeof value !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value)) {
@@ -111,6 +112,11 @@ export async function readJoin(request: Request): Promise<JoinInput> {
   }
   if (typeof value.tailnet !== 'string' || !/^[a-z0-9.-]{1,253}$/i.test(value.tailnet)) {
     throw new ApiError(400, 'invalid_request', 'tailnet must be an ENS name such as mesh.eth.')
+  }
+  try {
+    normalize(`${name}.${value.tailnet.toLowerCase()}`)
+  } catch {
+    throw new ApiError(400, 'invalid_request', 'label and tailnet must form a valid ENS name.')
   }
   return { label: name, pubkey: value.pubkey.toLowerCase(), tailnet: value.tailnet.toLowerCase() }
 }

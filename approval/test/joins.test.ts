@@ -137,3 +137,28 @@ test('an incomplete enrollment reserves allocation until its retry completes', a
   expect((await call(`/joins/${first.id}/approve`, 'POST')).status).toBe(200)
   expect((await (await call(`/joins/${second.id}/approve`, 'POST')).json()).meshIp).toBe('10.77.0.3')
 })
+
+test('ENS-invalid ASCII labels are rejected before they can reserve enrollment', async () => {
+  const { call, memory } = setup()
+  for (const label of ['ab--cd', 'xn--a']) {
+    expect((await call('/joins', 'POST', { ...input, label }, false)).status).toBe(400)
+  }
+  const created = await (await call('/joins', 'POST', input)).json()
+  expect((await call(`/joins/${created.id}/approve`, 'POST')).status).toBe(200)
+  expect(memory.steps).toHaveLength(4)
+})
+
+test('confirmed device revocation survives a stale read-back without duplicate writes', async () => {
+  const { call, memory } = setup()
+  const { id } = await (await call('/joins', 'POST', input)).json()
+  await call(`/joins/${id}/approve`, 'POST')
+  const read = memory.resolver.getText
+  memory.resolver.getText = async (name, key) => (key === 'revoked' ? 'false' : read(name, key))
+  const revoked = await call(`/joins/${id}/revoke`, 'POST')
+  expect(revoked.status).toBe(200)
+  expect((await revoked.json()).status).toBe('revoked')
+  expect((await (await call(`/joins/${id}`)).json()).status).toBe('revoked')
+  expect((await call(`/joins/${id}/revoke`, 'POST')).status).toBe(409)
+  expect((await (await call('/members')).json()).members[0].status).toBe('revoked')
+  expect(memory.steps.filter((step) => step === 'setText:revoked')).toHaveLength(1)
+})
