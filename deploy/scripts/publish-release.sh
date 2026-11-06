@@ -102,7 +102,7 @@ fi
 # that downloads while the new tarball and SHA256SUMS land one after the other sees a checksum
 # mismatch and refuses; it succeeds on retry.
 rsync_opts=(-rt --chmod=D755,F644 -e "ssh -o BatchMode=yes")
-rsync "${rsync_opts[@]}" --delete --exclude=SHA256SUMS "$stage/dl/" "$ssh_alias:$dist/dl/"
+rsync "${rsync_opts[@]}" --delete --exclude=/SHA256SUMS "$stage/dl/" "$ssh_alias:$dist/dl/"
 rsync "${rsync_opts[@]}" "$stage/dl/SHA256SUMS" "$ssh_alias:$dist/dl/SHA256SUMS"
 rsync "${rsync_opts[@]}" "$stage/.well-known/" "$ssh_alias:$dist/.well-known/"
 [ -f "$stage/uninstall.sh" ] && rsync "${rsync_opts[@]}" "$stage/uninstall.sh" "$ssh_alias:$dist/uninstall.sh"
