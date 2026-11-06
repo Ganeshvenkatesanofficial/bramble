@@ -29,10 +29,12 @@ N is two Tor runs and two direct runs of 600 s each, on one machine and one netw
 
 The script `sidecar/scripts/revocation-poll.ts` replays a trace. It does not send a revoking transaction.
 
-1. It runs the same loop `brambled` runs: one `resolveDevice()` pass per peer, a ticker of period `--ttl` that buffers one tick (Go `time.Ticker`), and the next pass starting when the previous one returns.
+1. It runs the same loop `brambled` runs, with one peer: one `resolveDevice()` pass, a ticker of period `--ttl` that buffers one tick (Go `time.Ticker`), and the next pass starting when the previous one returns.
 2. It timestamps every RPC request inside each pass. A pass sends 7 requests.
 3. It replays the trace. For each synthetic revocation instant `t0` (every 50 ms), the first pass whose read of the changed record starts after `t0` sees the revocation. The latency is that pass's end minus `t0`.
 4. Because a read happens between its request's start and end, it reports three bounds: the read at the request's start, middle and end. Revocation by clearing `pubkey` is the first request of a pass. The `revoked` record is the second request, and gives values 0.3 to 1.2 s lower.
+
+With N peers, `brambled` resolves them one after another, so a revocation can wait behind up to N-1 other Tor resolves (Read from source, `brambled/admission/loop.go`). This measurement does not cover that.
 
 What the method leaves out: chain confirmation of the revoking transaction, RPC node lag, and the time `brambled` takes to remove the peer from the WireGuard table. The first two add to the real figure. The last is small and was not measured here.
 
@@ -44,7 +46,7 @@ The script reuses the sidecar's own ENS code through the `createEnsClient` seam 
 - Machine: one developer machine on one residential or office network (not a datacenter). This is the **rootless equivalent** of the cloud topology. We did not run it from the cloud machines, so a datacenter's route to the Tor network is Open.
 - Software: Bun 1.4.0, tor-js 0.4.4 through `sidecar/src/tor/index.ts`, a fresh Tor client per Tor run. Tor became ready after 5.0 s (run 1) and 4.3 s (run 2).
 - Poll interval: `--ttl 5` (5 s).
-- Name: `device1` under `bramble-dev-c91e55e9.eth` on the hackathon Sepolia ENSv2 deployment.
+- Name: `device1` (the `label` field in all four saved run files; the script's default label is `laptop-demo`) under `bramble-dev-c91e55e9.eth` on the hackathon Sepolia ENSv2 deployment.
 - RPC: the default public Sepolia endpoint (`ethereum-sepolia-rpc.publicnode.com`), no dedicated provider.
 
 ## Reproduce
@@ -53,9 +55,9 @@ From `sidecar/`:
 
 ```sh
 BRAMBLE_TAILNET_NAME=<name>.eth BRAMBLE_TAILNET_REGISTRY=0x<registry> \
-  bun run scripts/revocation-poll.ts --mode tor --ttl 5 --duration 600 --out tor.json
+  bun run scripts/revocation-poll.ts --mode tor --label device1 --ttl 5 --duration 600 --out tor.json
 BRAMBLE_TAILNET_NAME=<name>.eth BRAMBLE_TAILNET_REGISTRY=0x<registry> \
-  bun run scripts/revocation-poll.ts --mode direct --ttl 5 --duration 600 --out direct.json
+  bun run scripts/revocation-poll.ts --mode direct --label device1 --ttl 5 --duration 600 --out direct.json
 ```
 
 Unset `SEPOLIA_RPC_URL` to use the public endpoint. The script needs no signing key.
