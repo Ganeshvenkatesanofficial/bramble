@@ -66,7 +66,7 @@ cd /opt/bramble && git checkout <commit>
 
 Use the same commit on every machine. Record the commit in the demo log. Deploy only a commit on `hackathon` that `pnpm verify` accepted. The checkout is owned by `bramble` after A5, and git refuses other users. Read it as root with the directory marked safe: `sudo git -c safe.directory=/opt/bramble -C /opt/bramble rev-parse --short HEAD`.
 
-Run on 6 Nov 2026: all three machines at `92dd04e` (merge of PR #25). The public clone worked with no deploy key.
+Run on 6 Nov 2026: all three machines at `a9db736` (merge of PR #18). The public clone worked with no deploy key.
 
 ### A5. Run the installer. Verified (cloud, 6 Nov 2026)
 
