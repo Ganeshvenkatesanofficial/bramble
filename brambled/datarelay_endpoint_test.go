@@ -294,11 +294,11 @@ func TestRelayRoutedEndpoint_BothSidesReachEachOtherThroughDataRelay(t *testing.
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		aliceEndpoint, _, aliceErr = relayRoutedEndpoint(alice, aliceM, pool, 1000, unrestrictedDataRelayPurchasePolicy, relays, alicePub, bobPub, 5*time.Second)
+		aliceEndpoint, _, aliceErr = relayRoutedEndpoint(alice, aliceM, pool, 1000, unrestrictedDataRelayPurchasePolicy, relays, alicePub, bobPub, 5*time.Second, nil)
 	}()
 	go func() {
 		defer wg.Done()
-		bobEndpoint, _, bobErr = relayRoutedEndpoint(bob, bobM, pool, 1000, unrestrictedDataRelayPurchasePolicy, relays, bobPub, alicePub, 5*time.Second)
+		bobEndpoint, _, bobErr = relayRoutedEndpoint(bob, bobM, pool, 1000, unrestrictedDataRelayPurchasePolicy, relays, bobPub, alicePub, 5*time.Second, nil)
 	}()
 	wg.Wait()
 	if aliceErr != nil {
@@ -625,13 +625,13 @@ func testDataRelayFailover(t *testing.T, watcherSource func([]sidecar.Rendezvous
 	// adopts whatever alice publishes, the same as any ordinary
 	// non-relay-peer.
 	var aliceEndpoint, bobEndpoint *netip.AddrPort
-	var aliceLabel string
+	var aliceSession *dataRelaySession
 	var aliceErr, bobErr error
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		aliceEndpoint, aliceLabel, aliceErr = relayRoutedEndpoint(alice, aliceM, pool, 1_000_000, unrestrictedDataRelayPurchasePolicy, relays, alicePub, bobPub, 15*time.Second)
+		aliceEndpoint, aliceSession, aliceErr = relayRoutedEndpoint(alice, aliceM, pool, 1_000_000, unrestrictedDataRelayPurchasePolicy, relays, alicePub, bobPub, 15*time.Second, nil)
 	}()
 	go func() {
 		defer wg.Done()
@@ -663,10 +663,10 @@ func testDataRelayFailover(t *testing.T, watcherSource func([]sidecar.Rendezvous
 	if bobErr != nil {
 		t.Fatalf("bob's candidate exchange: %v", bobErr)
 	}
-	if aliceLabel != "primary" {
-		t.Fatalf("expected alice to pick the cheaper relay first, got %q", aliceLabel)
+	if aliceSession.relayLabel != "primary" {
+		t.Fatalf("expected alice to pick the cheaper relay first, got %q", aliceSession.relayLabel)
 	}
-	aliceState.set("bob", bobPub, aliceLabel)
+	aliceState.set("bob", bobPub, aliceSession)
 
 	if err := alice.AddPeer(bobPub, bobIP, aliceEndpoint); err != nil {
 		t.Fatalf("alice adding bob: %v", err)
@@ -743,6 +743,27 @@ func pingUntilConnected(t *testing.T, node *wgnode.Node, addr netip.Addr, timeou
 // adopter may still be waiting for admission or the shared sponsored poll
 // budget. Keep its advertised session usable while it catches up.
 func TestSponsoredRelay_BootstrapKeepsSessionUntilPeerHandshakes(t *testing.T) {
+	t.Run("live allocation", func(t *testing.T) { testSponsoredRelayBootstrap(t, false) })
+	t.Run("expired allocation", func(t *testing.T) { testSponsoredRelayBootstrap(t, true) })
+}
+
+// Shorten only the first server-provided deadline, so expiry is tested without
+// waiting five minutes. The relay and both WireGuard nodes remain real.
+type expiringFirstSessionPayer struct {
+	relayPayer
+	shortened bool
+}
+
+func (p *expiringFirstSessionPayer) DataRelaySession(url string, bytes int64) (*sidecar.DataRelaySessionResponse, error) {
+	response, err := p.relayPayer.DataRelaySession(url, bytes)
+	if err == nil && !p.shortened {
+		response.ExpiresAt = time.Now().Add(2 * time.Second).Unix()
+		p.shortened = true
+	}
+	return response, err
+}
+
+func testSponsoredRelayBootstrap(t *testing.T, expireFirst bool) {
 	rdvAddr, sidecarURL := startRealSponsoringRelay(t, "device1,cloud1", 1<<20)
 	relays := []sidecar.RendezvousRelay{{Label: "relay1", Address: rdvAddr, SidecarURL: sidecarURL}}
 	pool := dataRelayFlag{"relay1": sidecarURL}
@@ -774,7 +795,11 @@ func TestSponsoredRelay_BootstrapKeepsSessionUntilPeerHandshakes(t *testing.T) {
 		candidateCh <- candidate
 		errCh <- err
 	}()
-	endpoint, label, err := relayRoutedEndpoint(device, payer, pool, 10_000, unrestrictedDataRelayPurchasePolicy, relays, devicePub, cloudPub, 15*time.Second)
+	var bootstrapPayer relayPayer = payer
+	if expireFirst {
+		bootstrapPayer = &expiringFirstSessionPayer{relayPayer: payer}
+	}
+	endpoint, session, err := relayRoutedEndpoint(device, bootstrapPayer, pool, 10_000, unrestrictedDataRelayPurchasePolicy, relays, devicePub, cloudPub, 15*time.Second, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -789,24 +814,69 @@ func TestSponsoredRelay_BootstrapKeepsSessionUntilPeerHandshakes(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := newRelayState()
-	state.set("cloud1", cloudPub, label)
+	state.set("cloud1", cloudPub, session)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go watchDataRelayFailover(ctx, device, payer, state, "cloud1", netip.PrefixFrom(cloudIP, 32), pool, 10_000,
+	go watchDataRelayFailover(ctx, device, bootstrapPayer, state, "cloud1", netip.PrefixFrom(cloudIP, 32), pool, 10_000,
 		unrestrictedDataRelayPurchasePolicy, staticRendezvous(relays), devicePub, 15*time.Second)
 	// Hold cloud admission beyond the six-second stall timeout. No handshake
 	// or received bytes exist yet, so that silence must not replace the session.
 	time.Sleep(12 * time.Second)
-	if n := payer.sessions.Load(); n != 1 {
-		t.Fatalf("bootstrap replaced an unhandshaked session: allocated %d sessions, want 1", n)
+	want := int32(1)
+	if expireFirst {
+		want = 2
 	}
-	if err := cloud.SetPersistentKeepalive(devicePub, dataRelayKeepaliveSeconds); err != nil {
-		t.Fatal(err)
+	if n := payer.sessions.Load(); n != want {
+		t.Fatalf("bootstrap allocated %d sessions, want %d", n, want)
 	}
-	if err := cloud.AddPeer(devicePub, netip.PrefixFrom(deviceIP, 32), endpoint); err != nil {
-		t.Fatal(err)
-	}
+	go watchDataRelayAdopt(ctx, cloud, &sponsor.Payer{Label: "cloud1"}, "device1", cloudPub, devicePub, "",
+		netip.PrefixFrom(deviceIP, 32), staticRendezvous(relays), nil)
 	if !pingUntilConnected(t, device, cloudIP, 10*time.Second) {
-		t.Fatal("delayed cloud adopter could not handshake through the original session")
+		t.Fatal("delayed cloud adopter could not handshake through the retained session")
+	}
+}
+
+// A renewal starts with the previous session's received-byte counter still
+// positive. That counter must not confirm the new allocation before adoption.
+func TestSponsoredRelay_RenewalKeepsSessionWhileAdopterWaits(t *testing.T) {
+	p := connectSponsoredPair(t, 64<<10, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "after delayed adoption")
+	}))
+	if status, _, err := getUntil(p.httpClient(time.Second), "http://cloud1.mesh/", 10*time.Second); err != nil || status != http.StatusOK {
+		t.Fatalf("initial GET: %d %v", status, err)
+	}
+	// Take the admitted cloud peer offline after receiving real traffic. This
+	// stops keepalives deterministically, without depending on a download's
+	// packet sizes leaving room for a few keepalives below the byte cap.
+	if err := p.cloud.RemovePeer(p.devicePub); err != nil {
+		t.Fatal(err)
+	}
+	payer := &countingPayer{relayPayer: &sponsor.Payer{Label: "device1"}}
+	payer.sessions.Store(1)
+	state := newRelayState()
+	state.set("cloud1", p.cloudPub, p.session)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go watchDataRelayFailover(ctx, p.device, payer, state, "cloud1", netip.PrefixFrom(p.cloudIP, 32), p.pool, 10_000,
+		unrestrictedDataRelayPurchasePolicy, staticRendezvous(p.relays), p.devicePub, 3*time.Second)
+	deadline := time.Now().Add(15 * time.Second)
+	for payer.sessions.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if n := payer.sessions.Load(); n != 2 {
+		t.Fatalf("expected first renewal, got %d sessions", n)
+	}
+	// Cross another complete stall plus failed-publication cycle.
+	time.Sleep(14 * time.Second)
+	if n := payer.sessions.Load(); n != 2 {
+		t.Fatalf("unadopted renewal churned: allocated %d sessions, want 2", n)
+	}
+	go watchDataRelayAdopt(ctx, p.cloud, &sponsor.Payer{Label: "cloud1"}, "device1", p.cloudPub, p.devicePub, "",
+		netip.PrefixFrom(p.deviceIP, 32), staticRendezvous(p.relays), nil)
+	if status, body, err := getUntil(p.httpClient(time.Second), "http://cloud1.mesh/", 25*time.Second); err != nil || status != http.StatusOK || body != "after delayed adoption" {
+		t.Fatalf("GET after adoption: %d %q %v", status, body, err)
+	}
+	if n := payer.sessions.Load(); n != 2 {
+		t.Fatalf("recovery needed %d sessions, want 2", n)
 	}
 }
