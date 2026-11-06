@@ -49,6 +49,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -124,6 +125,7 @@ type Loop struct {
 	resolvedEndpoints map[string]struct{}  // pubkey -> already resolved via EndpointResolver
 	knownPubkeys      map[string]string    // label -> last pubkey this label was authorized under
 	lastSuccess       map[string]time.Time // label -> time of last successful resolve
+	endpointFailed    map[string]bool      // label -> its last endpoint exchange failed (peer not answering)
 
 	peersMu sync.Mutex    // guards Peers and kick once Run is going
 	kick    chan struct{} // AddPeers asks Run for an early sync pass
@@ -185,7 +187,15 @@ func (l *Loop) now() time.Time {
 // table accordingly. Idempotent — safe to call on every tick without diffing
 // against prior state first.
 func (l *Loop) SyncOnce() {
-	for _, p := range l.trackedPeers() {
+	// Peers whose last endpoint exchange failed go last. Each failing peer
+	// blocks this pass for a whole exchange timeout, and a new device only
+	// meets us during its own short exchange window, so a pass must reach
+	// peers that might answer before the ones that did not.
+	peers := l.trackedPeers()
+	sort.SliceStable(peers, func(i, j int) bool {
+		return !l.endpointFailed[peers[i].Label] && l.endpointFailed[peers[j].Label]
+	})
+	for _, p := range peers {
 		record, err := l.Resolver.ResolveDevice(p.Label)
 		if err != nil {
 			l.emit(Event{Label: p.Label, Authorized: false, Err: err})
@@ -215,6 +225,10 @@ func (l *Loop) SyncOnce() {
 			}
 			endpoint, epErr := l.resolveEndpoint(p, pubkey)
 			endpointErr = epErr
+			if l.endpointFailed == nil {
+				l.endpointFailed = make(map[string]bool)
+			}
+			l.endpointFailed[p.Label] = epErr != nil
 			syncErr = l.Table.AddPeer(pubkey, p.AllowedIP, endpoint)
 			if l.knownPubkeys == nil {
 				l.knownPubkeys = make(map[string]string)
