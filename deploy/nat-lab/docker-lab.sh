@@ -69,14 +69,23 @@ echo "== control: both nodes point WireGuard at the other's NAT address (symmetr
 role nodeB cloud "$cloud_priv" "$dev_pub" cloud1 NETLAB_MODE=direct-control NETLAB_DIRECT_ENDPOINT=192.0.2.2:51820 >/out/cloud-control.log 2>&1 &
 cloud_pid=$!
 sleep 1
-role nodeA device "$dev_priv" "$cloud_pub" device1 NETLAB_MODE=direct-control NETLAB_DIRECT_ENDPOINT=192.0.2.6:51820 | grep -E '^NETLAB|^(---|FAIL|ok|PASS)' || true
+# The control must fail to connect. A working direct path, or a crashed
+# control run, means the relay result below would prove nothing.
+status=0
+role nodeA device "$dev_priv" "$cloud_pub" device1 NETLAB_MODE=direct-control NETLAB_DIRECT_ENDPOINT=192.0.2.6:51820 >/out/device-control.log 2>&1 || status=1
+grep -E '^NETLAB|^(---|FAIL|ok|PASS)' /out/device-control.log || true
+grep -q 'NETLAB_RESULT direct-control: no handshake' /out/device-control.log || status=1
 kill "$cloud_pid" 2>/dev/null || true; wait "$cloud_pid" 2>/dev/null || true
+if [ "$status" -ne 0 ]; then
+  echo "control failed: the direct path connected or the control run did not finish; see /out/device-control.log" >&2
+  bash "$LAB" down >/dev/null
+  exit 1
+fi
 
 echo "== relay run: direct UDP between the NATs dropped; both sides use sponsored tokens, device a sponsored session"
 bash "$LAB" block-direct
 role nodeB cloud "$cloud_priv" "$dev_pub" cloud1 >/out/cloud-relay.log 2>&1 &
 cloud_pid=$!
-status=0
 role nodeA device "$dev_priv" "$cloud_pub" device1 | tee /out/device-relay.log | grep -E '^NETLAB|^(---|FAIL|ok|PASS)' || status=1
 grep -q 'NETLAB_RESULT relay: HTTP 200' /out/device-relay.log || status=1
 kill "$cloud_pid" 2>/dev/null || true; wait "$cloud_pid" 2>/dev/null || true

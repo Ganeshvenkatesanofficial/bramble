@@ -37,7 +37,7 @@ It runs `netns-lab.sh up symmetric` with `NETLAB_UPLINK=0`, starts the real `rel
 1. Control: `nodeA` and `nodeB` point WireGuard at each other's NAT address. The handshake must fail.
 2. Relay run: direct UDP between the NATs is also dropped (`block-direct`). `nodeA` (the device, no Hedera key) and `nodeB` (the cloud node) take sponsored tokens, the device takes a sponsored session, and the device must get HTTP 200 from a server on the cloud node.
 
-The relay's sidecar is the test harness `relay-sidecar/test/e2e-harness`. It mounts the real sponsor routes, token minting and allocation. Its registry read is a fixture, because the lab has no route to a chain. The script exits non-zero unless the device prints `NETLAB_RESULT relay: HTTP 200`.
+The relay's sidecar is the test harness `relay-sidecar/test/e2e-harness`. It mounts the real sponsor routes, token minting and allocation. Its registry read is a fixture, because the lab has no route to a chain. The script exits non-zero unless the control prints `NETLAB_RESULT direct-control: no handshake` and the device then prints `NETLAB_RESULT relay: HTTP 200`. If the control connects or crashes, the script stops before the relay run.
 
 ## Cloud NAT box
 
