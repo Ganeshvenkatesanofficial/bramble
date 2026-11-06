@@ -25,11 +25,31 @@ export interface TransactionReceipt {
   transactionHash: string
 }
 
-/** Implementations return only after confirmation and reconcile ambiguous write failures. */
+/**
+ * Implementations return only after confirmation. A submitted write whose outcome stays unknown
+ * throws UnresolvedWriteError; a definitively failed write throws any other error.
+ */
 export interface GrantSigner {
   grant(input: Pick<RequestInput, 'agentLabel' | 'gatewayLabel' | 'service'>): Promise<TransactionReceipt>
   /** Clear this agent's ACL grants. Device enrollment remains unchanged. */
   revoke(agentLabel: string): Promise<TransactionReceipt>
+}
+
+export type SettleOutcome = 'confirmed' | 'reverted' | 'unresolved'
+
+/**
+ * Thrown by a signer when a transaction was submitted but its outcome could not be established.
+ * The write may still land, so callers must not resubmit or treat it as a clean failure;
+ * `settle()` re-checks the submitted transaction's receipt.
+ */
+export class UnresolvedWriteError extends Error {
+  constructor(
+    readonly operation: 'grant' | 'revoke',
+    readonly transactionHash: string,
+    readonly settle: () => Promise<SettleOutcome>
+  ) {
+    super(`${operation} transaction ${transactionHash} is not confirmed`)
+  }
 }
 
 export interface Clock {
@@ -48,6 +68,8 @@ export interface AccessRequest extends RequestInput {
   revokedAt?: string
   revokeReason?: 'manual' | 'duration' | 'external'
   expiryStatus: 'none' | 'scheduled' | 'revoking' | 'failed' | 'revoked'
+  /** A submitted transaction whose outcome is not yet known. Cleared when it settles. */
+  unresolvedWrite?: { operation: 'grant' | 'revoke'; transactionHash: string }
 }
 
 export class ApiError extends Error {
