@@ -63,11 +63,12 @@ const paymentFeed: PaymentsFeed = {
   ],
 }
 
+const build = (input: Parameters<typeof buildActivity>[0]) => buildActivity({ ensParent: 'bramble.eth', ...input })
 const kinds = (entries: ActivityEntry[]) => entries.map((entry) => entry.kind)
 
 test('every feed kind appears from the statusapi fixture, the request record and the mirror', () => {
   const status = parseStatusEvents(fixture)
-  const events = buildActivity({ requests: [view()], status, payments: paymentFeed })
+  const events = build({ requests: [view()], status, payments: paymentFeed })
   const seen = new Set<ActivityKind>(kinds(events))
   for (const kind of [
     'request-received',
@@ -82,7 +83,7 @@ test('every feed kind appears from the statusapi fixture, the request record and
   ] as ActivityKind[]) {
     expect(seen.has(kind)).toBe(true)
   }
-  const denied = buildActivity({
+  const denied = build({
     requests: [view({ id: 'r2', status: 'denied', grantTransaction: undefined, revokedAt: undefined })],
     status: [],
     payments: null,
@@ -91,7 +92,7 @@ test('every feed kind appears from the statusapi fixture, the request record and
 })
 
 test('entries are newest first and bounded', () => {
-  const events = buildActivity({ requests: [view()], status: parseStatusEvents(fixture), payments: paymentFeed })
+  const events = build({ requests: [view()], status: parseStatusEvents(fixture), payments: paymentFeed })
   const times = events.map((entry) => Date.parse(entry.time))
   expect([...times].sort((a, b) => b - a)).toEqual(times)
   const flood: StatusEvent[] = Array.from({ length: 150 }, (_, i) => ({
@@ -102,12 +103,12 @@ test('entries are newest first and bounded', () => {
     outcome: 'allowed',
     service: 'web',
   }))
-  expect(buildActivity({ requests: [], status: flood, payments: null })).toHaveLength(100)
+  expect(build({ requests: [], status: flood, payments: null })).toHaveLength(100)
 })
 
 test('entries with the same timestamp keep causal order, newest first', () => {
   const time = '2026-11-06T00:00:00.000Z'
-  const events = buildActivity({
+  const events = build({
     requests: [],
     status: parseStatusEvents([
       { time, kind: 'admission', label: 'agent-1', message: 'authorized=false' },
@@ -119,7 +120,7 @@ test('entries with the same timestamp keep causal order, newest first', () => {
 })
 
 test('cut-off is the first blocked call or peer drop after the revoke request, in milliseconds', () => {
-  const events = buildActivity({ requests: [view()], status: parseStatusEvents(fixture), payments: null })
+  const events = build({ requests: [view()], status: parseStatusEvents(fixture), payments: null })
   const cutoff = events.find((entry) => entry.kind === 'cutoff-measured')
   expect(cutoff?.cutoffMs).toBe(3_400)
   expect(cutoff?.summary).toContain('3.4 s')
@@ -128,7 +129,7 @@ test('cut-off is the first blocked call or peer drop after the revoke request, i
 })
 
 test('a denial before the revoke request does not count, and a peer drop can be the first block', () => {
-  const events = buildActivity({
+  const events = build({
     requests: [view()],
     status: parseStatusEvents(fixture).filter((event) => event.time !== '2026-11-06T00:01:03.400Z'),
     payments: null,
@@ -141,7 +142,7 @@ test('a denial before the revoke request does not count, and a peer drop can be 
 test('no cut-off is reported without a later block, for external revokes, or when a re-grant ends the window', () => {
   const status = parseStatusEvents(fixture)
   const none = (requests: RequestView[], events: StatusEvent[] = status) =>
-    buildActivity({ requests, status: events, payments: null }).some((entry) => entry.kind === 'cutoff-measured')
+    build({ requests, status: events, payments: null }).some((entry) => entry.kind === 'cutoff-measured')
   expect(none([view()], status.slice(0, 3))).toBe(false)
   expect(none([view({ revokeReason: 'external' })])).toBe(false)
   expect(none([view({ revokeRequestedAt: undefined })])).toBe(false)
@@ -155,16 +156,90 @@ test('no cut-off is reported without a later block, for external revokes, or whe
   expect(none([view(), regrant])).toBe(false)
 })
 
-test('status labels match approval agents by their first ENS label', () => {
-  const other = parseStatusEvents(fixture).map((event) => ({ ...event, label: 'agent-2.bramble.eth' }))
-  const events = buildActivity({ requests: [view()], status: other, payments: null })
+test('status labels match approval agents only under the configured ENS parent', () => {
+  const cutoffOf = (label: string, ensParent?: string) =>
+    buildActivity({
+      requests: [view()],
+      status: parseStatusEvents(fixture).map((event) => ({ ...event, label })),
+      payments: null,
+      ensParent,
+    }).find((entry) => entry.kind === 'cutoff-measured')?.cutoffMs
+  expect(cutoffOf('agent-1.bramble.eth', 'bramble.eth')).toBe(3_400)
+  expect(cutoffOf('Agent-1.Bramble.eth', 'Bramble.eth.')).toBe(3_400)
+  expect(cutoffOf('agent-1', 'bramble.eth')).toBe(3_400)
+  expect(cutoffOf('agent-1')).toBe(3_400)
+  expect(cutoffOf('agent-2.bramble.eth', 'bramble.eth')).toBeUndefined()
+  expect(cutoffOf('agent-1.foreign.eth', 'bramble.eth')).toBeUndefined()
+  expect(cutoffOf('agent-1.sub.bramble.eth', 'bramble.eth')).toBeUndefined()
+  expect(cutoffOf('agent-1.bramble.eth')).toBeUndefined()
+  const foreign = build({
+    requests: [],
+    status: parseStatusEvents(fixture).map((event) => ({ ...event, label: 'agent-1.foreign.eth' })),
+    payments: null,
+  })
+  expect(foreign.find((entry) => entry.kind === 'gateway-denied')?.agentLabel).toBe('agent-1.foreign.eth')
+  const own = build({ requests: [], status: parseStatusEvents(fixture), payments: null })
+  expect(own.find((entry) => entry.kind === 'gateway-denied')?.agentLabel).toBe('agent-1')
+})
+
+test("a foreign agent's peer drop does not measure a cut-off for the console agent", () => {
+  const events = build({
+    requests: [view()],
+    status: parseStatusEvents([
+      {
+        time: '2026-11-06T00:01:00.100Z',
+        kind: 'peer',
+        label: 'agent-1.foreign.eth',
+        message: 'dropped',
+        outcome: 'dropped',
+      },
+    ]),
+    payments: null,
+  })
   expect(events.some((entry) => entry.kind === 'cutoff-measured')).toBe(false)
-  expect(events.find((entry) => entry.kind === 'gateway-denied')?.agentLabel).toBe('agent-2')
+})
+
+test('only a missing-grant denial of the revoked service counts as the cut-off', () => {
+  const at = (ms: number) => new Date(Date.parse('2026-11-06T00:01:00.000Z') + ms).toISOString()
+  const denial = (ms: number, service: string, detail = 'no matching granted digest') => ({
+    time: at(ms),
+    kind: 'gateway',
+    label: 'agent-1.bramble.eth',
+    outcome: 'denied',
+    service,
+    message: `denied "${service}": ${detail} (agent-1.bramble.eth)`,
+  })
+  const events = build({
+    requests: [view()],
+    status: parseStatusEvents([
+      denial(100, 'never-granted'),
+      denial(200, 'web', 'unknown service'),
+      denial(300, 'web', 'local service unreachable: dial tcp'),
+      denial(400, 'web', 'ACL check failed: timeout'),
+      {
+        time: at(5_000),
+        kind: 'gateway',
+        label: 'agent-1.bramble.eth',
+        outcome: 'allowed',
+        service: 'web',
+        message: 'allowed "web": proxying to 127.0.0.1:9100 (agent-1.bramble.eth)',
+      },
+      { time: at(12_000), kind: 'peer', label: 'agent-1.bramble.eth', message: 'dropped', outcome: 'dropped' },
+    ]),
+    payments: null,
+  })
+  const cutoff = events.find((entry) => entry.kind === 'cutoff-measured')
+  expect(cutoff?.cutoffMs).toBe(12_000)
+  expect(cutoff?.detail).toContain('peer drop')
+  // An older node without the service field: the service is read from the message.
+  const legacy = { ...denial(700, 'web'), service: undefined }
+  const fromMessage = build({ requests: [view()], status: parseStatusEvents([legacy]), payments: null })
+  expect(fromMessage.find((entry) => entry.kind === 'cutoff-measured')?.cutoffMs).toBe(700)
 })
 
 test('gateway text is mapped to fixed phrases and raw error text is withheld', () => {
   const secret = 'https://sepolia.example/v2/SECRET_KEY'
-  const events = buildActivity({
+  const events = build({
     requests: [],
     status: parseStatusEvents([
       {
@@ -226,7 +301,7 @@ test('formatCutoff shows seconds with one decimal', () => {
 })
 
 test('payment entries use the mirror consensus time and link to HashScan', () => {
-  const entry = buildActivity({ requests: [], status: [], payments: paymentFeed })[0]
+  const entry = build({ requests: [], status: [], payments: paymentFeed })[0]
   expect(entry.kind).toBe('payment-settled')
   expect(entry.summary).toContain('0.010000 USDC')
   expect(entry.time).toBe('2026-11-06T00:00:30.000Z')
@@ -240,6 +315,43 @@ test('the payments fixture shape from the mirror works as a feed source input', 
     handler: async () => Response.json(paymentFeed),
   })
   expect((await source()).state).toBe('ok')
+})
+
+test('status source stops reading and cancels a body larger than 1 MB', async () => {
+  let reads = 0
+  let cancelled = false
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (++reads <= 10) controller.enqueue(new Uint8Array(400_000))
+      else controller.close()
+    },
+    cancel() {
+      cancelled = true
+    },
+  })
+  const result = await createStatusSource({
+    baseUrl: () => 'http://127.0.0.1:7899',
+    fetchImpl: (async () => new Response(body)) as unknown as typeof fetch,
+  })()
+  expect(result).toEqual({ state: 'unavailable', events: [] })
+  expect(reads).toBeLessThanOrEqual(4)
+  expect(cancelled).toBe(true)
+  let declaredCancelled = false
+  const declared = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      controller.enqueue(new Uint8Array(1))
+    },
+    cancel() {
+      declaredCancelled = true
+    },
+  })
+  const tooLong = await createStatusSource({
+    baseUrl: () => 'http://127.0.0.1:7899',
+    fetchImpl: (async () =>
+      new Response(declared, { headers: { 'content-length': '2000000' } })) as unknown as typeof fetch,
+  })()
+  expect(tooLong.state).toBe('unavailable')
+  expect(declaredCancelled).toBe(true)
 })
 
 test('status source reports not_configured, unavailable and ok', async () => {
@@ -311,6 +423,7 @@ test('GET /api/activity records revokeRequestedAt and measures the cut-off end t
     signer: chain,
     resolver: chain,
     clock,
+    ensParent: 'bramble.eth',
     activity: {
       status: createStatusSource({
         baseUrl: () => 'http://127.0.0.1:8080',

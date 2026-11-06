@@ -140,20 +140,27 @@ polls it every second. The endpoint is read-only and public like the other reads
 feed, so a missing source is visible rather than silent. Set `BRAMBLED_STATUS_URL` to the
 base URL of the gateway node's `brambled/statusapi` (for example `http://127.0.0.1:7899`, the default `-status-port`).
 The server reads only `GET /activity`, rejects redirects and URLs with credentials, and
-times out after three seconds. Without the variable the gateway source is `not_configured`.
+times out after three seconds. It stops reading and cancels any body over 1 MB. Without the
+variable the gateway source is `not_configured`.
 The payments source needs `APPROVAL_PAYMENT_AGENTS` (see below).
 
 The feed never forwards raw gateway or resolver error text, because it can contain RPC
 URLs. Known gateway detail prefixes map to fixed phrases and anything else reads
 "Details withheld from this view."
 
-**Cut-off.** The measured cut-off is the first call the gateway denied, or the first peer
-drop, for that agent at or after the approval server accepted the revoke, minus that
+**Cut-off.** The measured cut-off is the first call to the revoked service that the gateway
+denied with "no matching granted digest", or the first peer drop, for that agent at or
+after the approval server accepted the revoke, minus that
 acceptance time (`revokeRequestedAt`). The window ends if the agent is granted again. The
 two timestamps come from two machines' clocks, so the number is only as accurate as their
 agreement. Keep both on NTP and treat a very small result as possible clock
 error. No cut-off is shown until the gateway reports a block; a revoke removed outside the
-console is not measured.
+console is not measured. Other denials, such as an unknown service or a failed ACL read,
+do not count.
+
+A gateway label matches a console agent when it is that agent's bare label or
+`<label>.<APPROVAL_ENS_PARENT>`. A full name under another parent never matches, and is
+shown in full in the feed. Without `APPROVAL_ENS_PARENT`, only bare labels match.
 
 The statusapi records an admission event only when the result changes, and records a
 `peer` event once when a peer goes from authorized to unauthorized and is removed.

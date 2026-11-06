@@ -82,7 +82,9 @@ export function createApprovalApi(options: ApiOptions) {
         }
         if (path === '/api/requests' && request.method === 'GET') return json({ requests: service.list() })
         if (path === '/api/activity' && request.method === 'GET') {
-          return json(await loadActivity({ requests: service.list(), ...options.activity }))
+          return json(
+            await loadActivity({ requests: service.list(), ...options.activity, ensParent: options.ensParent })
+          )
         }
         if (path === '/api/audit' && request.method === 'GET') return json({ entries: service.auditFeed() })
         if (path === '/api/payments/settled' && request.method === 'POST') {

@@ -63,9 +63,36 @@ export interface StatusEvent {
 const MAX_ENTRIES = 100
 const SERVICE_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/
 
-// statusapi labels may be full ENS names; approval labels are single labels.
-const shortLabel = (label: string) => label.toLowerCase().split('.')[0]
-const sameAgent = (statusLabel: string, agentLabel: string) => shortLabel(statusLabel) === agentLabel
+const MAX_STATUS_BYTES = 1_000_000
+
+// statusapi labels may be full ENS names; approval labels are single labels
+// under APPROVAL_ENS_PARENT. A bare status label is read as being under that
+// parent. A full name matches only under that parent, so `agent-1.other.eth`
+// never matches the console's `agent-1`. Without a parent, full names match nothing.
+const normalParent = (parent?: string) => parent?.toLowerCase().replace(/^\.+|\.+$/g, '') || undefined
+
+/** The console's own agent label for a status label, or undefined when the label is outside the configured namespace. */
+function consoleLabel(statusLabel: string, parent?: string): string | undefined {
+  const label = statusLabel.toLowerCase()
+  if (!label.includes('.')) return label
+  const suffix = parent ? `.${parent}` : undefined
+  if (!suffix || !label.endsWith(suffix)) return undefined
+  const head = label.slice(0, -suffix.length)
+  return head && !head.includes('.') ? head : undefined
+}
+
+// The gateway reports the service in its own field; older nodes only in the message.
+function gatewayService(event: StatusEvent): string | undefined {
+  if (event.service) return event.service
+  return /^(?:allowed|denied) "([a-z][a-z0-9_-]{0,63})": /.exec(event.message)?.[1]
+}
+
+// Only a missing grant is the denial a revoke causes. "unknown service", an
+// unreachable service or a failed ACL read say nothing about the revoke.
+const isGrantDenial = (event: StatusEvent) =>
+  event.kind === 'gateway' &&
+  event.outcome === 'denied' &&
+  /^denied "(?:[^"\\]|\\.)*": no matching granted digest/.test(event.message)
 
 export function parseStatusEvents(raw: unknown): StatusEvent[] {
   if (!Array.isArray(raw)) return []
@@ -143,8 +170,11 @@ export function buildActivity(input: {
   requests: RequestView[]
   status: StatusEvent[]
   payments: PaymentsFeed | null
+  /** APPROVAL_ENS_PARENT, for example `acme.eth`. Status labels are matched to agents under it. */
+  ensParent?: string
 }): ActivityEntry[] {
   const entries: ActivityEntry[] = []
+  const parent = normalParent(input.ensParent)
 
   for (const request of input.requests) {
     const base = { source: 'approval' as const, agentLabel: request.agentLabel }
@@ -206,8 +236,10 @@ export function buildActivity(input: {
     const key = `${event.time}|${event.kind}|${event.label}|${event.message}`
     const occurrence = seen.get(key) ?? 0
     seen.set(key, occurrence + 1)
-    const base = { source: 'gateway' as const, agentLabel: shortLabel(event.label), time: event.time }
-    const id = `status:${event.time}|${event.kind}|${shortLabel(event.label)}|${fingerprint(key)}#${occurrence}`
+    // A label outside the console's namespace is shown in full, so it cannot pass for a console agent.
+    const agentLabel = consoleLabel(event.label, parent) ?? event.label.toLowerCase()
+    const base = { source: 'gateway' as const, agentLabel, time: event.time }
+    const id = `status:${event.time}|${event.kind}|${agentLabel}|${fingerprint(key)}#${occurrence}`
     const service = event.service ? `"${event.service}"` : 'a service'
     let entry: ActivityEntry
     if (event.kind === 'gateway') {
@@ -252,9 +284,10 @@ export function buildActivity(input: {
     entries.push(entry)
   }
 
-  // Cut-off: the first call the gateway blocks, or the first peer drop, after the
-  // approval service accepted the revoke. The window ends when the same agent is
-  // granted again. The two timestamps come from two machines' clocks.
+  // Cut-off: the first call to the revoked service that the gateway denies for a
+  // missing grant, or the first peer drop, after the approval service accepted the
+  // revoke. The window ends when the same agent is granted again. The two
+  // timestamps come from two machines' clocks.
   for (const request of input.requests) {
     if (request.status !== 'revoked' || !request.revokeRequestedAt || request.revokeReason === 'external') continue
     const start = Date.parse(request.revokeRequestedAt)
@@ -266,8 +299,12 @@ export function buildActivity(input: {
     let first: { entry: ActivityEntry; event: StatusEvent } | undefined
     for (const candidate of gateway) {
       const time = Date.parse(candidate.event.time)
-      const blocks = candidate.event.outcome === 'denied' || candidate.event.outcome === 'dropped'
-      if (!blocks || !sameAgent(candidate.event.label, request.agentLabel) || time < start || time >= end) continue
+      const { event } = candidate
+      const blocks =
+        (event.kind === 'peer' && event.outcome === 'dropped') ||
+        (isGrantDenial(event) && gatewayService(event) === request.service)
+      const sameAgent = consoleLabel(event.label, parent) === request.agentLabel.toLowerCase()
+      if (!blocks || !sameAgent || time < start || time >= end) continue
       if (!first || time < Date.parse(first.event.time)) first = candidate
     }
     if (!first) continue
@@ -309,6 +346,37 @@ export function buildActivity(input: {
     .map(({ entry }) => entry)
 }
 
+// Reads a body chunk by chunk and cancels it once it passes `limit` bytes, so an
+// oversized response is never buffered whole. Returns undefined past the limit.
+async function readLimited(response: Response, limit: number): Promise<string | undefined> {
+  const declared = Number(response.headers.get('content-length'))
+  if (Number.isFinite(declared) && declared > limit) {
+    await response.body?.cancel().catch(() => {})
+    return undefined
+  }
+  if (!response.body) return ''
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.byteLength
+    if (total > limit) {
+      await reader.cancel().catch(() => {})
+      return undefined
+    }
+    chunks.push(value)
+  }
+  const body = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    body.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(body)
+}
+
 export interface StatusSource {
   (): Promise<{ state: SourceState; events: StatusEvent[] }>
 }
@@ -331,9 +399,12 @@ export function createStatusSource(options: {
         redirect: 'error',
         signal: AbortSignal.timeout(options.timeoutMs ?? 3_000),
       })
-      if (!response.ok) return { state: 'unavailable', events: [] }
-      const text = await response.text()
-      if (text.length > 1_000_000) return { state: 'unavailable', events: [] }
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => {})
+        return { state: 'unavailable', events: [] }
+      }
+      const text = await readLimited(response, MAX_STATUS_BYTES)
+      if (text === undefined) return { state: 'unavailable', events: [] }
       return { state: 'ok', events: parseStatusEvents(JSON.parse(text)) }
     } catch {
       return { state: 'unavailable', events: [] }
@@ -366,6 +437,7 @@ export async function loadActivity(input: {
   requests: RequestView[]
   status?: StatusSource
   payments?: PaymentsSource
+  ensParent?: string
   now?: () => Date
 }): Promise<ActivityFeed> {
   const [status, payments] = await Promise.all([
@@ -373,7 +445,12 @@ export async function loadActivity(input: {
     input.payments ? input.payments() : { state: 'not_configured' as const, feed: null },
   ])
   return {
-    events: buildActivity({ requests: input.requests, status: status.events, payments: payments.feed }),
+    events: buildActivity({
+      requests: input.requests,
+      status: status.events,
+      payments: payments.feed,
+      ensParent: input.ensParent,
+    }),
     sources: { approval: 'ok', gateway: status.state, hedera: payments.state },
     observedAt: (input.now?.() ?? new Date()).toISOString(),
   }

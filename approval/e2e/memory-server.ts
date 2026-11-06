@@ -56,6 +56,7 @@ const makeApi = () =>
     token: () => 'browser-test-only',
     signer: chain,
     resolver: chain,
+    ensParent: 'bramble.eth',
     activity: { status, payments },
   })
 let api = makeApi()
