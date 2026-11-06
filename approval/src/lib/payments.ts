@@ -73,17 +73,36 @@ export interface SettledPayment {
   txRef: string
 }
 
-/** The credited USDC account with the largest amount, or undefined when the transfer credits nobody. */
-function usdcPayee(transfers: MirrorTransaction['token_transfers']): string | undefined {
-  let payee: string | undefined
-  let largest = 0
-  for (const transfer of transfers) {
-    if (transfer.token_id === USDC && transfer.amount > largest) {
-      largest = transfer.amount
-      payee = transfer.account
+export interface SettlementRead {
+  settled: SettledPayment[]
+  /** `txRef`s of payer transactions whose transfer shape is not a single-payee payment. */
+  unsupported: string[]
+}
+
+/** What the mirror node shows for one transaction of a payer: a payment with one payee, or a shape this module will not assert. */
+type Settlement = { payment: SettledPayment } | { unsupported: string }
+
+/**
+ * Nets every USDC transfer of the successful records that share one transaction ID. Only a plain
+ * transfer is asserted: the payer is the only account that pays, one account receives, and the
+ * received amount equals the payer's net debit. Anything else (split payees, other payers, fees
+ * taken from the amount) is reported as unsupported, never as a single-payee payment.
+ */
+function settle(payer: string, txRef: string, records: MirrorTransaction[]): Settlement | null {
+  const net = new Map<string, bigint>()
+  for (const record of records)
+    for (const transfer of record.token_transfers) {
+      if (transfer.token_id !== USDC) continue
+      if (!Number.isSafeInteger(transfer.amount)) throw new Error('unsafe amount')
+      net.set(transfer.account, (net.get(transfer.account) ?? BigInt(0)) + BigInt(transfer.amount))
     }
-  }
-  return payee
+  const spent = -(net.get(payer) ?? BigInt(0))
+  if (spent <= BigInt(0)) return null
+  const others = [...net].filter(([account, amount]) => account !== payer && amount !== BigInt(0))
+  const received = others.filter(([, amount]) => amount > BigInt(0))
+  const supported = received.length === 1 && received.length === others.length && received[0][1] === spent
+  if (!supported) return { unsupported: txRef }
+  return { payment: { payer, payee: received[0][0], asset: USDC, amountAtomic: spent.toString(), txRef } }
 }
 
 async function loadAgents(
@@ -91,8 +110,8 @@ async function loadAgents(
   configs: AgentConfig[],
   perPaymentCapAtomic: string,
   until: string
-): Promise<{ agents: AgentPayments[]; settled: SettledPayment[] }> {
-  const settled: SettledPayment[] = []
+): Promise<{ agents: AgentPayments[]; settlements: SettlementRead }> {
+  const settlements: SettlementRead = { settled: [], unsupported: [] }
   const agents = await Promise.all(
     configs.map(async (config) => {
       let next: URL | null = new URL('/api/v1/transactions', mirror)
@@ -145,8 +164,10 @@ async function loadAgents(
       }
       let spent = BigInt(0)
       const payments: Payment[] = []
+      const byTransaction = new Map<string, MirrorTransaction[]>()
       for (const tx of transactions.values()) {
         if (tx.result !== 'SUCCESS') continue
+        byTransaction.set(tx.transaction_id, [...(byTransaction.get(tx.transaction_id) ?? []), tx])
         let amount = BigInt(0)
         for (const transfer of tx.token_transfers) {
           if (transfer.token_id !== USDC || transfer.account !== config.payerAccountId) continue
@@ -162,15 +183,13 @@ async function loadAgents(
           amountAtomic: amount.toString(),
           hashscanUrl: `https://hashscan.io/testnet/transaction/${account}@${seconds}.${nanos}`,
         })
-        const payee = usdcPayee(tx.token_transfers)
-        if (payee)
-          settled.push({
-            payer: config.payerAccountId,
-            payee,
-            asset: USDC,
-            amountAtomic: amount.toString(),
-            txRef: `${account}@${seconds}.${nanos.padStart(9, '0')}`,
-          })
+      }
+      for (const [transactionId, records] of byTransaction) {
+        const [account, seconds, nanos] = transactionId.split('-')
+        const result = settle(config.payerAccountId, `${account}@${seconds}.${nanos.padStart(9, '0')}`, records)
+        if (!result) continue
+        if ('payment' in result) settlements.settled.push(result.payment)
+        else settlements.unsupported.push(result.unsupported)
       }
       payments.sort((a, b) => (timestamp(a.consensusTimestamp) > timestamp(b.consensusTimestamp) ? -1 : 1))
       const remaining = BigInt(config.budgetAtomic) - spent
@@ -186,7 +205,7 @@ async function loadAgents(
       }
     })
   )
-  return { agents, settled }
+  return { agents, settlements }
 }
 
 /**
@@ -197,13 +216,13 @@ async function loadAgents(
 export function createSettlementSource(options: {
   config: () => string | undefined
   mirrorUrl?: string
-}): () => Promise<SettledPayment[]> {
+}): () => Promise<SettlementRead> {
   const mirror = new URL(options.mirrorUrl ?? MIRROR_URL)
   return async () => {
     const configs = parseConfig(options.config())
     const until = `${Math.floor(Date.now() / 1000)}.999999999`
     if (configs.some((config) => timestamp(config.since) > timestamp(until))) throw new Error('future window')
-    return (await loadAgents(mirror, configs, '0', until)).settled
+    return (await loadAgents(mirror, configs, '0', until)).settlements
   }
 }
 

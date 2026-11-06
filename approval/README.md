@@ -146,8 +146,10 @@ field, no error text from Hedera, and no secret. A `failed` row is not retried.
 
 - `audit_event_unavailable`: the signer returned no `serviceDigest` (ADR 0005), or the revoke
   has no matching request. The service never posts a plaintext service name instead. The real
-  signer (`chain.ts`) returns the `0x`-prefixed digest the grant wrote, including when the grant
-  is confirmed after a reconciliation retry or a later poll. A restart loses the request-to-digest
+  signer (`chain.ts`) computes the `0x`-prefixed digest once, before it submits, from public keys and
+  a granter key it reads once and pins for that grant. It returns that same digest when the grant is
+  confirmed after a reconciliation retry or a later poll, so unreadable ENS or a changed key after
+  submission cannot change or lose it. A restart loses the request-to-digest
   link, so a revoke of a grant made before the restart has no request and posts nothing.
 - `audit_not_configured`: no HCS trail is set. Decisions still succeed.
 - A repeated payment report with the same `txRef` returns the first row and posts nothing.
@@ -156,8 +158,11 @@ field, no error text from Hedera, and no secret. A `failed` row is not retried.
 Payments settle in the sidecar, which does not call this service. When
 `APPROVAL_PAYMENT_AGENTS` is set, the service polls the Hedera testnet mirror node every 30 seconds
 (the same configuration and window as `GET /api/payments`) and posts one commitment for each
-successful outgoing USDC payment of a configured payer. The payee is the account credited the most
-in that transfer. The first poll starts with the first request to the API route and covers the whole
+successful outgoing USDC transaction of a configured payer. Records that share a transaction ID are
+netted into one payment. Only a plain transfer is committed: the payer is the only account that
+pays, exactly one account receives, and it receives the payer's whole net debit. A transaction
+with split payees, another payer, or a received amount that differs from the debit is not
+committed; it appears once as a `failed` payment row with `audit_event_unavailable`. The first poll starts with the first request to the API route and covers the whole
 `since` window; a poll that finds the mirror unavailable or incomplete posts nothing and retries.
 Replays are dropped by `txRef` in memory, so a restart posts the window's payments again. Set
 `since` to the start of the demo.

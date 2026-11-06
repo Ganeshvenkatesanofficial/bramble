@@ -122,30 +122,36 @@ export function createChainAdapters(config: ChainConfig): ChainAdapters {
     signer: {
       async grant(input: Pick<RequestInput, 'agentLabel' | 'gatewayLabel' | 'service'>) {
         const tracked = track()
-        const deps = { resolver, signer: tracked.signer, tailnetName }
+        // Pubkey reads and the granter key are pinned for this grant, so the digest computed here
+        // is exactly the one grantAcl writes and a later read of changed state cannot alter it.
+        const pubkeys = new Map<string, Promise<string | null>>()
+        const pinned: Resolver = {
+          getText(name, key) {
+            if (key !== 'pubkey') return resolver.getText(name, key)
+            const id = `${name}|${key}`
+            if (!pubkeys.has(id)) pubkeys.set(id, resolver.getText(name, key))
+            return pubkeys.get(id)!
+          },
+        }
+        let granterKey: Promise<string> | undefined
+        const deps = { resolver: pinned, signer: tracked.signer, tailnetName }
         const params = {
           deviceLabel: input.agentLabel,
           gatewayLabel: input.gatewayLabel,
           granterLabel: config.granterLabel,
           serviceNames: [input.service],
-          loadGranterKey: config.loadGranterKey,
+          loadGranterKey: () => (granterKey ??= config.loadGranterKey()),
         }
+        const { digests } = await computeGrantDigests(deps, params)
+        const serviceDigest = digests[0] ? withPrefix(digests[0]) : undefined
         try {
           const change = await grantAcl(deps, params)
           if (!change.txHash) throw new Error('grant produced no transaction')
-          return {
-            transactionHash: change.txHash,
-            ...(change.digests[0] ? { serviceDigest: withPrefix(change.digests[0]) } : {}),
-          }
+          return { transactionHash: change.txHash, ...(serviceDigest ? { serviceDigest } : {}) }
         } catch (error) {
           const hash = tracked.submittedHash()
           if (!hash) throw error
-          // The failure came after submission, so the digest the write carried is recomputed.
-          const digest = await computeGrantDigests(deps, params).then(
-            (computed) => computed.digests[0],
-            () => undefined
-          )
-          return settleAfterFailure('grant', hash, error, digest ? withPrefix(digest) : undefined)
+          return settleAfterFailure('grant', hash, error, serviceDigest)
         }
       },
 

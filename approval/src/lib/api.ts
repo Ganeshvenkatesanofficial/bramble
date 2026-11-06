@@ -16,7 +16,7 @@ interface ApiOptions {
    * Settled payments this process observes itself, for example from the mirror node. Each is
    * polled and recorded once per `txRef`; nothing here is believed on a caller's word.
    */
-  settlements?: () => Promise<PaymentInput[]>
+  settlements?: () => Promise<{ settled: PaymentInput[]; unsupported?: string[] }>
   /** Delay between settlement polls. Defaults to 30 seconds. */
   settlementPollMs?: number
   token: () => string | undefined
@@ -37,13 +37,15 @@ export function createApprovalApi(options: ApiOptions) {
   const observeSettlements = async () => {
     if (!options.settlements) return
     try {
-      for (const payment of await options.settlements()) {
+      const { settled, unsupported = [] } = await options.settlements()
+      for (const payment of settled) {
         try {
           service.recordPayment(parsePayment({ ...payment }))
         } catch {
           // A malformed row is not recorded.
         }
       }
+      for (const txRef of unsupported) service.recordUnsupportedPayment(txRef)
     } catch {
       // The source is unavailable.
     }

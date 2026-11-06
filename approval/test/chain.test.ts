@@ -47,11 +47,15 @@ function memoryEns() {
     /** Receipt lookups that report "not mined yet" before the real status shows. */
     receiptLag: 0,
     keyLoads: 0,
+    /** Runs right after a write is submitted, to change the world the write was computed from. */
+    afterSubmit: undefined as (() => void) | undefined,
+    failReads: false,
     granterKey: granter.priv,
   }
 
   const resolver: Resolver = {
     async getText(name, key) {
+      if (state.failReads) throw new Error('rpc unavailable')
       if (key === 'acl' && state.stale && writes.length > state.stale.afterWrites) return state.stale.value
       const value = records.get(`${name}|${key}`)
       return value ? value : null
@@ -64,6 +68,7 @@ function memoryEns() {
       const behavior = state.wait
       receipts.set(hash, behavior === 'revert' ? 'reverted' : 'success')
       if (behavior !== 'revert') records.set(`${name}|${key}`, value)
+      state.afterSubmit?.()
       return {
         hash,
         async wait() {
@@ -528,5 +533,30 @@ describe('commitments from the real chain adapter', () => {
     await reverted.api.audit.idle()
     expect(reverted.topic.submitted).toEqual([])
     expect(await reverted.feed()).toEqual([])
+  })
+
+  test('the digest is the one the write carried even when ENS reads fail or keys change after submission', async () => {
+    const unreadable = audited()
+    unreadable.chain.state.wait = 'fail-but-landed'
+    unreadable.chain.state.afterSubmit = () => {
+      unreadable.chain.state.failReads = true
+    }
+    expect((await unreadable.approve()).response.status).toBe(200)
+    await unreadable.api.audit.idle()
+    const [entry] = await unreadable.feed()
+    expect(entry).toMatchObject({ kind: 'grant', status: 'posted' })
+    expect(unreadable.api.audit.opening(entry.id as string)!.event).toMatchObject({ serviceDigest: unreadable.digest })
+
+    const rekeyed = audited()
+    rekeyed.chain.state.wait = 'fail-but-landed'
+    rekeyed.chain.state.afterSubmit = () => {
+      rekeyed.chain.records.set(`agent-1.${TAILNET}|pubkey`, identity().pub)
+    }
+    await rekeyed.approve()
+    await rekeyed.api.audit.idle()
+    const [rekeyedEntry] = await rekeyed.feed()
+    expect(rekeyed.api.audit.opening(rekeyedEntry.id as string)!.event).toMatchObject({ serviceDigest: rekeyed.digest })
+    const written = rekeyed.chain.writes[0].value
+    expect(written).toContain(rekeyed.chain.digest)
   })
 })

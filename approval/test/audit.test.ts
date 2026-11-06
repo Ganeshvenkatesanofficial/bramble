@@ -227,7 +227,10 @@ test('settlements the process observes post one commitment each and are not post
     settlements: async () => {
       polls += 1
       // The mirror feed lists every settled payment in the window on each poll.
-      return [...sources, { ...payment, payee: 'not-an-account', txRef: '0.0.1001@1700000002.000000002' }]
+      return {
+        settled: [...sources, { ...payment, payee: 'not-an-account', txRef: '0.0.1001@1700000002.000000002' }],
+        unsupported: ['0.0.1001@1700000003.000000003'],
+      }
     },
     settlementPollMs: 10_000,
   })
@@ -239,6 +242,10 @@ test('settlements the process observes post one commitment each and are not post
   await api.audit.idle()
   expect(polls).toBe(3)
   expect(topic.submitted.map((bytes) => parseMessage(bytes)!.kind)).toEqual(['payment', 'payment'])
+  // An unsupported transfer shape is one failed row, polled three times, and never committed.
+  expect(await api.audit.list().filter((entry) => entry.status === 'failed')).toMatchObject([
+    { kind: 'payment', error: 'audit_event_unavailable' },
+  ])
   // A payment also reported through the endpoint is the same event.
   const reported = await api.handle(
     new Request('http://localhost/api/payments/settled', {
@@ -262,7 +269,7 @@ test('an unavailable settlement source posts nothing and the next poll retries',
     auditTrail: new HcsAuditTrail({ client: topic, topicId: '0.0.9000' }),
     settlements: async () => {
       if (!up) throw new Error('mirror down')
-      return [payment]
+      return { settled: [payment] }
     },
     settlementPollMs: 10_000,
   })
