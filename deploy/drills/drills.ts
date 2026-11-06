@@ -25,6 +25,14 @@ const PRIVATE_KEY = `0x${'5e'.repeat(32)}`
 const TAILNET = 'mesh.eth'
 
 let failures = 0
+// Everything the operator, the agent or the service log showed during the current drill.
+let outputs: string[] = []
+
+/** Records `text` as shown to someone, so the drill's final non-leak check covers it. */
+function shown<T extends string>(text: T): T {
+  outputs.push(text)
+  return text
+}
 
 function check(label: string, ok: boolean, shown?: string) {
   console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${label}`)
@@ -48,7 +56,7 @@ function call(api: ReturnType<typeof createApprovalApi>, path: string, method = 
 }
 
 async function read(response: Response) {
-  const text = await response.text()
+  const text = shown(await response.text())
   return { status: response.status, text, body: JSON.parse(text) as Record<string, unknown> }
 }
 
@@ -63,7 +71,8 @@ async function captureLog<T>(action: () => Promise<T>): Promise<{ value: T; log:
   const lines: string[] = []
   console.error = (...args: unknown[]) => lines.push(args.map(String).join(' '))
   try {
-    return { value: await action(), log: lines.join('\n') }
+    const value = await action()
+    return { value, log: shown(lines.join('\n')) }
   } finally {
     console.error = original
   }
@@ -126,13 +135,46 @@ async function relayDown() {
   }
   const relayCheck = async () => {
     const unit = buildChecks(ctx).find((u) => u.id === 'relay')!
-    return formatReport(await runPreflight([unit], { waitMs: 0, intervalMs: 0 }))
+    return shown(formatReport(await runPreflight([unit], { waitMs: 0, intervalMs: 0 })))
   }
-  const noAddress = (text: string) => clean(text, [...addresses, sidecarUrl, '127.0.0.1'])
+
+  // The console reads gateway status from the gateway's own statusapi (BRAMBLED_STATUS_URL), not
+  // from a relay. It runs as its own server here, so a relay outage and a status outage stay apart.
+  const gatewayEvent = {
+    time: new Date().toISOString(),
+    kind: 'gateway',
+    label: 'agent-1',
+    service: 'web',
+    outcome: 'allowed',
+    message: 'allowed "web": proxying to 127.0.0.1:8080 (agent-1)',
+  }
+  const statusApp = { hostname: '127.0.0.1', fetch: () => Response.json([gatewayEvent]) }
+  let statusServer = Bun.serve({ ...statusApp, port: 0 })
+  const statusPort = statusServer.port
+  const statusUrl = `http://127.0.0.1:${statusPort}`
+  const status = createStatusSource({ baseUrl: () => statusUrl, timeoutMs: 1000 })
+  const api = createApprovalApi({ token: () => TOKEN, activity: { status } })
+  const consoleView = async () => {
+    const activity = await read(await call(api, '/activity'))
+    const sources = activity.body.sources as Record<string, string>
+    return {
+      ...activity,
+      gateway: sources?.gateway,
+      line: `HTTP ${activity.status} sources=${JSON.stringify(sources)}`,
+    }
+  }
+  const noAddress = (text: string) => clean(text, [...addresses, sidecarUrl, statusUrl, '127.0.0.1'])
 
   try {
     let report = await relayCheck()
     check('baseline: both relays up, preflight passes', report.startsWith('PASS'), report.split('\n')[0])
+    let view = await consoleView()
+    check(
+      'baseline: console reads gateway status as ok, with its allowed call',
+      view.status === 200 && view.gateway === 'ok' && view.text.includes('Gateway allowed a call to'),
+      view.line
+    )
+    check('console activity leaks no address or URL', noAddress(view.text))
 
     await close(relays[1])
     report = await relayCheck()
@@ -153,31 +195,52 @@ async function relayDown() {
     check('failure leaks no address, URL or secret', noAddress(report))
 
     sidecar.stop(true)
-    const status = createStatusSource({ baseUrl: () => sidecarUrl, timeoutMs: 1000 })
-    const api = createApprovalApi({ token: () => TOKEN, activity: { status } })
-    const activity = await read(await call(api, '/activity'))
+    report = await relayCheck()
+    check('relays and payment sidecar down: preflight still fails', report.startsWith('FAIL'), report.split('\n')[0])
+    // The console has no relay view. It must keep working and not blame the gateway status source.
+    view = await consoleView()
     check(
-      'console activity: gateway status reads as unavailable, not an error page',
-      activity.status === 200 && activity.text.includes('"unavailable"'),
-      `HTTP ${activity.status} ${activity.text.slice(0, 160)}`
+      'relay outage: console keeps answering and still reads gateway status as ok',
+      view.status === 200 && view.gateway === 'ok',
+      view.line
     )
-    check('console activity leaks no address or URL', noAddress(activity.text))
+    check('console activity during the relay outage leaks no address or URL', noAddress(view.text))
+
+    // A separate failure: the gateway's statusapi itself stops answering.
+    statusServer.stop(true)
+    view = await consoleView()
+    check(
+      'gateway status outage: console marks only the gateway source unavailable, not an error page',
+      view.status === 200 &&
+        view.gateway === 'unavailable' &&
+        (view.body.sources as Record<string, string>).approval === 'ok',
+      view.line
+    )
+    check('console activity during the status outage leaks no address or URL', noAddress(view.text))
 
     for (const [index, port] of ports.entries()) {
       relays[index] = createServer((socket) => socket.end())
       await new Promise<void>((resolve) => relays[index].listen(port, '127.0.0.1', () => resolve()))
     }
     const restored = Bun.serve({ hostname: '127.0.0.1', port: sidecarPort, fetch: () => Response.json({ ok: true }) })
+    statusServer = Bun.serve({ ...statusApp, port: statusPort })
     report = await relayCheck()
     check(
       'recovery: relays back on the same ports, preflight passes again',
       report.startsWith('PASS'),
       report.split('\n')[0]
     )
+    view = await consoleView()
+    check(
+      'recovery: statusapi back on the same port, console reads gateway status as ok again',
+      view.status === 200 && view.gateway === 'ok' && view.text.includes('Gateway allowed a call to'),
+      view.line
+    )
     restored.stop(true)
   } finally {
     await Promise.all(relays.map((relay) => (relay.listening ? close(relay) : Promise.resolve())))
     sidecar.stop(true)
+    statusServer.stop(true)
   }
 }
 
@@ -188,7 +251,7 @@ async function approvalTimeout() {
   const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: (request) => api.handle(request) })
   try {
     const tools = createTools(agentConfig(server.url.origin, 1000))
-    const first = await tools.requestPrivateAccess({ service: 'web', reason: 'drill' })
+    const first = shown(await tools.requestPrivateAccess({ service: 'web', reason: 'drill' }))
     check(
       'agent: no decision in time returns a clear pending message',
       first.startsWith('pending: no decision after 1s'),
@@ -198,8 +261,8 @@ async function approvalTimeout() {
 
     const pending = (await read(await call(api, '/requests'))).body.requests as Array<{ id: string; status: string }>
     check('console: exactly one pending card for the request', pending.length === 1 && pending[0].status === 'pending')
-    await call(api, `/requests/${pending[0].id}/approve`, 'POST')
-    const second = await tools.requestPrivateAccess({ service: 'web', reason: 'drill' })
+    await read(await call(api, `/requests/${pending[0].id}/approve`, 'POST'))
+    const second = shown(await tools.requestPrivateAccess({ service: 'web', reason: 'drill' }))
     check(
       'recovery: asking again waits on the same request and reports the grant',
       second.startsWith('granted:'),
@@ -308,7 +371,10 @@ async function expiredGrant() {
       `status=${card.status} expiryStatus=${card.expiryStatus}`
     )
     check('service log for the failed revoke leaks no secret', clean(log), log || '(nothing logged)')
-    check('console card carries no signer diagnostic', !JSON.stringify(card).includes('adapter diagnostic'))
+    check(
+      'console card carries no secret and no signer diagnostic',
+      clean(JSON.stringify(card), ['adapter diagnostic'])
+    )
 
     chain.failRevoke = false
     await clock.advance(5000)
@@ -320,7 +386,7 @@ async function expiredGrant() {
     )
 
     const tools = createTools(agentConfig(server.url.origin, 1000))
-    const agentView = await tools.requestPrivateAccess({ service: 'web', reason: 'after expiry' })
+    const agentView = shown(await tools.requestPrivateAccess({ service: 'web', reason: 'after expiry' }))
     check(
       'agent: a new request after expiry waits for a human instead of reusing the old grant',
       agentView.startsWith('pending:'),
@@ -384,8 +450,10 @@ async function wrongTailnet() {
     granterRingPresent: false,
   }
   const sidecarCheck = async () =>
-    formatReport(
-      await runPreflight([buildChecks(ctx).find((u) => u.id === 'sidecar:gateway')!], { waitMs: 0, intervalMs: 0 })
+    shown(
+      formatReport(
+        await runPreflight([buildChecks(ctx).find((u) => u.id === 'sidecar:gateway')!], { waitMs: 0, intervalMs: 0 })
+      )
     )
   let report = await sidecarCheck()
   check(
@@ -407,14 +475,21 @@ const DRILLS: Record<string, () => Promise<void>> = {
 }
 
 const names = process.argv.slice(2)
-const unknown = names.filter((name) => !(name in DRILLS))
+const unknown = names.filter((name) => !Object.hasOwn(DRILLS, name))
 if (unknown.length > 0) {
   console.error(`unknown drill: ${unknown.join(', ')}. Choose from: ${Object.keys(DRILLS).join(', ')}`)
   process.exit(2)
 }
 for (const name of names.length > 0 ? names : Object.keys(DRILLS)) {
   console.log(`\n== ${name}`)
+  outputs = []
   await DRILLS[name]()
+  const leaking = outputs.filter((text) => !clean(text)).length
+  check(
+    `every output shown in this drill (${outputs.length} API answers, agent messages, reports and logs) holds no token, RPC URL, credential or key`,
+    leaking === 0,
+    leaking === 0 ? undefined : `${leaking} output(s) leak`
+  )
 }
 console.log(failures === 0 ? '\nall drills passed' : `\n${failures} check(s) failed`)
 process.exit(failures === 0 ? 0 : 1)
