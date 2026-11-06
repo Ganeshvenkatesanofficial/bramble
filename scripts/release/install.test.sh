@@ -31,6 +31,7 @@ cat > "$work/stub/bramble" <<'EOF'
 [ "$1" = up ] || { echo "usage: bramble up ..." >&2; exit 2; }
 d="${BRAMBLE_HOME:?}"
 mkdir -p "$d"
+printf '%s\n' "$*" > "$d/start-args"
 echo $$ > "$d/bramble.pid"
 echo "http://127.0.0.1:7777/" > "$d/ui.url"
 while :; do sleep 1; done
@@ -153,6 +154,22 @@ for sh in "${shells[@]}"; do
   HOME="$work" BRAMBLE_HOME="$home" $sh "$here/uninstall.sh" --yes >/dev/null 2>&1; rc=$?
   if [ "$rc" -eq 0 ] && [ ! -e "$home" ]; then ok "$sh: full uninstall after keep-data removes remaining installation"; else bad "$sh: full uninstall after keep-data failed"; fi
 done
+
+# TUN startup follows the capability result; these fixtures never call real sudo.
+if [ "$os" = linux ]; then
+  mkdir -p "$work/fake-cap"
+  printf '#!/bin/sh\nexec "$@"\n' > "$work/fake-cap/sudo"
+  printf '#!/bin/sh\nexit "${FAKE_CAP_EXIT:-0}"\n' > "$work/fake-cap/setcap"
+  chmod +x "$work/fake-cap/sudo" "$work/fake-cap/setcap"
+  for cap_exit in 0 1; do
+    home="$work/tun-$cap_exit"
+    PATH="$work/fake-cap:$PATH" FAKE_CAP_EXIT="$cap_exit" run_install sh "$home" --tun >/dev/null 2>&1
+    daemon_pids+=("$(cat "$home/bramble.pid")")
+    expected='up -open=false'
+    [ "$cap_exit" -ne 0 ] || expected="$expected -tun"
+    if [ "$(cat "$home/start-args")" = "$expected" ]; then ok "TUN capability result $cap_exit selects correct startup mode"; else bad "TUN capability result $cap_exit selects wrong startup mode"; fi
+  done
+fi
 
 # Every alias of the user's home is protected, including physical symlinks.
 for suffix in / // /. /child/..; do

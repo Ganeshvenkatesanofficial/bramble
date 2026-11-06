@@ -24,6 +24,7 @@ BIN_DIR="$HOME_DIR/bin"
 NO_START="${BRAMBLE_NO_START:-0}"
 NO_OPEN="${BRAMBLE_NO_OPEN:-0}"
 WANT_TUN="${BRAMBLE_INSTALL_TUN:-0}"
+USE_TUN=0
 
 say() { printf '%s\n' "$*"; }
 warn() { printf 'bramble install: %s\n' "$*" >&2; }
@@ -183,7 +184,7 @@ if [ "$WANT_TUN" = 1 ]; then
     say ""
     say "Granting cap_net_admin to $CAP_TARGET so it can create the WireGuard interface bramble0."
     say "This is the only step that uses sudo; it changes that one file and nothing else."
-    if sudo setcap cap_net_admin+ep "$CAP_TARGET"; then say "Capability granted."; else warn "setcap failed; keeping the user-space network stack"; fi
+    if sudo setcap cap_net_admin+ep "$CAP_TARGET"; then USE_TUN=1; say "Capability granted."; else warn "setcap failed; keeping the user-space network stack"; fi
   fi
 fi
 
@@ -198,7 +199,9 @@ if [ "$NO_START" = 1 ]; then
   say "Installed. Start it with: $BIN_DIR/bramble up"
 else
   rm -f "$HOME_DIR/ui.url"
-  BRAMBLE_HOME="$HOME_DIR" nohup "$BIN_DIR/bramble" up -open=false > "$HOME_DIR/logs/bramble.out" 2>&1 < /dev/null &
+  set -- up -open=false
+  [ "$USE_TUN" = 0 ] || set -- "$@" -tun
+  BRAMBLE_HOME="$HOME_DIR" nohup "$BIN_DIR/bramble" "$@" > "$HOME_DIR/logs/bramble.out" 2>&1 < /dev/null &
   BPID=$!
   say ""
   say "Starting bramble (pid $BPID)..."
