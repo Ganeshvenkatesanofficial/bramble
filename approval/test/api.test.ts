@@ -260,3 +260,27 @@ test('an externally revoked grant cannot leave a stale timer that revokes a late
   expect(retired.status).toBe('revoked')
   expect(retired.revokeReason).toBe('external')
 })
+
+test('public identity reads expose only resolved facts and fail closed when resolution is unavailable', async () => {
+  const chain = new MemoryChain()
+  const api = createApprovalApi({ token: () => token, resolver: chain })
+  const response = await api.handle(request('/identities/agent-1'))
+  expect(response.status).toBe(200)
+  expect(await response.json()).toEqual({
+    identity: {
+      label: 'agent-1',
+      pubkeyPublished: true,
+      revoked: false,
+      expiry: 4102444800,
+    },
+  })
+  expect(await (await api.handle(request('/identities/unknown'))).json()).toEqual({ identity: null })
+  const unavailable = createApprovalApi({ token: () => token })
+  expect((await unavailable.handle(request('/identities/agent-1'))).status).toBe(503)
+  chain.resolveIdentity = async () => {
+    throw new Error('private upstream diagnostic')
+  }
+  const failure = await api.handle(request('/identities/agent-1'))
+  expect(failure.status).toBe(502)
+  expect(await failure.text()).not.toContain('private upstream')
+})

@@ -132,11 +132,11 @@ test('a duration expiry posts one revoke commitment and a failed signer revoke p
 
 test('a settled payment posts one commitment; a replay of the same transaction posts none', async () => {
   const { topic, api, call, feed } = setup()
-  const first = await call('/payments', 'POST', payment)
+  const first = await call('/payments/settled', 'POST', payment)
   expect(first.status).toBe(202)
-  const replay = await call('/payments', 'POST', payment)
+  const replay = await call('/payments/settled', 'POST', payment)
   expect((await replay.json()).id).toBe((await first.json()).id)
-  await call('/payments', 'POST', { ...payment, txRef: '0.0.1001@1700000001.000000001' })
+  await call('/payments/settled', 'POST', { ...payment, txRef: '0.0.1001@1700000001.000000001' })
   await api.audit.idle()
   expect(topic.submitted).toHaveLength(2)
   const [entry] = await feed()
@@ -153,7 +153,7 @@ test('a settled payment posts one commitment; a replay of the same transaction p
 test('payment reports need the token and a well-formed body, and post nothing otherwise', async () => {
   const { topic, api, call } = setup()
   const anonymous = await api.handle(
-    new Request('http://localhost/api/payments', {
+    new Request('http://localhost/api/payments/settled', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payment),
@@ -169,7 +169,7 @@ test('payment reports need the token and a well-formed body, and post nothing ot
     { ...payment, extra: 'field' },
     { payer: payment.payer },
   ])
-    expect((await call('/payments', 'POST', bad)).status).toBe(400)
+    expect((await call('/payments/settled', 'POST', bad)).status).toBe(400)
   await api.audit.idle()
   expect(topic.submitted).toEqual([])
 })

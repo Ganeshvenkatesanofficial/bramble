@@ -8,11 +8,11 @@ Bramble posts one message to a Hedera Consensus Service (HCS) topic for each gra
 
 The message is UTF-8 JSON with exactly three keys. It is at most 95 bytes, well under the HCS single-message limit of 1024 bytes.
 
-| Key    | Type    | Meaning                                                                    |
-| ------ | ------- | -------------------------------------------------------------------------- |
-| `v`    | integer | Format version. Always `1`.                                                |
-| `kind` | string  | `grant`, `revoke` or `payment`.                                            |
-| `c`    | string  | Commitment: 64 lowercase hex characters (HMAC-SHA256, see below).          |
+| Key    | Type    | Meaning                                                           |
+| ------ | ------- | ----------------------------------------------------------------- |
+| `v`    | integer | Format version. Always `1`.                                       |
+| `kind` | string  | `grant`, `revoke` or `payment`.                                   |
+| `c`    | string  | Commitment: 64 lowercase hex characters (HMAC-SHA256, see below). |
 
 Example:
 
@@ -26,20 +26,20 @@ A reader treats any message that does not match this shape exactly (extra keys, 
 
 All field values are strings. Every field of an event is required. An event with a missing, empty or extra field is rejected before anything is posted.
 
-| Kind      | Field           | Meaning                                                              |
-| --------- | --------------- | -------------------------------------------------------------------- |
-| `grant`   | `subject`       | ENS name of the agent or device that receives the grant              |
-|           | `serviceDigest` | `0x`-prefixed ACL digest of the service (ADR 0005), never a name     |
-|           | `expiresAt`     | Expiry, decimal Unix seconds                                         |
-|           | `txRef`         | Hash of the Sepolia transaction that wrote the grant                 |
-| `revoke`  | `subject`       | ENS name whose grant ends                                            |
-|           | `serviceDigest` | ACL digest of the service                                            |
-|           | `txRef`         | Hash of the Sepolia transaction that removed the grant               |
-| `payment` | `payer`         | Hedera account ID of the payer                                       |
-|           | `payee`         | Hedera account ID of the payee                                       |
-|           | `asset`         | Hedera token ID                                                      |
-|           | `amountAtomic`  | Amount in atomic units, decimal                                      |
-|           | `txRef`         | Hedera transaction ID of the payment                                 |
+| Kind      | Field           | Meaning                                                          |
+| --------- | --------------- | ---------------------------------------------------------------- |
+| `grant`   | `subject`       | ENS name of the agent or device that receives the grant          |
+|           | `serviceDigest` | `0x`-prefixed ACL digest of the service (ADR 0005), never a name |
+|           | `expiresAt`     | Expiry, decimal Unix seconds                                     |
+|           | `txRef`         | Hash of the Sepolia transaction that wrote the grant             |
+| `revoke`  | `subject`       | ENS name whose grant ends                                        |
+|           | `serviceDigest` | ACL digest of the service                                        |
+|           | `txRef`         | Hash of the Sepolia transaction that removed the grant           |
+| `payment` | `payer`         | Hedera account ID of the payer                                   |
+|           | `payee`         | Hedera account ID of the payee                                   |
+|           | `asset`         | Hedera token ID                                                  |
+|           | `amountAtomic`  | Amount in atomic units, decimal                                  |
+|           | `txRef`         | Hedera transaction ID of the payment                             |
 
 ## Commitment
 
@@ -57,7 +57,11 @@ Length prefixes make the encoding unambiguous: moving bytes from one field into 
 The operator that posts a commitment keeps the **opening**: the event and the salt. The opening is never posted.
 
 ```json
-{ "v": 1, "event": { "kind": "revoke", "subject": "…", "serviceDigest": "0x…", "txRef": "0x…" }, "salt": "64 hex characters" }
+{
+  "v": 1,
+  "event": { "kind": "revoke", "subject": "…", "serviceDigest": "0x…", "txRef": "0x…" },
+  "salt": "64 hex characters"
+}
 ```
 
 To verify, a reader recomputes `c` from the opening and compares it with the posted `c` in constant time. A matching opening proves that the posted entry commits to exactly that event and salt. It does not prove that the asserted grant or payment really happened: the operator chose the event, so check the referenced `txRef` on its own chain. Without the opening, the encoded fields (subject, service digest, amounts, references) stay computationally hidden, because the salt is a fresh secret random value. The metadata in the next section stays public.
@@ -79,13 +83,13 @@ To verify, a reader recomputes `c` from the opening and compares it with the pos
 
 `approval/` posts these events (ticket ETH-48). Each row names the event field and its source.
 
-| Event field                  | Source in the approval service                                                                              |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `grant.subject`, `revoke.subject` | The agent label, or `<label>.<APPROVAL_ENS_PARENT>` when that variable is set                          |
-| `serviceDigest`              | `serviceDigest` on the signer's grant receipt (ADR 0005). The request's plaintext `service` is never posted |
-| `grant.expiresAt`            | Unix seconds of the request's `expiresAt`; `0` when the request has no duration                              |
-| `grant.txRef`, `revoke.txRef` | `transactionHash` of the signer's confirmed receipt                                                        |
-| `payment.*`                  | The body of `POST /api/payments`                                                                             |
+| Event field                       | Source in the approval service                                                                              |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `grant.subject`, `revoke.subject` | The agent label, or `<label>.<APPROVAL_ENS_PARENT>` when that variable is set                               |
+| `serviceDigest`                   | `serviceDigest` on the signer's grant receipt (ADR 0005). The request's plaintext `service` is never posted |
+| `grant.expiresAt`                 | Unix seconds of the request's `expiresAt`; `0` when the request has no duration                             |
+| `grant.txRef`, `revoke.txRef`     | `transactionHash` of the signer's confirmed receipt                                                         |
+| `payment.*`                       | The body of `POST /api/payments/settled`                                                                    |
 
 One event key gets one commitment: `grant` and `revoke` per request, `payment` per `txRef`. The service posts
 nothing when the signer fails, and it posts nothing for a grant retired by an external revoke, because no
