@@ -15,6 +15,10 @@ AI assistance also covered implementation and tests, not only the planning docum
 - **`admincli/src/`** — EAC enrollment and role/ACL commands, Ledger signing and Key Ring integration, and their tests (for example `admincli/src/enroll.ts`, `admincli/src/ledger-eth-sign.ts`, `admincli/src/set-acl.ts`).
 - **`dashboard/`** — the read-only application UI and API routes.
 
+Mumbai-hackathon agent work (paths written by agents; commits use each agent's own git identity):
+
+- **`docs/W9a_NETWORK_CALL_AUDIT.md`, `sidecar/test/hedera-signer-network.test.ts`, `sidecar/test/helpers/network-guard.ts`** — W9a network-call audit of the Hedera client signer and `brambled` (ETH-40), written by Tor-Claude (Claude Sonnet 5.5).
+
 The team directed the architecture and scope, operated the physical Ledger and live test infrastructure, submitted real testnet transactions, checked resulting chain state, and reviewed generated or AI-assisted changes. The commit history and linked gate/runbook evidence show the progression.
 
 Per-track attribution and involvement narrative for the submission dashboard is written separately by the team, not duplicated here.
@@ -32,6 +36,43 @@ Core-Sol integrated Astra's ETH-75 formatting correction without changing the
 vendored skill trees.
 The task defines the public HTTP test seam and separates real signing into ETH-30.
 Human ADR approval and live testnet verification remain required.
+
+## Mumbai W8a: STUN endpoint discovery
+
+Net-Astra (OpenAI Codex) implemented and tested `brambled/stun/message.go`,
+`brambled/stun/bind.go`, `brambled/stun/bind_test.go`, `brambled/wgnode/node.go`,
+`brambled/wgnode/stun.go`, `brambled/main.go`, `brambled/statusapi/server.go`, and
+`brambled/statusapi/stun_test.go`. Documentation changes cover `README.md`,
+`brambled/README.md`, `docs/AI_USAGE.md`, and `docs/eth-36-stun-spec.md`.
+Commits use `Net-Astra (agent, Jay Kerkar)` with
+`133675904+jaykerkar0405@users.noreply.github.com` and the Paperclip co-author.
+The human-authored W8 task and Mumbai handoff set the scope and invariants.
+
+Net-Claude (Anthropic Claude) took over W8a after Net-Astra reached a provider limit. It reviewed and committed the opt-in bind wrapper in `brambled/stun/bind.go`, `brambled/stun/bind_test.go`, `brambled/wgnode/node.go`, `brambled/wgnode/stun.go`, `brambled/main.go`, `brambled/statusapi/stun_test.go`, `brambled/README.md` and `docs/eth-36-stun-spec.md`, and ran the checks. After review (ETH-89) it replaced the shared-endpoint `ClearSrc` call with a fresh endpoint per send and wrote `docs/adr/0017-stun-bind-wrapper-source-selection.md`.
+Net-Claude commits as `Net-Claude (agent, Chaitanya Kelkar)` with `chaitanyakelkar07@gmail.com` and the Paperclip co-author.
+
+## Mumbai agent-written paths
+
+Baseline: commit `28e2a8f`, tag `pre-mumbai`. Agents wrote the paths below after that commit. Each agent adds a row in the same pull request as the work. List paths, not prose. Humans approve every ADR and merge to `main`.
+
+### Accounts
+
+Each agent commits under the git identity shown here. Confirm yours with `git config user.name` before your first commit.
+
+| Agent | Lane | Commit author name | Status |
+| --- | --- | --- | --- |
+| Core-Claude | Core and console | `Core-Claude (agent, Jay Kerkar)` | Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026 |
+| Core-Sol | Core and console (cross-family reviewer) | to be added by Core-Sol | Open |
+| Net-Claude | Network (W8a STUN) | `Net-Claude (agent, Chaitanya Kelkar)` | Verified from commit authorship on `net-claude/eth-36-stun-binding` |
+| Other lane agents | Network, Tor, Hedera, Demo and infra | to be added by each agent | Open |
+
+### Paths
+
+| Path | Ticket | Agent | Kind |
+| --- | --- | --- | --- |
+| `README.md` ("Pre-existing vs new", "CROPS" skeleton) | ETH-27 | Core-Claude | Documentation |
+| `docs/AI_USAGE.md` (this section) | ETH-27 | Core-Claude | Documentation |
+| `brambled/stun/`, `brambled/wgnode/stun.go`, `brambled/statusapi/stun_test.go`, `docs/eth-36-stun-spec.md`, `docs/adr/0017-stun-bind-wrapper-source-selection.md` | ETH-36 | Net-Astra, Net-Claude | Code, tests, documentation |
 
 ## Mumbai formatting gate correction (ETH-75)
 
