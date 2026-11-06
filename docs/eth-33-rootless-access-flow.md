@@ -7,14 +7,14 @@ revoke, then deny the same service call without restarting either peer.
 
 `pnpm test:access-flow` runs the existing Go gateway scope/revocation test,
 then `agent-mcp/test/access-flow.test.ts`. The latter also runs under
-`pnpm verify` through the MCP package's test task.
+`pnpm verify` through the Model Context Protocol (MCP) package's test task.
 
 The test starts:
 
 - The real approval application programming interface (API) and
   `createChainAdapters`, using an in-memory Ethereum Name Service (ENS)
   text-record store and a signer that confirms writes in memory.
-- The real Model Context Protocol (MCP) stdio server and software development
+- The real MCP standard input/output (stdio) server and software development
   kit (SDK) client. The agent calls both public tools.
 - Two userspace WireGuard peers, the gateway CONNECT server, the local
   forwarder, and a loopback Hypertext Transfer Protocol (HTTP) backend in a
