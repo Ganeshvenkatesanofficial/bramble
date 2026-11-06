@@ -1,7 +1,10 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 
 const head = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], { encoding: 'utf8' }).trim()
+
+// The HCS panel has its own alerts; the queue specs only assert on queue notices.
+const queueAlert = (page: Page) => page.getByRole('main').getByRole('alert').filter({ hasNotText: 'HCS verification' })
 
 const headers = { authorization: 'Bearer browser-test-only' }
 const input = {
@@ -125,14 +128,14 @@ test('failed authorization and signer failures never report a grant', async ({ p
   await page.getByLabel('Demo token', { exact: true }).fill('incorrect')
   await page.getByRole('button', { name: 'Unlock', exact: true }).click()
   await page.getByRole('button', { name: 'Approve', exact: true }).click()
-  await expect(page.getByRole('main').getByRole('alert')).toContainText('valid demo bearer token')
+  await expect(queueAlert(page)).toContainText('valid demo bearer token')
   await expect(page.getByText('Access granted', { exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Lock console' }).click()
   await page.getByLabel('Demo token', { exact: true }).fill('browser-test-only')
   await page.getByRole('button', { name: 'Unlock', exact: true }).click()
   await request.post('/__test/fail-grant')
   await page.getByRole('button', { name: 'Approve', exact: true }).click()
-  await expect(page.getByRole('main').getByRole('alert')).toContainText('did not confirm the grant')
+  await expect(queueAlert(page)).toContainText('did not confirm the grant')
   await expect(page.getByText('Access granted', { exact: true })).toHaveCount(0)
 })
 
@@ -144,10 +147,10 @@ test('a stale queue pauses decisions until a fresh API read succeeds', async ({ 
   const approve = page.getByRole('button', { name: 'Approve', exact: true })
   await expect(approve).toBeEnabled()
   await request.post('/__test/offline')
-  await expect(page.getByRole('main').getByRole('alert')).toContainText('decisions are paused')
+  await expect(queueAlert(page)).toContainText('decisions are paused')
   await expect(approve).toBeDisabled()
   await request.post('/__test/reset')
   await request.post('/api/requests', { data: input, headers })
-  await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0)
+  await expect(queueAlert(page)).toHaveCount(0)
   await expect(approve).toBeEnabled()
 })
