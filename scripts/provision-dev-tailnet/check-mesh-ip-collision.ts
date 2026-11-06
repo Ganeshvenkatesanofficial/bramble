@@ -18,10 +18,9 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createPublicClient, http, getAddress } from 'viem'
-import { sepolia } from 'viem/chains'
+import { createPublicClient, http } from 'viem'
 import { normalize } from 'viem/ens'
-import { UNIVERSAL_RESOLVER, RPC_URL, tailnetName } from '../../sidecar/src/ens/config'
+import { ensSepolia, RPC_URL, tailnetName } from '../../sidecar/src/ens/config'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -46,11 +45,7 @@ if (labels.length < 2) {
   )
 }
 
-const hackathonSepolia = {
-  ...sepolia,
-  contracts: { ...sepolia.contracts, ensUniversalResolver: { address: getAddress(UNIVERSAL_RESOLVER) } },
-}
-const publicClient = createPublicClient({ chain: hackathonSepolia, transport: http(RPC_URL) })
+const publicClient = createPublicClient({ chain: ensSepolia, transport: http(RPC_URL) })
 
 const meshIPs = await Promise.all(
   labels.map(async (label) => {

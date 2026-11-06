@@ -1,5 +1,5 @@
 // One-time setup script for Phase 1 Section A: registers a persistent test
-// tailnet (a name + subregistry + one device subname) on the hackathon
+// tailnet (a name + subregistry + one device subname) on the selected
 // ENSv2 Sepolia deployment, so the sidecar has real on-chain data to resolve
 // without re-registering (commit-reveal + 75s wait) on every test run.
 //
@@ -26,20 +26,34 @@ import {
   getAddress,
   formatEther,
 } from 'viem'
-import { sepolia } from 'viem/chains'
 import { privateKeyToAccount } from 'viem/accounts'
 import { normalize, packetToBytes } from 'viem/ens'
 import {
+  ENS_DEPLOYMENT,
   ETH_REGISTRY,
   ETH_REGISTRAR,
   MOCK_USDC,
   VERIFIABLE_FACTORY,
   PERMISSIONED_RESOLVER_IMPL,
   USER_REGISTRY_IMPL,
-  UNIVERSAL_RESOLVER,
+  ensSepolia,
   ALL_ROLES,
   RPC_URL,
 } from '../../sidecar/src/ens/config'
+
+// --parent-only creates the migration parent without enrolling a placeholder device.
+// --name chooses its .eth label; the old random dev name remains the default.
+const options = process.argv.slice(2)
+const parentOnly = options.includes('--parent-only')
+let requestedLabel: string | undefined
+for (let i = 0; i < options.length; i++) {
+  if (options[i] === '--parent-only') continue
+  if (options[i] === '--name' && options[i + 1]) requestedLabel = options[++i]
+  else throw new Error('usage: bun run index.ts [--parent-only] [--name <eth-label>]')
+}
+if (requestedLabel && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(requestedLabel)) {
+  throw new Error('--name must be a lowercase ENS label, without .eth')
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -60,6 +74,7 @@ if (existsSync(envPath)) {
 
 const ethRegistrarAbi = parseAbi([
   'function isAvailable(string label) view returns (bool)',
+  'function MIN_COMMITMENT_AGE() view returns (uint64)',
   'function getRegisterPrice(string label, uint64 duration, address paymentToken) view returns (uint256 base, uint256 premium)',
   'function makeCommitment(string label, address owner, bytes32 secret, address subregistry, address resolver, uint64 duration, bytes32 referrer) view returns (bytes32)',
   'function commit(bytes32 commitment)',
@@ -96,12 +111,8 @@ const rawKey = process.env.SEPOLIA_PRIVATE_KEY.trim()
 const privateKey = (rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`) as `0x${string}`
 const account = privateKeyToAccount(privateKey)
 
-const hackathonSepolia = {
-  ...sepolia,
-  contracts: { ...sepolia.contracts, ensUniversalResolver: { address: getAddress(UNIVERSAL_RESOLVER) } },
-}
-const publicClient = createPublicClient({ chain: hackathonSepolia, transport: http(RPC_URL) })
-const wallet = createWalletClient({ account, chain: hackathonSepolia, transport: http(RPC_URL) })
+const publicClient = createPublicClient({ chain: ensSepolia, transport: http(RPC_URL) })
+const wallet = createWalletClient({ account, chain: ensSepolia, transport: http(RPC_URL) })
 
 async function writeAndWait(label: string, args: Parameters<typeof wallet.writeContract>[0]) {
   const hash = await wallet.writeContract(args)
@@ -158,15 +169,28 @@ async function deployUserRegistryProxy(fullName: string, version: bigint) {
     args: [getAddress(USER_REGISTRY_IMPL), salt, initData],
   })
   const [log] = parseEventLogs({ abi: verifiableFactoryAbi, eventName: 'ProxyDeployed', logs: receipt.logs })
-  return log.args.proxyAddress
+  return { address: log.args.proxyAddress, block: receipt.blockNumber }
 }
 
 async function main() {
+  console.log(`Deployment: ${ENS_DEPLOYMENT.id}`)
   console.log(`Account: ${account.address}`)
   const ethBalance = await publicClient.getBalance({ address: account.address })
   console.log(`Sepolia ETH balance: ${formatEther(ethBalance)}`)
   if (ethBalance === 0n) throw new Error('Account has 0 Sepolia ETH — fund it via a faucet first.')
 
+  const label = requestedLabel ?? `bramble-dev-${Math.random().toString(16).slice(2, 10)}`
+  const fullName = `${label}.eth`
+  if (
+    !(await publicClient.readContract({
+      address: ETH_REGISTRAR,
+      abi: ethRegistrarAbi,
+      functionName: 'isAvailable',
+      args: [label],
+    }))
+  ) {
+    throw new Error(`${fullName} is already registered; reuse its saved migration config`)
+  }
   console.log('\n[1/6] Minting MockUSDC...')
   await writeAndWait('mint MockUSDC', {
     address: getAddress(MOCK_USDC),
@@ -180,10 +204,7 @@ async function main() {
   const rootResolverAddress = await deployResolverProxy(runSeed)
   console.log(`   root resolver: ${rootResolverAddress}`)
 
-  const label = `bramble-dev-${Math.random().toString(16).slice(2, 10)}`
-  const fullName = `${label}.eth`
   console.log(`\n[3/6] Registering ${fullName}...`)
-
   const duration = 31536000n
   const secret = keccak256(toHex(crypto.randomUUID()))
   const referrer = `0x${'0'.repeat(64)}` as `0x${string}`
@@ -217,8 +238,13 @@ async function main() {
     args: [commitment],
   })
 
-  console.log('   waiting 75s for MIN_COMMITMENT_AGE (60s)...')
-  await sleep(75_000)
+  const commitmentAge = await publicClient.readContract({
+    address: ETH_REGISTRAR,
+    abi: ethRegistrarAbi,
+    functionName: 'MIN_COMMITMENT_AGE',
+  })
+  console.log(`   waiting ${commitmentAge + 15n}s for commitment maturity...`)
+  await sleep(Number(commitmentAge + 15n) * 1000)
 
   await writeAndWait('register', {
     address: getAddress(ETH_REGISTRAR),
@@ -238,7 +264,7 @@ async function main() {
   console.log(`   registered, tokenId=${tokenId}`)
 
   console.log('\n[4/6] Deploying subregistry and attaching it to the test name...')
-  const subRegistryAddress = await deployUserRegistryProxy(fullName, 0n)
+  const { address: subRegistryAddress, block: deployBlock } = await deployUserRegistryProxy(fullName, 0n)
   console.log(`   subregistry: ${subRegistryAddress}`)
   await writeAndWait('setSubregistry', {
     address: getAddress(ETH_REGISTRY),
@@ -246,6 +272,26 @@ async function main() {
     functionName: 'setSubregistry',
     args: [tokenId, subRegistryAddress],
   })
+
+  if (parentOnly) {
+    const fixture = {
+      deployment: ENS_DEPLOYMENT.id,
+      tailnetName: fullName,
+      tailnetRegistry: subRegistryAddress,
+      tailnetRegistryDeployBlock: deployBlock.toString(),
+      provisionedAt: new Date().toISOString(),
+    }
+    const fixtureDir = path.resolve(__dirname, '../../.tmp')
+    mkdirSync(fixtureDir, { recursive: true })
+    const fixturePath = path.join(fixtureDir, `${ENS_DEPLOYMENT.id}-parent.json`)
+    writeFileSync(fixturePath, JSON.stringify(fixture, null, 2) + '\n')
+    console.log(`BRAMBLE_ENS_DEPLOYMENT=${ENS_DEPLOYMENT.id}`)
+    console.log(`BRAMBLE_TAILNET_NAME=${fullName}`)
+    console.log(`BRAMBLE_TAILNET_REGISTRY=${subRegistryAddress}`)
+    console.log(`BRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK=${deployBlock}`)
+    console.log(`Parent fixture written to ${fixturePath}`)
+    return
+  }
 
   console.log('\n[5/6] Deploying a dedicated resolver for the device subname...')
   const deviceResolverAddress = await deployResolverProxy(runSeed + 1n)

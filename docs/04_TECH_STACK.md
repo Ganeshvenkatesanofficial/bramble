@@ -24,7 +24,7 @@ Verified Sept 4, 2026 where marked. Everything else: check on Day 0 and pin.
 | Chain (payments) | Hedera testnet | Settlement asset is a choice, not forced: native HBAR (`asset: "0.0.0"`, 8 decimals/tinybar, no association needed) or testnet USDC (`0.0.429274`, 6 decimals, HTS — **watch token association**, no EVM analogue). Gate 0.4's proof uses HBAR specifically to avoid the association step; Section B/C may choose differently for the "HTS tokens... in the settlement path" extra-points bullet |
 | Admin CLI / demo UI | Node + TypeScript, optionally Next.js 16 | Keep it minimal; the demo is terminals, not a dashboard |
 | Tests | Go stdlib testing + Vitest for TS parts | |
-| Monorepo tooling | **Turborepo** | Root `pnpm typecheck / lint / format / build / test` fan out to every package (`brambled` via Go toolchain commands wrapped in a `package.json`, TS packages via their own scripts); `pnpm verify` runs all five in CI order. ESLint + Prettier are configured once at the repo root and run directly (not per-package — pnpm's strict `node_modules` means a workspace package can't see root devDependencies). `scripts/gate0.3-eac-check/` is deliberately outside the workspace — frozen historical artifact, not linted/formatted going forward |
+| Monorepo tooling | **Turborepo** | Root `pnpm typecheck / lint / format / build / test` fan out to every package (`brambled` via Go toolchain commands wrapped in a `package.json`, TS packages via their own scripts); `pnpm verify` runs all five in CI order. ESLint + Prettier are configured once at the repo root and run directly (not per-package — pnpm's strict `node_modules` means a workspace package can't see root devDependencies). `scripts/gate0.3-eac-check/` is outside the workspace; it imports the shared ENS deployment config and runs with Bun |
 | CI | GitHub Actions, push-triggered only | No PR or release workflows yet — hackathon scope. `.github/workflows/ci.yml` runs `pnpm verify` on every push |
 
 ## Two-chain note
@@ -33,7 +33,7 @@ ENS is on Sepolia, payments on Hedera. This is forced by the tracks and is defen
 
 ## Hackathon ENSv2 Sepolia deployment (confirmed Sept 4, Kevin | ENS Labs, Discord)
 
-A dedicated ENSv2 deployment is live on Sepolia for ETHOnline 2026, separate from the production/beta deployment. **Build against this one, not the addresses on the production docs.**
+A dedicated ENSv2 deployment is live on Sepolia for ETHOnline 2026, separate from the production/beta deployment. This is now the `hackathon-test` compatibility configuration. For the official October 1 deployment, select `BRAMBLE_ENS_DEPLOYMENT=sepolia-v2`. All clients import the selected contracts and chain from `sidecar/src/ens/config.ts`; see [ENS deployments](reference/ens-deployments.md). Keep the compatibility default until the new tailnet passes the full demo lifecycle.
 
 | What | Link |
 |---|---|

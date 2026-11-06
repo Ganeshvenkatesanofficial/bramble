@@ -11,10 +11,9 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createPublicClient, createWalletClient, http, parseAbi, getAddress, toHex } from 'viem'
-import { sepolia } from 'viem/chains'
 import { privateKeyToAccount } from 'viem/accounts'
 import { normalize, packetToBytes } from 'viem/ens'
-import { UNIVERSAL_RESOLVER, RPC_URL } from '../../sidecar/src/ens/config'
+import { ensSepolia, RPC_URL } from '../../sidecar/src/ens/config'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -45,12 +44,8 @@ const rawKey = process.env.SEPOLIA_PRIVATE_KEY.trim()
 const privateKey = (rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`) as `0x${string}`
 const account = privateKeyToAccount(privateKey)
 
-const hackathonSepolia = {
-  ...sepolia,
-  contracts: { ...sepolia.contracts, ensUniversalResolver: { address: getAddress(UNIVERSAL_RESOLVER) } },
-}
-const publicClient = createPublicClient({ chain: hackathonSepolia, transport: http(RPC_URL) })
-const wallet = createWalletClient({ account, chain: hackathonSepolia, transport: http(RPC_URL) })
+const publicClient = createPublicClient({ chain: ensSepolia, transport: http(RPC_URL) })
+const wallet = createWalletClient({ account, chain: ensSepolia, transport: http(RPC_URL) })
 
 const fixturePath = path.resolve(__dirname, '../../sidecar/test/fixtures/dev-tailnet.json')
 const fixture = JSON.parse(readFileSync(fixturePath, 'utf-8'))

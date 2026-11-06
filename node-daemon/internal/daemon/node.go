@@ -139,6 +139,11 @@ func ServeEnv(spec NodeSpec, ports NodePorts) []string {
 		"BRAMBLE_TAILNET_REGISTRY=" + cfg.Registry,
 		"BRAMBLE_SIDECAR_PORT=" + strconv.Itoa(ports.Sidecar),
 	}
+	deployment := cfg.ENSDeployment
+	if deployment == "" {
+		deployment = "hackathon-test"
+	}
+	env = append(env, "BRAMBLE_ENS_DEPLOYMENT="+deployment)
 	if cfg.RPCURL != "" {
 		env = append(env, "SEPOLIA_RPC_URL="+cfg.RPCURL)
 	}

@@ -22,13 +22,12 @@ import {
   toHex,
   parseEventLogs,
 } from 'viem'
-import { sepolia } from 'viem/chains'
 import { privateKeyToAccount } from 'viem/accounts'
 import { normalize, packetToBytes } from 'viem/ens'
 import {
   VERIFIABLE_FACTORY,
   PERMISSIONED_RESOLVER_IMPL,
-  UNIVERSAL_RESOLVER,
+  ensSepolia,
   ALL_ROLES,
   RPC_URL,
 } from '../../sidecar/src/ens/config'
@@ -57,12 +56,8 @@ const rawKey = process.env.SEPOLIA_PRIVATE_KEY.trim()
 const privateKey = (rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`) as `0x${string}`
 const account = privateKeyToAccount(privateKey)
 
-const hackathonSepolia = {
-  ...sepolia,
-  contracts: { ...sepolia.contracts, ensUniversalResolver: { address: getAddress(UNIVERSAL_RESOLVER) } },
-}
-const publicClient = createPublicClient({ chain: hackathonSepolia, transport: http(RPC_URL) })
-const wallet = createWalletClient({ account, chain: hackathonSepolia, transport: http(RPC_URL) })
+const publicClient = createPublicClient({ chain: ensSepolia, transport: http(RPC_URL) })
+const wallet = createWalletClient({ account, chain: ensSepolia, transport: http(RPC_URL) })
 
 async function writeAndWait(label: string, args: Parameters<typeof wallet.writeContract>[0]) {
   const hash = await wallet.writeContract(args)
