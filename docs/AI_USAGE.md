@@ -7,13 +7,16 @@ This project was built with AI assistance (Claude Code and OpenAI Codex) through
 - **`docs/11_SOURCE_NOTES.md`** — a research log: partner-workshop findings reconciled against the spec, including contradictions found and how they were resolved, and implementation-time findings (e.g. a docs-vs-deployed-bytecode mismatch caught while validating Gate 0.3).
 - **`docs/sources/`** — cleaned transcripts of the two partner workshops used as primary research input.
 - **`scripts/gate0.3-eac-check/`** — a validation script (not production code) used to empirically verify a Day-0 feasibility gate against the live hackathon ENSv2 deployment; see its README.
+- **`AGENTS.md`** — operating rules for AI agents, including how agents read the Sepolia key (`${SEPOLIA_PRIVATE_KEY:-$SEPOLIA_PK}`) without exposing it.
 
 AI assistance also covered implementation and tests, not only the planning documents. In particular, it was used to draft, revise, and review code in:
 
 - **`brambled/` and `relay/`** — WireGuard admission, service gateway, rendezvous/data relay, payment selection, failover, and their Go tests (for example `brambled/admission/loop.go`, `brambled/gateway/acl.go`, `relay/datarelay.go`).
 - **`sidecar/src/` and `relay-sidecar/src/`** — ENSv2 resolution/discovery, x402 Hedera client and resource-server flows, and their TypeScript tests (for example `sidecar/src/ens/client.ts`, `sidecar/src/payments/datarelay.ts`, `relay-sidecar/src/routes/datarelay.ts`).
 - **`admincli/src/`** — EAC enrollment and role/ACL commands, Ledger signing and Key Ring integration, and their tests (for example `admincli/src/enroll.ts`, `admincli/src/ledger-eth-sign.ts`, `admincli/src/set-acl.ts`).
+- **`admincli/src/lib.ts`, `admincli/src/lib-viem.ts`, `admincli/src/lib.test.ts`** — written by the Core-Claude agent (ETH-28) during the Mumbai build: importable grant/revoke functions extracted from `set-acl.ts`, `revoke-acl.ts` and `revoke.ts`, the viem-backed `Resolver`/`Signer`, and in-memory unit tests. The same change rewrote `admincli/src/set-acl.ts`, `revoke-acl.ts` and `revoke.ts` as thin wrappers and removed `admincli/src/acl-grant.ts`.
 - **`dashboard/`** — the read-only application UI and API routes.
+- **`deploy/`** — the cloud topology runbook, systemd units, install and check scripts, env-var name templates, and the NAT test setup (`deploy/README.md`, `deploy/REFERENCE.md`, `deploy/TOPOLOGY.md`, `deploy/systemd/`, `deploy/scripts/`, `deploy/nat-lab/`, `deploy/env/`, `deploy/caddy/`, `deploy/stun/`, `deploy/sysctl/`, `deploy/scripts/stun-probe.py`, `deploy/scripts/agent-in-box.sh`) and the ADR `docs/adr/0015-cloud-demo-topology.md`. Written by Infra-Claude under ETH-49 and reviewed by another model family.
 
 Mumbai-hackathon agent work (paths written by agents; commits use each agent's own git identity):
 
@@ -64,6 +67,7 @@ Each agent commits under the git identity shown here. Confirm yours with `git co
 | Core-Claude | Core and console | `Core-Claude (agent, Jay Kerkar)` | Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026 |
 | Core-Sol | Core and console (cross-family reviewer) | to be added by Core-Sol | Open |
 | Net-Claude | Network (W8a STUN) | `Net-Claude (agent, Chaitanya Kelkar)` | Verified from commit authorship on `net-claude/eth-36-stun-binding` |
+| Tor-Claude | Tor (took over ETH-50 from Core-Claude) | `Tor-Claude (agent, Chaitanya Kelkar)` | Verified from the author of commit `06e52d9` |
 | Other lane agents | Network, Tor, Hedera, Demo and infra | to be added by each agent | Open |
 
 ### Paths
@@ -72,6 +76,11 @@ Each agent commits under the git identity shown here. Confirm yours with `git co
 | --- | --- | --- | --- |
 | `README.md` ("Pre-existing vs new", "CROPS" skeleton) | ETH-27 | Core-Claude | Documentation |
 | `docs/AI_USAGE.md` (this section) | ETH-27 | Core-Claude | Documentation |
+| `scripts/demo/src/*.ts`, `scripts/demo/package.json`, `scripts/demo/tsconfig.json` | ETH-50 | Core-Claude | Code and unit tests (launcher, preflight, probe, reset) |
+| `scripts/demo/README.md` | ETH-50 | Core-Claude | Documentation |
+| `scripts/demo/REFERENCE.md` | ETH-50 | Tor-Claude | Documentation (split from the README) |
+| `scripts/demo/src/redact.ts`, `scripts/demo/src/run-command.ts`, and the review fixes in `scripts/demo/src/*.ts` and `scripts/demo/README.md` | ETH-50 | Tor-Claude (took over from Core-Claude, 5 Nov 2026) | Code, unit tests, documentation |
+| `package.json` (`demo`, `demo:preflight`, `demo:reset` scripts), `pnpm-workspace.yaml`, `pnpm-lock.yaml` | ETH-50 | Core-Claude | Configuration |
 | `brambled/stun/`, `brambled/wgnode/stun.go`, `brambled/statusapi/stun_test.go`, `docs/eth-36-stun-spec.md`, `docs/adr/0017-stun-bind-wrapper-source-selection.md` | ETH-36 | Net-Astra, Net-Claude | Code, tests, documentation |
 
 ## Mumbai formatting gate correction (ETH-75)
@@ -149,7 +158,7 @@ Findings and changes:
 ## Mumbai payment review corrections (ETH-34)
 
 Core-Sol (OpenAI Codex), using the existing Core-Sol git identity, integrated
-`origin/hackathon` without rewriting history and preserved both attribution
+`origin/hackathon` (through `1bbca93`) without rewriting history and preserved both attribution
 sections in this file. Review corrections cover `approval/src/lib/payments.ts`,
 `approval/src/components/payments-panel.tsx`, `approval/test/payments.test.ts`,
 `docs/16_AGENT_PAYMENTS_FLOW.md`, `docs/17_AGENT_PAYMENTS_REFERENCE.md`, and
