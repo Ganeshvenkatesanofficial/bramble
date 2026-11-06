@@ -15,6 +15,7 @@ chain.revoke = async (label) => {
   await revoke(label)
   return { transactionHash: `0x${'2'.repeat(64)}` }
 }
+let offline = false
 let api = createApprovalApi({ token: () => 'browser-test-only', signer: chain, resolver: chain })
 Bun.serve({
   hostname: '127.0.0.1',
@@ -22,6 +23,7 @@ Bun.serve({
   async fetch(request) {
     const url = new URL(request.url)
     if (url.pathname === '/__test/reset' && request.method === 'POST') {
+      offline = false
       chain.grants.clear()
       chain.failGrant = false
       api = createApprovalApi({ token: () => 'browser-test-only', signer: chain, resolver: chain })
@@ -30,6 +32,13 @@ Bun.serve({
     if (url.pathname === '/__test/fail-grant' && request.method === 'POST') {
       chain.failGrant = true
       return Response.json({ failureEnabled: true })
+    }
+    if (url.pathname === '/__test/offline' && request.method === 'POST') {
+      offline = true
+      return Response.json({ offline: true })
+    }
+    if (offline && url.pathname === '/api/requests' && request.method === 'GET') {
+      return Response.json({ error: { message: 'Test connection unavailable' } }, { status: 503 })
     }
     if (url.pathname.startsWith('/api/')) return api.handle(request)
     url.port = '3001'

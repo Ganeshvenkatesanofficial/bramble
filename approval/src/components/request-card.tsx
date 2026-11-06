@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { readJson, transactionUrl, type RequestView } from '../lib/console-api'
 import { IdentityFacts } from './identity-facts'
+import { Button } from './ui/button'
 
 const statusLabels = {
   pending: 'Awaiting decision',
@@ -123,18 +124,18 @@ export function RequestCard({ request, token, offline }: { request: RequestView;
         <div className="actions">
           {request.status === 'pending' && (
             <>
-              <button disabled={disabled} onClick={() => void decide('deny')}>
+              <Button variant="outline" disabled={disabled} onClick={() => void decide('deny')}>
                 Deny
-              </button>
-              <button className="primary" disabled={disabled} onClick={() => void decide('approve')}>
+              </Button>
+              <Button className="primary" disabled={disabled} onClick={() => void decide('approve')}>
                 Approve
-              </button>
+              </Button>
             </>
           )}
           {request.status === 'approved' && (
-            <button className="danger" disabled={disabled} onClick={() => void decide('revoke')}>
+            <Button variant="destructive" className="danger" disabled={disabled} onClick={() => void decide('revoke')}>
               Revoke access
-            </button>
+            </Button>
           )}
         </div>
       </footer>

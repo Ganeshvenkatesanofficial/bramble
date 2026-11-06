@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRequests } from '../hooks/use-requests'
 import { RequestCard } from './request-card'
+import { Button } from './ui/button'
 
 export function ApprovalConsole() {
   const { requests, error, updatedAt } = useRequests()
@@ -57,18 +58,21 @@ export function ApprovalConsole() {
           <div>
             <h2>Operator authorization</h2>
             <p className="muted">
-              {token ? 'Write access enabled for this tab.' : 'Enter the shared demo token to enable decisions.'}
+              {token
+                ? 'Decision controls unlocked. The API checks each action.'
+                : 'Enter the shared demo token to enable decisions.'}
             </p>
           </div>
           {token ? (
-            <button
+            <Button
+              variant="outline"
               onClick={() => {
                 setToken('')
                 setDraft('')
               }}
             >
               Lock console
-            </button>
+            </Button>
           ) : (
             <form
               onSubmit={(event) => {
@@ -88,9 +92,9 @@ export function ApprovalConsole() {
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
               />
-              <button type="submit" disabled={!draft.trim()}>
+              <Button variant="outline" type="submit" disabled={!draft.trim()}>
                 Unlock
-              </button>
+              </Button>
             </form>
           )}
         </section>

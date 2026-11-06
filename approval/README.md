@@ -1,10 +1,10 @@
 # Approval API reference
 
 The approval service supports demo beats 2 (request and approve) and 5 (revoke).
-It runs in one long-lived Node.js process on the admin machine. Run
+It runs in one long-lived Node.js process on the admin machine. The development command is
 `pnpm --filter @bramble/approval dev` from the repository root. The default bind
 address is loopback, port 3001. The production commands are `build` and `start`
-in the same package. Expose it only through the approved tunnel topology.
+in the same package. External access is limited to the approved tunnel topology.
 
 The root page is the approval console. ETH-30 supplies the real signer and ENS
 resolver; ETH-31 supplies the UI. The default runtime accepts requests and deny
@@ -37,8 +37,7 @@ signer/resolver. These tests perform no network writes.
 
 ## Console reference
 
-The console polls requests every second. Enter the operator token in the password
-field to enable Approve, Deny and Revoke. The token stays in tab memory only and
+The console polls requests every second. The password field accepts the operator token to enable Approve, Deny and Revoke. The token stays in tab memory only and
 is cleared by Lock console or reload. An invalid token fails at the API; entering
 one does not prove authorization. Pending transactions stay pending until the
 signer returns confirmation. Confirmed Sepolia hashes link to Etherscan.
@@ -47,12 +46,9 @@ Identity facts refresh every 10 seconds and are revalidated by the server before
 a grant. “ENS facts unavailable” never means the identity is verified. The request
 contract has no price quote; the card explicitly reports an unavailable estimate.
 The countdown uses API remaining seconds and a server-side revoke timer, not
-on-chain expiry. Keep the service running for timed revocation.
+on-chain expiry. Timed revocation requires a running service.
 
-`pnpm --filter @bramble/approval build` followed by
-`pnpm --filter @bramble/approval test:ui` runs browser checks at 1280 and 390 pixels.
-Install Chromium once with `pnpm --filter @bramble/approval exec playwright install chromium`
-if needed. The harness starts the production UI on loopback port 3001 and a
-separate in-memory API proxy on 3101. Both ports must be free. No test adapter is
-imported by the runtime. Screenshots live in ignored `test-results/` and use
-simulated receipts. They do not verify a real Sepolia transaction or peer cutoff.
+Browser verification uses the production UI and a separate in-memory HTTP API.
+The [browser verification how-to](../docs/how-to-test-approval-console.md) describes
+setup and execution. Screenshots use simulated receipts and do not verify a
+real Sepolia transaction or peer cutoff.
