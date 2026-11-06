@@ -153,7 +153,17 @@ After the take, under **Members**, click **Revoke** for the device label to end 
 
 ## Close with the agent
 
-Use the [Pi run instructions](../agent-mcp/PI.md). The live prompt, as `agent` on the worker:
+Use the [Pi run instructions](../agent-mcp/PI.md). Per the operator update on 6 November 2026 at 18:44 UTC, worker MCP uses `https://console.13-233-181-104.sslip.io` for the approval API. Set `BRAMBLE_APPROVAL_URL` to that URL when installing Pi; the installer saves it in the MCP configuration. The agent beat needs no worker reverse tunnel. The private service still uses the worker's `http://127.0.0.1:8080` Bramble forward.
+
+Before the slot, check the public route from the worker:
+
+```sh
+ssh bramble-worker 'curl -sS -m 10 -o /dev/null -w "console HTTP %{http_code}\n" https://console.13-233-181-104.sslip.io/api/requests'
+```
+
+Expect `console HTTP 200`. This checks reachability only; it does not prove authenticated request creation or private service access. The public route is **operator-reported**; this author has not rehearsed the Pi lifecycle with it. The ETH-243 measurements below used the earlier temporary worker tunnel. The workstation's `bramble-console-tunnel` still serves the public console and remains in preflight.
+
+The live prompt, as `agent` on the worker:
 
 ```sh
 ~/bin/pi-agent -p "Fetch the task from the private staging service"
@@ -163,7 +173,7 @@ A full live agent lifecycle takes minutes: ETH-243 measured 32.14 s and 32.31 s 
 
 ## Fall back to the agent path
 
-Switch here when a hero-path deadline passes, the new device stays **Approved** without **Connected**, or the page never loads. Say: "The new-device path is not answering in time, so I will show the same lifecycle with our agent worker, which passed twice today." The worker path below is the earlier operator script, unchanged. It runs beats 1 (denied), 2 (request and approve), 3 (works and pays) and 5 (revoke) with the identical worker `curl`.
+Switch here when a hero-path deadline passes, the new device stays **Approved** without **Connected**, or the page never loads. Say: "The new-device path is not answering in time, so I will show the same lifecycle with our agent worker, which passed twice today." Use [Close with the agent](#close-with-the-agent) for Pi setup through the public console, and the [recording fallback](demo/fallback.md) if that URL is unavailable. The worker sequence below runs beats 1 (denied), 2 (request and approve), 3 (works and pays) and 5 (revoke) with the identical worker `curl`.
 
 ### Budget for the measured waits
 

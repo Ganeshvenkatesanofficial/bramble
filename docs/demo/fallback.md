@@ -9,7 +9,34 @@ page is the recipe for it.
 **Evidence labels.** **Verified** means this author ran it on 6 November 2026
 at base `52a35cb`. **Read from source** means taken from the repository and
 never run end to end. **Open** means untested. Nothing here has run against the
-cloud pair; the ETH-244 operator owns that slot.
+cloud pair; ETH-313 now owns the exclusive live slot.
+
+## Use the agent backup through the public console
+
+If the new-device path misses a stage deadline, use the
+[agent backup](../DEMO_SCRIPT.md#fall-back-to-the-agent-path). Worker MCP sends
+approval requests to `https://console.13-233-181-104.sslip.io`. The operator
+reported this route on 6 November 2026 at 18:44 UTC; a new Pi lifecycle through
+that URL remains **Open** for this author.
+
+1. Before the slot, follow the [Pi installation step](../../agent-mcp/PI.md#steps)
+   with `BRAMBLE_APPROVAL_URL=https://console.13-233-181-104.sslip.io`. The
+   installer saves it in Pi's MCP configuration. Rerun that step for an existing
+   install that used `http://127.0.0.1:3001`.
+2. Run the [worker reachability check](../DEMO_SCRIPT.md#close-with-the-agent).
+   Expect HTTP 200. The agent beat needs no worker reverse tunnel. Keep the
+   workstation's `bramble-console-tunnel` running: it serves the public URL.
+   Private service calls still use the worker's `http://127.0.0.1:8080` forward.
+3. Run `~/bin/pi-agent -p "Fetch the task from the private staging service"` as
+   `agent` on the worker. The human approves and revokes through the console.
+   After revoke, run a separate Pi invocation asking it to call `/task` once
+   without requesting access, and check the fresh gateway denial.
+4. If the public console is unavailable, switch to a labeled recording or the
+   offline stand-ins below. The agent backup also depends on that URL; recreating
+   the old worker tunnel is not a stage recovery step.
+
+ETH-243's two recorded Pi lifecycles used a temporary worker tunnel. Keep that
+historical routing and their measurements labeled when playing the recording.
 
 ## What you can and cannot replace offline
 
@@ -23,11 +50,13 @@ cloud pair; the ETH-244 operator owns that slot.
 
 ## Decide when to switch
 
-Use the measured waits in [DEMO_SCRIPT.md](../DEMO_SCRIPT.md): the denied call
-takes 18–28 s, the first success after approval 27–44 s, and the first failure
-after revoke 29–37 s. These are single observations, not limits.
+Use the action deadlines in [DEMO_SCRIPT.md](../DEMO_SCRIPT.md#recover-when-a-beat-stalls).
+The latest ETH-244 worker observations are 121.0 / 26.4 s for denial, 40.9 / 39.1 s
+for success, and 46.1 / 50.8 s from starting revoke to the first failed call.
+These are individual observations, not limits or measurements of the new public
+MCP route.
 
-1. Give each beat its window plus 20 s. If the result has not appeared, say
+1. Switch at the script's action deadline or clock-window end. If the result has not appeared, say
    “I will switch to the recording” and start the matching clip.
 2. Switch at once, without a retry, if the console URL fails to load, a node
    unit is inactive, or a call returns an error that is not
@@ -73,7 +102,7 @@ spoken-script pace and talk over the wait.
 
 ### Record clips A, B, C and E
 
-Reserve the pair first. Coordinate with ETH-244, which holds the single live
+Reserve the pair first. Coordinate with ETH-313, which holds the single live
 slot. Read steps and units from `DEMO_SCRIPT.md` and `deploy/DRYRUN.md`; do not
 copy secrets onto the screen.
 
@@ -145,13 +174,13 @@ Times are relative to the presentation slot (T).
 
 - Show `RECORDED` and the recording date on every frame.
 - Do not show a token, header, key file or environment dump.
-- Do not claim the recording shows a real AI agent. `DEMO_SCRIPT.md` says the
-  validated caller is a Unix user, not an autonomous session.
+- Label worker `curl` clips as calls by a Unix user. Only a clip that shows the
+  actual Pi session demonstrates an AI agent; use the ETH-243 evidence labels.
 - Do not reuse an earlier payment link. Label it with its run time.
 
 ## Open items
 
 - A human chooses the recording tool and where to store the files.
-- No full cloud lifecycle has been recorded. The live slot is ETH-244.
+- A full recording's availability remains Open until the operator checks it. The live slot is ETH-313.
 - Clip D needs a NAT box or the Docker lab; neither has run for this plan.
 - The real-Tor before/after for beat 6 is untested.

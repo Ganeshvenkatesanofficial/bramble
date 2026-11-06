@@ -11,6 +11,7 @@ Deadline: Saturday 7 November 2026, 09:00 IST. Cloud nodes cost testnet USDC whi
 - [ ] ETH-313 releases the cloud pair to you. Nobody restarts units, edits grants or calls the forward during the take.
 - [ ] Start the nodes at least 3 minutes early. Wait for `serving on` and `adopted new candidate` on both nodes. Start the worker too: it is the backup.
 - [ ] The public console loads and `GET /api/requests` returns 200. A human unlocks it with the demo token. Keep the token and any `.env` off screen.
+- [ ] Worker MCP uses the public console URL saved by the [Pi installation step](../agent-mcp/PI.md#steps). The [worker reachability check](DEMO_SCRIPT.md#close-with-the-agent) returns 200. The agent beat needs no worker reverse tunnel; keep the console's `bramble-console-tunnel` running.
 - [ ] The new device is clean (no `~/.bramble`), has a desktop browser and is not a cloud node. Pick a fresh label, for example `home-laptop-2`.
 - [ ] Remove any old `mumbai-worker` grant. Testnet balances are enough: Sepolia ETH for the admin, Hedera testnet HBAR and USDC (token `0.0.429274`) for the payer.
 - [ ] Two hero-path rehearsals in the ETH-313 slot passed, with each beat timed. Otherwise present the backup path.
