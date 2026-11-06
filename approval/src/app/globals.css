@@ -838,15 +838,10 @@
     }
   }
 
-  /* Payments retain their page-specific layout without changing the console. */
+  /* Payments retain their page-specific layout without changing the console.
+     Colours come from the console tokens (:root and :root[data-theme='dark']),
+     so the page follows the theme toggle. Do not redeclare them here. */
   .payments-page {
-    color-scheme: light;
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --muted-foreground: #52525b;
-    --border: oklch(0.922 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --radius: 0.625rem;
     font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
     color: var(--foreground);
     background: var(--background);
