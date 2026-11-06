@@ -48,7 +48,7 @@ The contract does not fix the response bodies of the two GET calls. The UI accep
 
 ## Mock server
 
-`mock/model.ts` implements the local API and the admin proxy in memory. `mock/server.ts` serves it with `out/`. Test hooks under `/__test/*` (`reset`, `flags`, `state`, `joins`) exist only in the mock. Reset scenarios are `fresh`, `ready`, `pending`, `approved`, `denied`, `connected`, `connected-empty` and `error`.
+`mock/model.ts` implements the local API and the admin proxy in memory. `mock/server.ts` serves it with `out/`. Test hooks under `/__test/*` (`reset`, `flags`, `state`, `joins`) exist only in the mock. Reset scenarios are `fresh`, `ready`, `pending`, `approved`, `denied`, `connected`, `connected-empty`, `error` and `error-first-join`.
 
 ## Reuse
 
