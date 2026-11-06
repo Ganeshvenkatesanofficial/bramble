@@ -63,5 +63,16 @@ created a request for `task`. The operator approval POST returned HTTP 401
 sequence passed. Both nodes and the worker tunnel are stopped. Restore a valid
 operator token before repeating the two runs; keep its value out of transcripts.
 
+Verified after the operator released the cloud pair, 6 November 2026 at
+15:18–15:20 UTC: the worker tunnel reaches the same pending request on the
+live approval API at admin port 3011. A protected `GET /api/members` and a
+`POST /api/eth243-auth-probe-not-a-route` both return HTTP 401 with the worker
+token file passed directly into the Authorization header. Read from source:
+the nonexistent route returns HTTP 404 when authenticated and changes no request or grant.
+The failure occurs before approval or signing. Both node services remain
+inactive with MainPID 0; neither was started. The temporary tunnel is closed.
+The operator must correct `~/.config/bramble/approval.token` to match the live
+API before the two runs can proceed. Do not post its value.
+
 See [Pi security explanation](./PI_SECURITY.md) for the tool restrictions and
 [Pi runtime reference](./REFERENCE.md#pi-runtime) for model and launcher settings.

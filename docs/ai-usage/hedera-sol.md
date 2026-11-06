@@ -68,3 +68,18 @@ Paths written:
 - `/home/anonjr/bramble-work/status/eth-243-isolated-docs-verify.log`
 - Worker: `/home/agent/bin/pi-agent`
 - Worker: `/home/agent/.pi/agent/skills/bramble-private-service/SKILL.md`
+
+## ETH-243 authentication check after operator release
+
+Demo beats: 2, 3 and 5. Verified both node services inactive with MainPID 0.
+Reopened only the worker approval tunnel, confirmed the same pending request,
+and reproduced HTTP 401 on a protected GET and a nonexistent POST with the
+authorized worker file passed directly into the HTTP header. Neither node
+service was started. No request, grant, credential or service configuration
+changed. Closed the temporary tunnel and verified its listener absent.
+
+Paths written:
+
+- `agent-mcp/PI.md`
+- `deploy/README.md`
+- `docs/ai-usage/hedera-sol.md`

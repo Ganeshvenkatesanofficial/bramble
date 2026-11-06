@@ -252,6 +252,8 @@ Full Pi beat sequence: **Open**. Earlier Pi calls on 6 November 2026 overlapped 
 
 Verified, isolated attempt on 6 November 2026: the deployed launcher matches `91f7ca4`. The initial call reached the gateway and was denied for `task` with `no matching granted digest`. Pi created the correct access request in 33.11 s. The operator approval POST returned HTTP 401 (`unauthorized`) using `/home/agent/.config/bramble/approval.token`; no grant was approved. Both units were stopped by 15:06:39 UTC with MainPID 0, and the worker tunnel was closed. The two full runs remain Open until the supplied operator token authenticates. No payment or revocation timing is verified by this attempt.
 
+Verified after the operator release, 6 November 2026 at 15:18–15:20 UTC: the worker tunnel reaches the live API on admin port 3011 and reads the same pending request. The file-derived operator header still returns HTTP 401 on a protected GET and a nonexistent POST route. No requests or grants changed. Neither node service was started; both remain inactive with MainPID 0, and the temporary tunnel is closed. Correct the worker token file before starting the nodes for the two runs. See [Pi run instructions](../agent-mcp/PI.md) for the authentication check and limits.
+
 **Launching the agent.** Without the NAT box, the agent runs as `agent` on the host and reaches the forward on the host's `127.0.0.1:8080`. With the NAT box, the node (and so the forward) sits in the `bramble-node` namespace, and a process on the host cannot reach it. Start the agent through the launcher, which enters the namespace as root and then drops to the `agent` user with no capabilities and `no_new_privs`:
 
 ```sh
