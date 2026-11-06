@@ -137,3 +137,23 @@ and adds `gen-node-key.test.sh`, `join-test.py` and `rehearse.py`. These inherit
 changes make the requested whole-directory diff against `91f7ca4` nonempty.
 The conflict resolution does not edit scripts, tests, launchers or SKILL files.
 The approved Pi files remain byte-identical to `91f7ca4`.
+
+## 2026-11-06 — ETH-184 documentation closeout
+
+Demo beats: 1–5. Reconciled recorded installer, enrollment, cloud access and
+rehearsal evidence from ETH-179, ETH-250, ETH-244 and ETH-287 under the
+operator's docs-only direction and cross-family review waiver. No live test,
+cloud mutation, approval, payment or browser walkthrough ran for this change.
+The acceptance log attributes reported observations and preserves the fresh-device
+connectivity failure and other Open outcomes.
+
+Verified: `pnpm verify` exits 0 (Turbo tasks cached), `git diff --check` is clean,
+and relative file links in all three deliverables resolve. These repository checks
+do not add live acceptance evidence.
+
+Paths written:
+
+- `README.md`
+- `docs/DEMO_SCRIPT.md`
+- `docs/measurements/2026-11-06-onboarding-acceptance.md`
+- `docs/ai-usage/hedera-sol.md`
