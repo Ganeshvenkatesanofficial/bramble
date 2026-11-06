@@ -11,3 +11,4 @@ packages:
   - dashboard
   - hedera-audit
   - approval
+  - join-ui

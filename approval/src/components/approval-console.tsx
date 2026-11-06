@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRequests } from '../hooks/use-requests'
 import { RequestCard } from './request-card'
+import { JoinConsole } from './join-console'
 import { Button } from './ui/button'
 
 export function ApprovalConsole() {
@@ -140,6 +141,7 @@ export function ApprovalConsole() {
             ))}
           </section>
         )}
+        <JoinConsole token={token} />
         <footer className="page-footer">
           <span>Requests are suggestions. ENS identity is rechecked before every grant.</span>
           <span>{updatedAt ? `Last received ${updatedAt}` : 'Waiting for API'}</span>

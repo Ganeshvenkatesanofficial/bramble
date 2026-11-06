@@ -13,3 +13,20 @@ Paths written:
 - `docs/ai-usage/core-sol.md`
 
 Verified: HTTP lifecycle tests use the admincli library and in-memory chain; no testnet writes in these tests.
+
+Additional paths written:
+
+- `approval/src/components/{approval-console.tsx,join-console.tsx}`
+- `approval/e2e/{console.spec.ts,memory-server.ts}`
+- `approval/{package.json,tsconfig.json,next.config.ts,playwright.config.ts,.env.example}`
+- `approval/test/node-config.test.ts`
+- `approval/scripts/smoke-join.ts`
+- `admincli/src/enroll-chain-viem.test.ts`
+- `join-ui/{package.json,tsconfig.json,src/index.tsx}`
+- `pnpm-workspace.yaml`, `pnpm-lock.yaml`
+- `deploy/scripts/gen-node-config.mjs` (reused unchanged from install-hosting work)
+- `scripts/print-node-config.mjs`
+- `docs/reference/approval-api.md`
+- `README.md`
+
+Open: real Sepolia smoke requires administrator configuration; this run lacks `APPROVAL_ENS_PARENT`.
