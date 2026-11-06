@@ -81,9 +81,16 @@ func ServeArgs(spec NodeSpec, ports NodePorts) []string {
 	for _, label := range relayLabels {
 		args = append(args, "-data-relay", label+"="+cfg.DataRelays[label])
 	}
-	for _, p := range cfg.RelayPeers {
-		if p != spec.Label {
-			args = append(args, "-relay-peer", p)
+	if cfg.UseSponsoredRelay() {
+		args = append(args, "-sponsored-relay")
+	}
+	if cfg.UseRelayFirst() {
+		args = append(args, "-relay-first")
+	} else {
+		for _, p := range cfg.RelayPeers {
+			if p != spec.Label {
+				args = append(args, "-relay-peer", p)
+			}
 		}
 	}
 	for _, s := range cfg.Services {
@@ -145,6 +152,9 @@ func ServeEnv(spec NodeSpec, ports NodePorts) []string {
 	}
 	if cfg.RelayDeployBlock > 0 {
 		env = append(env, "BRAMBLE_RELAY_REGISTRY_DEPLOY_BLOCK="+strconv.FormatUint(cfg.RelayDeployBlock, 10))
+	}
+	if cfg.RendezvousPaymentURL != "" {
+		env = append(env, "BRAMBLE_RENDEZVOUS_PAYMENT_URL="+cfg.RendezvousPaymentURL)
 	}
 	return env
 }

@@ -174,7 +174,7 @@ func (d *Daemon) State() State {
 		MeshIP:      d.m.MeshIP(),
 		IsAdmin:     d.Store.AdminToken() != "",
 		Peers:       d.m.Peers(),
-		Error:       d.m.Problem(),
+		Error:       d.m.Reason(),
 	}
 	if d.cfg != nil {
 		st.DefaultTailnet = d.cfg.Tailnet

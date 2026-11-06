@@ -265,7 +265,7 @@ func TestDaemonJoinLifecycle(t *testing.T) {
 
 	// Revocation: the node stops and the UI explains.
 	hs.api.set("join-laptop", JoinRevoked, "")
-	st = hs.waitPhase(PhaseError)
+	st = hs.waitPhase(PhaseDenied)
 	if st.Error == nil || st.Error.NextStep == "" {
 		t.Fatalf("revoked state lacks a next step: %+v", st)
 	}

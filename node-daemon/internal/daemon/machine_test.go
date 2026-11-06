@@ -104,15 +104,15 @@ func TestRevokeStopsNodeAndExplains(t *testing.T) {
 	mustPhase(t, m, PhaseConnected)
 
 	m.JoinUpdate(Join{ID: "j1", Status: JoinRevoked})
-	mustPhase(t, m, PhaseError)
+	mustPhase(t, m, PhaseDenied)
 	if m.WantsNode() || m.WantsPolling() || len(m.Peers()) != 0 {
 		t.Fatalf("revoked: the node must stop and polling must end")
 	}
-	p := m.Problem()
+	p := m.Reason()
 	if p == nil || p.Message == "" || p.NextStep == "" {
 		t.Fatalf("revoked must explain itself, got %+v", p)
 	}
-	if m.Base() != PhaseReady || m.CanJoin() != nil {
+	if m.Base() != PhaseDenied || m.CanJoin() != nil {
 		t.Fatalf("after revoke the person can ask to join again")
 	}
 	m.JoinSent("demo.eth", "j2")

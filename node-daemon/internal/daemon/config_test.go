@@ -94,12 +94,16 @@ func TestServeArgsAndEnv(t *testing.T) {
 		"-rendezvous 203.0.113.1:7000",
 		"-stun-servers 203.0.113.1:3478",
 		"-data-relay relay-a=http://203.0.113.1:7891",
-		"-relay-peer gateway",
+		"-sponsored-relay",
+		"-relay-first",
 		"-forward 40003=gateway:health",
 	} {
 		if !strings.Contains(args, want) {
 			t.Errorf("args %q lack %q", args, want)
 		}
+	}
+	if strings.Contains(args, "-relay-peer") {
+		t.Errorf("relay-first replaces per-peer relay flags: %q", args)
 	}
 	if strings.Contains(args, "secret-key-hex") {
 		t.Fatalf("the private key must never be on the command line")
@@ -135,9 +139,36 @@ func TestServeArgsAndEnv(t *testing.T) {
 	}
 
 	// The device never forwards to or relays for itself.
+	off := false
+	cfg.RelayFirst = &off
+	if a := strings.Join(ServeArgs(spec, ports), " "); !strings.Contains(a, "-relay-peer gateway") || strings.Contains(a, "-relay-first") {
+		t.Errorf("relayFirst=false must pass -relay-peer per entry: %q", a)
+	}
 	spec.Label = "gateway"
 	if a := strings.Join(ServeArgs(spec, ports), " "); strings.Contains(a, "-relay-peer gateway") || strings.Contains(a, "-forward") {
 		t.Errorf("self-referencing relay peer or forward in %q", a)
+	}
+	cfg.SponsoredRelay = &off
+	if a := strings.Join(ServeArgs(spec, ports), " "); strings.Contains(a, "-sponsored-relay") {
+		t.Errorf("sponsoredRelay=false must drop the flag: %q", a)
+	}
+}
+
+func TestRelayDefaultsAndPaymentURL(t *testing.T) {
+	cfg, err := ParseNodeConfig([]byte(`{"tailnet":"demo.eth","registry":"0x1111111111111111111111111111111111111111","joinApi":"http://x.test","rendezvousPaymentUrl":"http://203.0.113.1:7892"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.UseSponsoredRelay() || cfg.UseRelayFirst() {
+		t.Errorf("defaults: sponsored true, relayFirst false with no data relays")
+	}
+	spec := NodeSpec{Label: "laptop", PrivateKeyHex: "k", Config: cfg}
+	env := strings.Join(ServeEnv(spec, NodePorts{}), "\n")
+	if !strings.Contains(env, "BRAMBLE_RENDEZVOUS_PAYMENT_URL=http://203.0.113.1:7892") {
+		t.Errorf("env lacks the rendezvous payment url: %s", env)
+	}
+	if _, err := ParseNodeConfig([]byte(`{"tailnet":"demo.eth","registry":"0x1111111111111111111111111111111111111111","joinApi":"http://x.test","rendezvousPaymentUrl":"nope"}`)); err == nil {
+		t.Errorf("a bad rendezvousPaymentUrl must be rejected")
 	}
 }
 

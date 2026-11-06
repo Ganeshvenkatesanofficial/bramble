@@ -51,6 +51,8 @@ type Machine struct {
 	meshIP  string
 	peers   []Peer
 	problem *ErrorInfo
+	// denial explains a denied phase reached by revocation.
+	denial *ErrorInfo
 }
 
 // ErrBusy rejects a command that does not fit the current phase.
@@ -87,6 +89,18 @@ func (m *Machine) Tailnet() string     { return m.tailnet }
 func (m *Machine) JoinID() string      { return m.joinID }
 func (m *Machine) MeshIP() string      { return m.meshIP }
 func (m *Machine) Problem() *ErrorInfo { return m.problem }
+
+// Reason is what GET /api/state puts in "error": the problem, or the reason
+// a denied phase carries (access removed).
+func (m *Machine) Reason() *ErrorInfo {
+	if m.problem != nil {
+		return m.problem
+	}
+	if m.base == PhaseDenied {
+		return m.denial
+	}
+	return nil
+}
 
 // Peers returns a copy of the current peer list.
 func (m *Machine) Peers() []Peer {
@@ -141,6 +155,7 @@ func (m *Machine) JoinSent(tailnet, joinID string) {
 	m.meshIP = ""
 	m.peers = nil
 	m.problem = nil
+	m.denial = nil
 }
 
 // JoinUpdate applies a status from GET /api/joins/:id. Updates for another
@@ -171,13 +186,16 @@ func (m *Machine) JoinUpdate(j Join) {
 		m.meshIP = ""
 		m.peers = nil
 	case JoinRevoked:
+		// Shown as phase "denied" with the reason in error (ETH-177 UI
+		// contract): a revoked device is one the tailnet no longer accepts.
 		tailnet := m.tailnet
-		m.base = PhaseReady
+		m.base = PhaseDenied
 		m.joinID = ""
 		m.meshIP = ""
 		m.peers = nil
-		m.problem = &ErrorInfo{
-			Message:  fmt.Sprintf("An admin removed this device from %s.", tailnet),
+		m.problem = nil
+		m.denial = &ErrorInfo{
+			Message:  fmt.Sprintf("Access was removed: an admin took this device off %s.", tailnet),
 			NextStep: fmt.Sprintf("Ask the admin of %s to let it back in, then press Join again.", tailnet),
 		}
 	default:

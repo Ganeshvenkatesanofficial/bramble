@@ -51,6 +51,29 @@ type NodeConfig struct {
 	// Service and relay peers are always included.
 	Peers    []string  `json:"peers,omitempty"`
 	Services []Service `json:"services,omitempty"`
+	// SponsoredRelay asks the relays for operator-sponsored sessions, so a
+	// device with no Hedera key needs no payment. nil means true.
+	SponsoredRelay *bool `json:"sponsoredRelay,omitempty"`
+	// RelayFirst routes every peer through the data-relay pool, so the
+	// device works with no direct path. nil means true when DataRelays is
+	// not empty.
+	RelayFirst *bool `json:"relayFirst,omitempty"`
+	// RendezvousPaymentURL is the payment sidecar paired with Rendezvous
+	// (env BRAMBLE_RENDEZVOUS_PAYMENT_URL).
+	RendezvousPaymentURL string `json:"rendezvousPaymentUrl,omitempty"`
+}
+
+// UseSponsoredRelay reports whether brambled gets -sponsored-relay.
+func (c *NodeConfig) UseSponsoredRelay() bool {
+	return c.SponsoredRelay == nil || *c.SponsoredRelay
+}
+
+// UseRelayFirst reports whether brambled gets -relay-first.
+func (c *NodeConfig) UseRelayFirst() bool {
+	if c.RelayFirst != nil {
+		return *c.RelayFirst
+	}
+	return len(c.DataRelays) > 0
 }
 
 // stringList accepts either "a" or ["a","b"].
@@ -133,6 +156,11 @@ func ParseNodeConfig(data []byte) (*NodeConfig, error) {
 	for _, s := range cfg.STUN {
 		if _, _, err := net.SplitHostPort(s); err != nil {
 			return nil, fmt.Errorf("the node config's stun server %q must be host:port", s)
+		}
+	}
+	if cfg.RendezvousPaymentURL != "" {
+		if err := checkHTTPURL(cfg.RendezvousPaymentURL); err != nil {
+			return nil, fmt.Errorf("the node config's rendezvousPaymentUrl: %w", err)
 		}
 	}
 	for label, u := range cfg.DataRelays {
