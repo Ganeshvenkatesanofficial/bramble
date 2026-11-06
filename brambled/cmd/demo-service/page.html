@@ -220,7 +220,7 @@
           Served by <code>{{.Host}}</code> at <code>{{.ServedAt}}</code>. Demo page: the album uses drawn placeholders,
           not real photos.
         </p>
-        <p id="checked">Checking the connection every 10 seconds.</p>
+        <p id="checked">Checking the connection, with 10 seconds between checks.</p>
       </footer>
     </main>
     <script>
@@ -242,7 +242,7 @@
             checked.textContent = 'Last answer from the home server: ' + time(now) + '.'
           } else {
             status.className = 'pill bad'
-            status.textContent = 'No access'
+            status.textContent = 'Unreachable'
             checked.textContent =
               'This device can no longer reach the home server (checked ' +
               time(now) +

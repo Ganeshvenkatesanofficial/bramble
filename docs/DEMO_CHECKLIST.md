@@ -27,7 +27,7 @@ All hero-path windows are **Open / unverified budgets** until the ETH-313 rehear
 | 0:35–1:05 | 3. Install with one line | `curl -fsSL https://console.13-233-181-104.sslip.io/install.sh \| sh`; the local UI asks to join | 60 s | Verified (reported): ETH-179, ETH-250 |
 | 1:05–1:40 | 4. Operator approves | **Pending device joins** → **Approve**; then the `task` request → **Approve** | 30 s per approval | Join: Verified (reported). New device's grant: Verified (reported) in ETH-244 |
 | 1:40–2:35 | 5. Opens in the browser | **Open task** on the connected screen shows the home page | 55 s | **Open**: needs ETH-313 acceptance |
-| 2:35–3:30 | 6. Revoke | **Revoke access**; the page badge turns **No access**; a reload fails | 60 s | **Open** for the new device; Verified (reported) for the worker |
+| 2:35–3:30 | 6. Revoke | **Revoke access**; the page badge turns **Unreachable**; a reload fails | 60 s | **Open** for the new device; Verified (reported) for the worker |
 | 3:30–4:00 | Closer: AI agent | ETH-243 Pi run: denied, request, approve, task, revoke | Recording unless rehearsed | Verified (reported): ETH-243 |
 
 ## During the take
