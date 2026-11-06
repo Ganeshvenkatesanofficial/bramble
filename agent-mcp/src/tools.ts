@@ -22,7 +22,14 @@ export interface ToolDeps {
   now?: () => number
 }
 
-class ApprovalApiError extends Error {}
+class ApprovalApiError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string
+  ) {
+    super(message)
+  }
+}
 
 export function createTools(config: AgentMcpConfig, deps: ToolDeps = {}): Tools {
   const doFetch = deps.fetch ?? fetch
@@ -55,7 +62,8 @@ export function createTools(config: AgentMcpConfig, deps: ToolDeps = {}): Tools 
     } | null
     if (!response.ok) {
       const code = payload?.error?.code ?? `http_${response.status}`
-      throw new ApprovalApiError(`the approval API refused the call (${code}).`)
+      const detail = payload?.error?.message ? `: ${payload.error.message}` : ''
+      throw new ApprovalApiError(`the approval API refused the call (${code})${detail}`, code)
     }
     return payload as unknown as AccessRequest
   }
@@ -96,7 +104,15 @@ export function createTools(config: AgentMcpConfig, deps: ToolDeps = {}): Tools 
       if (!name) return 'error: service is required.'
       try {
         const existing = outstanding.get(name)
-        if (existing) return await awaitDecision(existing, name)
+        if (existing) {
+          try {
+            return await awaitDecision(existing, name)
+          } catch (error) {
+            // The approval service forgot the request (for example after a restart): start over.
+            if (!(error instanceof ApprovalApiError && error.code === 'request_not_found')) throw error
+            outstanding.delete(name)
+          }
+        }
         const created = await api('POST', '/api/requests', {
           agentLabel: config.agentLabel,
           gatewayLabel: config.gatewayLabel,
@@ -121,13 +137,11 @@ export function createTools(config: AgentMcpConfig, deps: ToolDeps = {}): Tools 
 }
 
 function resolveForwardUrl(forwardUrl: string, path: string): URL | string {
-  const segments = path.split(/[/?#]/).map((segment) => segment.toLowerCase())
-  if (
-    !path.startsWith('/') ||
-    path.startsWith('//') ||
-    path.includes('\\') ||
-    segments.some((s) => s === '..' || s === '%2e%2e')
-  ) {
+  const segments = path
+    .split(/[?#]/)[0]
+    .split('/')
+    .map((segment) => segment.replace(/%2e/gi, '.'))
+  if (!path.startsWith('/') || path.startsWith('//') || path.includes('\\') || segments.includes('..')) {
     return 'error: path must start with a single "/" and name a path on the private service.'
   }
   const base = new URL(forwardUrl)

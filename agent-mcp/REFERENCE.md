@@ -23,7 +23,7 @@ undecided resumes polling that request. It does not create a duplicate card.
 | `task result: <body>`                         | The forward returned a 2xx response. The body is cut at 4000 characters.                                                                              |
 | `denied: no grant. ...`                       | The forward answered 403, or closed the connection with no reply. `brambled` closes the connection on a gateway DENY. A broken tunnel looks the same. |
 | `error: the Bramble forward is not listening` | Nothing accepts connections at `BRAMBLE_FORWARD_URL`.                                                                                                 |
-| `error: ...`                                  | Bad input, a missing token, an unreachable approval API, or an approval API refusal. The text includes the API error code, not its message.           |
+| `error: ...`                                  | Bad input, a missing token, an unreachable approval API, or an approval API refusal. The text includes the API error code and its message.            |
 
 ## Environment variables
 

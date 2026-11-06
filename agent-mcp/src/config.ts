@@ -32,7 +32,8 @@ function required(env: Record<string, string | undefined>, name: string): string
 }
 
 function loopbackUrl(raw: string): string {
-  const { hostname } = new URL(raw)
+  const { hostname, protocol } = new URL(raw)
+  if (protocol !== 'http:') throw new Error('BRAMBLE_FORWARD_URL must use http://; the forward speaks plain HTTP.')
   if (!['127.0.0.1', 'localhost', '[::1]'].includes(hostname)) {
     throw new Error(
       'BRAMBLE_FORWARD_URL must point at a loopback address; the forward is the only route to the service.'

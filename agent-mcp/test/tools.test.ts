@@ -94,7 +94,30 @@ describe('request_private_access', () => {
 
     const outcome = await tools.requestPrivateAccess({ service: 'staging-api', reason: 'x' })
 
-    expect(outcome).toBe('error: the approval API refused the call (unauthorized).')
+    expect(outcome).toBe(
+      'error: the approval API refused the call (unauthorized): A valid demo bearer token is required.'
+    )
+  })
+
+  test('starts a fresh request when the approval service forgot the outstanding one', async () => {
+    const approval = track(await startApprovalStub())
+    let clock = 0
+    const tools = createTools(configFor(approval, undefined, { decisionTimeoutMs: 100 }), {
+      now: () => clock,
+      sleep: async (ms) => {
+        clock += ms
+      },
+    })
+
+    expect(await tools.requestPrivateAccess({ service: 'staging-api', reason: 'x' })).toStartWith('pending:')
+    approval.requests.clear()
+    approval.setStatus('req-1', 'approved')
+    clock = 0
+    const outcome = await tools.requestPrivateAccess({ service: 'staging-api', reason: 'x' })
+
+    expect(outcome).toStartWith('pending:')
+    expect(approval.posts).toBe(2)
+    expect(approval.requests.get('req-1')?.status).toBe('pending')
   })
 
   test('reports a missing token before any network call', async () => {
@@ -153,6 +176,15 @@ describe('call_private_service', () => {
     expect(await tools.callPrivateService({ path: '/task' })).toStartWith('denied: no grant')
   })
 
+  test('allows ".." inside a query string', async () => {
+    const approval = track(await startApprovalStub())
+    const forward = track(await startForwardStub('allow'))
+    const tools = createTools(configFor(approval, forward))
+
+    expect(await tools.callPrivateService({ path: '/task?x=../y' })).toStartWith('task result: ')
+    expect(forward.paths).toEqual(['/task?x=../y'])
+  })
+
   test('says the forward is down when nothing listens', async () => {
     const approval = track(await startApprovalStub())
     const forward = await startForwardStub('allow')
@@ -162,17 +194,23 @@ describe('call_private_service', () => {
     expect(await tools.callPrivateService({ path: '/task' })).toStartWith('error: the Bramble forward is not listening')
   })
 
-  test.each(['task', '//evil.example/task', 'http://evil.example/task', '/../etc/passwd', '/a\\b'])(
-    'refuses the path %p without calling the forward',
-    async (path) => {
-      const approval = track(await startApprovalStub())
-      const forward = track(await startForwardStub('allow'))
-      const tools = createTools(configFor(approval, forward))
+  test.each([
+    'task',
+    '//evil.example/task',
+    'http://evil.example/task',
+    '/../etc/passwd',
+    '/a\\b',
+    '/a/.%2e/b',
+    '/a/%2e./b',
+    '/a/%2E%2e/b',
+  ])('refuses the path %p without calling the forward', async (path) => {
+    const approval = track(await startApprovalStub())
+    const forward = track(await startForwardStub('allow'))
+    const tools = createTools(configFor(approval, forward))
 
-      expect(await tools.callPrivateService({ path })).toStartWith('error:')
-      expect(forward.paths).toEqual([])
-    }
-  )
+    expect(await tools.callPrivateService({ path })).toStartWith('error:')
+    expect(forward.paths).toEqual([])
+  })
 })
 
 describe('full sequence: deny, request, approve, succeed, revoke, deny', () => {
@@ -211,6 +249,10 @@ describe('loadConfig', () => {
 
   test('refuses a non-loopback forward', () => {
     expect(() => loadConfig({ ...base, BRAMBLE_FORWARD_URL: 'http://example.com:8080' })).toThrow('loopback')
+  })
+
+  test.each(['https://127.0.0.1:8080', 'ftp://127.0.0.1'])('refuses the forward URL %p that is not http', (url) => {
+    expect(() => loadConfig({ ...base, BRAMBLE_FORWARD_URL: url })).toThrow('http://')
   })
 
   test('rejects a non-positive timing value', () => {

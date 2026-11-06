@@ -2,8 +2,11 @@
 
 This how-to gives a Claude Code session two tools: `request_private_access` and
 `call_private_service`. The session can then ask a human for access to a private
-service and call it through the local Bramble forward. The session never holds a
-backend credential. Tool and setting details are in [REFERENCE.md](./REFERENCE.md).
+service and call it through the local Bramble forward. The session holds no backend
+credential: the private service sits behind the forward. It does hold the shared demo
+token for the approval API, which the agent can read until the API splits tokens (see
+[Know the limits](#know-the-limits)). Tool and setting details are in
+[REFERENCE.md](./REFERENCE.md).
 
 Demo beats served: 1 (denied), 2 (request), 3 (works after approval) and 5 (denied after revoke).
 
@@ -82,9 +85,14 @@ stub forward on loopback and drive the server over the MCP protocol.
 
 ## Know the limits
 
-- Verified: the tools against stub servers, and against the approval API handlers from
-  ETH-29 (commit `8d5cb3b`) with in-memory chain adapters.
+- Verified: the tools against stub servers.
+- Verified by hand, with no test in this repository: the tools against the approval API
+  handlers from ETH-29 (commit `8d5cb3b`) with in-memory chain adapters. Request,
+  approve and deny returned `granted` and `denied`.
 - Open: a real Claude Code session, a real `brambled` forward, and the live approval console.
+- Open: whether Claude Code's Bash tool inherits the exported `APPROVAL_DEMO_TOKEN`.
+- Reported by the ETH-102 review, reproduced there: `claude mcp add --env` writes the token in plaintext to Claude
+  Code's config file, which the agent can read.
 - Open: the shared demo token also authorizes `approve` and `revoke` in the current
   approval API. This server only calls the create-request endpoint, but any process that
   can read the token can approve its own request. Keep the token out of the agent's
