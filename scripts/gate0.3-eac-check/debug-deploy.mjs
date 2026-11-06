@@ -8,19 +8,15 @@ import {
   createPublicClient, http, parseAbi, encodeAbiParameters, encodeFunctionData,
   keccak256, stringToHex, namehash, getAddress,
 } from 'viem'
-import { sepolia } from 'viem/chains'
 import { privateKeyToAccount } from 'viem/accounts'
 
 const rawKey = process.env.SEPOLIA_PRIVATE_KEY.trim()
 const privateKey = rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`
 const account = privateKeyToAccount(privateKey)
 
-const VERIFIABLE_FACTORY = getAddress('0x894bc9cc8ff1ad96b8a288c86a8c71d662c07780')
-const USER_REGISTRY_IMPL = getAddress('0x47b442d0cf617c41cabaff5f02f44dd1e5f72546')
-
-const publicClient = createPublicClient({ chain: sepolia, transport: http('https://ethereum-sepolia-rpc.publicnode.com') })
-
-const ALL_ROLES = BigInt('0x' + '1'.repeat(64))
+const { VERIFIABLE_FACTORY, USER_REGISTRY_IMPL, ensSepolia, RPC_URL, ALL_ROLES } =
+  await import('../../sidecar/src/ens/config.ts')
+const publicClient = createPublicClient({ chain: ensSepolia, transport: http(RPC_URL) })
 
 const verifiableFactoryAbi = parseAbi([
   'function deployProxy(address implementation, uint256 salt, bytes data) returns (address proxy)',

@@ -1,3 +1,4 @@
+import '../../admincli/src/env'
 // Quick pre-flight check for demo recording day: verifies a freshly
 // enrolled device's mesh-ip doesn't collide with the other devices actually
 // in play for this take. Exists because enroll.ts's allocation logic scans
@@ -18,26 +19,11 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createPublicClient, http, getAddress } from 'viem'
-import { sepolia } from 'viem/chains'
+import { createPublicClient, http } from 'viem'
 import { normalize } from 'viem/ens'
-import { UNIVERSAL_RESOLVER, RPC_URL, tailnetName } from '../../sidecar/src/ens/config'
+import { ensSepolia, RPC_URL, tailnetName } from '../../sidecar/src/ens/config'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-
-const envPath = path.resolve(__dirname, '../../.env')
-if (existsSync(envPath)) {
-  const env = await Bun.file(envPath).text()
-  for (const line of env.split('\n')) {
-    const match = line.match(/^([^#=]+)=(.*)$/)
-    if (match && !process.env[match[1].trim()]) {
-      // Strip one layer of matching surrounding quotes — see
-      // admincli/src/setup.ts's identical loader for the full reasoning.
-      const rawValue = match[2].trim()
-      process.env[match[1].trim()] = rawValue.replace(/^(['"])(.*)\1$/, '$2')
-    }
-  }
-}
 
 const labels = process.argv.slice(2)
 if (labels.length < 2) {
@@ -46,11 +32,7 @@ if (labels.length < 2) {
   )
 }
 
-const hackathonSepolia = {
-  ...sepolia,
-  contracts: { ...sepolia.contracts, ensUniversalResolver: { address: getAddress(UNIVERSAL_RESOLVER) } },
-}
-const publicClient = createPublicClient({ chain: hackathonSepolia, transport: http(RPC_URL) })
+const publicClient = createPublicClient({ chain: ensSepolia, transport: http(RPC_URL) })
 
 const meshIPs = await Promise.all(
   labels.map(async (label) => {

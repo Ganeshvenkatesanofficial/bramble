@@ -30,6 +30,8 @@ type Service struct {
 // NodeConfig is the public node config served at /.well-known/bramble.json.
 // It holds public values only: no keys, no tokens.
 type NodeConfig struct {
+	// ENSDeployment selects a Sepolia contract set; omitted configs retain the legacy default.
+	ENSDeployment string `json:"ensDeployment,omitempty"`
 	Version       string `json:"version"`
 	Tailnet       string `json:"tailnet"`
 	ChainID       int64  `json:"chainId"`
@@ -128,6 +130,9 @@ func ParseNodeConfig(data []byte) (*NodeConfig, error) {
 		if cfg.RelayRegistry == "" {
 			cfg.RelayRegistry = alt.Registries.Relay
 		}
+	}
+	if cfg.ENSDeployment != "" && cfg.ENSDeployment != "hackathon-test" && cfg.ENSDeployment != "sepolia-v2" {
+		return nil, fmt.Errorf("the node config's ensDeployment must be hackathon-test or sepolia-v2")
 	}
 	cfg.Tailnet = strings.ToLower(strings.TrimSpace(cfg.Tailnet))
 	if cfg.Tailnet == "" {

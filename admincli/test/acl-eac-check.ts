@@ -1,3 +1,4 @@
+import '../src/env'
 // Section B verification: table-driven EAC permit/deny check for the new
 // `acl` setter role (docs/adr/0005-acl-record-schema.md), mirroring
 // gate2.1-eac-check.ts's technique exactly but scoped to just this one role
@@ -26,7 +27,7 @@ process.env.BRAMBLE_TAILNET_NAME = fixture.tailnetName
 process.env.BRAMBLE_TAILNET_REGISTRY = fixture.tailnetRegistry
 
 import { RPC_URL } from '../../sidecar/src/ens/config'
-import { accountFromEnv, hackathonSepolia, publicClient } from '../src/setup'
+import { accountFromEnv, ensSepolia, publicClient } from '../src/setup'
 import { resolverWriteAbi, pubkeySetter, revokedSetter, aclSetter } from '../src/roles'
 
 const results: Record<string, boolean> = {}
@@ -37,7 +38,7 @@ function report(name: string, pass: boolean) {
 
 async function main() {
   const admin = accountFromEnv()
-  const wallet = createWalletClient({ account: admin, chain: hackathonSepolia, transport: http(RPC_URL) })
+  const wallet = createWalletClient({ account: admin, chain: ensSepolia, transport: http(RPC_URL) })
 
   async function writeAndWait(label: string, args: Parameters<typeof wallet.writeContract>[0]) {
     const hash = await wallet.writeContract(args)

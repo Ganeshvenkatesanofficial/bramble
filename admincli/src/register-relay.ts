@@ -1,3 +1,4 @@
+import './env'
 // Registers a relay subname on the relay registry (docs/adr/0003's
 // Consequence section, resolved) — mirrors enroll.ts's "deploy a dedicated
 // resolver, register, write initial records" exactly, just targeting the
@@ -33,7 +34,7 @@ import {
   ALL_ROLES,
   REGISTRATION_ROLE_BITMAP,
 } from '../../sidecar/src/ens/config'
-import { accountFromEnv, hackathonSepolia, publicClient } from './setup'
+import { accountFromEnv, ensSepolia, publicClient } from './setup'
 import { registryWriteAbi, resolverWriteAbi } from './roles'
 
 const verifiableFactoryAbi = parseAbi([
@@ -72,7 +73,7 @@ async function main() {
   if (!registry) throw new Error('BRAMBLE_RELAY_REGISTRY not set — run setup-relay-registry.ts first')
 
   const account = accountFromEnv()
-  const wallet = createWalletClient({ account, chain: hackathonSepolia, transport: http(RPC_URL) })
+  const wallet = createWalletClient({ account, chain: ensSepolia, transport: http(RPC_URL) })
 
   async function writeAndWait(label: string, args: Parameters<typeof wallet.writeContract>[0]) {
     const hash = await wallet.writeContract(args)

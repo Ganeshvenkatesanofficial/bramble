@@ -1,3 +1,4 @@
+import './env'
 // Sets a gateway's own `acl-granters` record (docs/adr/0005) — the list of
 // already-enrolled identity labels this gateway will accept ACL vouches
 // from. This is the gateway owner's own trust decision, independent of any
@@ -10,7 +11,7 @@
 import { createWalletClient, http, toHex } from 'viem'
 import { normalize, packetToBytes } from 'viem/ens'
 import { RPC_URL, tailnetName } from '../../sidecar/src/ens/config'
-import { accountFromEnv, hackathonSepolia, publicClient } from './setup'
+import { accountFromEnv, ensSepolia, publicClient } from './setup'
 import { resolverWriteAbi } from './roles'
 
 async function main() {
@@ -25,7 +26,7 @@ async function main() {
     .join(',')
 
   const account = accountFromEnv()
-  const wallet = createWalletClient({ account, chain: hackathonSepolia, transport: http(RPC_URL) })
+  const wallet = createWalletClient({ account, chain: ensSepolia, transport: http(RPC_URL) })
 
   const fullname = normalize(`${gatewayLabel}.${tailnetName()}`)
   const resolverAddress = await publicClient.getEnsResolver({ name: fullname })

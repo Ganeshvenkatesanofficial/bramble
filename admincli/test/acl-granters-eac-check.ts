@@ -1,3 +1,4 @@
+import '../src/env'
 // Section B verification: table-driven EAC permit/deny check for the
 // `acl-granters` setter role (docs/adr/0005-acl-record-schema.md) — the
 // gateway-owner-controlled half of the trust-store model, independent from
@@ -23,7 +24,7 @@ process.env.BRAMBLE_TAILNET_NAME = fixture.tailnetName
 process.env.BRAMBLE_TAILNET_REGISTRY = fixture.tailnetRegistry
 
 import { RPC_URL } from '../../sidecar/src/ens/config'
-import { accountFromEnv, hackathonSepolia, publicClient } from '../src/setup'
+import { accountFromEnv, ensSepolia, publicClient } from '../src/setup'
 import { resolverWriteAbi, pubkeySetter, revokedSetter, aclSetter, aclGrantersSetter } from '../src/roles'
 
 const results: Record<string, boolean> = {}
@@ -34,7 +35,7 @@ function report(name: string, pass: boolean) {
 
 async function main() {
   const admin = accountFromEnv()
-  const wallet = createWalletClient({ account: admin, chain: hackathonSepolia, transport: http(RPC_URL) })
+  const wallet = createWalletClient({ account: admin, chain: ensSepolia, transport: http(RPC_URL) })
 
   async function writeAndWait(label: string, args: Parameters<typeof wallet.writeContract>[0]) {
     const hash = await wallet.writeContract(args)

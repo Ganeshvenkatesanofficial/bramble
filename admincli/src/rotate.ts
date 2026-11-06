@@ -1,3 +1,4 @@
+import './env'
 // Rotates a device's pubkey text record — the EAC-gated rotation path
 // (docs/adr/0004). Functionally the non-empty-value case of
 // scripts/provision-dev-tailnet/set-pubkey.ts, reimplemented here as the
@@ -8,7 +9,7 @@
 import { createWalletClient, http, toHex } from 'viem'
 import { normalize, packetToBytes } from 'viem/ens'
 import { RPC_URL, tailnetName } from '../../sidecar/src/ens/config'
-import { accountFromEnv, hackathonSepolia, publicClient } from './setup'
+import { accountFromEnv, ensSepolia, publicClient } from './setup'
 import { resolverWriteAbi } from './roles'
 
 async function main() {
@@ -18,7 +19,7 @@ async function main() {
   }
 
   const account = accountFromEnv()
-  const wallet = createWalletClient({ account, chain: hackathonSepolia, transport: http(RPC_URL) })
+  const wallet = createWalletClient({ account, chain: ensSepolia, transport: http(RPC_URL) })
 
   const fullname = normalize(`${deviceLabel}.${tailnetName()}`)
   const resolverAddress = await publicClient.getEnsResolver({ name: fullname })

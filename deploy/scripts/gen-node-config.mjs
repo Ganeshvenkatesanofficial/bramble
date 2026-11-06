@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url'
 export const WANTED = [
   'BRAMBLE_CONSOLE_HOST',
   'BRAMBLE_RPC_HOST',
+  'BRAMBLE_ENS_DEPLOYMENT',
   'BRAMBLE_TAILNET_NAME',
   'BRAMBLE_CHAIN_ID',
   'BRAMBLE_TAILNET_REGISTRY',
@@ -100,6 +101,11 @@ export function buildConfig(env, version) {
     chainId: chainId(env),
     rpcUrl: publicUrl(rpc, 'rpcUrl'),
     registry: address(env, 'BRAMBLE_TAILNET_REGISTRY'),
+  }
+  if (env.BRAMBLE_ENS_DEPLOYMENT) {
+    if (!['hackathon-test', 'sepolia-v2'].includes(env.BRAMBLE_ENS_DEPLOYMENT))
+      throw new Error('BRAMBLE_ENS_DEPLOYMENT must be hackathon-test or sepolia-v2')
+    config.ensDeployment = env.BRAMBLE_ENS_DEPLOYMENT
   }
   if (env.BRAMBLE_RELAY_REGISTRY) config.relayRegistry = address(env, 'BRAMBLE_RELAY_REGISTRY')
   for (const [name, field] of [

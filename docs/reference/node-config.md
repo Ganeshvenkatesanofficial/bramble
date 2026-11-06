@@ -19,6 +19,7 @@ Unknown fields are ignored. Wrong values do not stop `bramble up`: it keeps serv
 | Field | Type | Default | Meaning |
 |---|---|---|---|
 | `version` | string | | Release the config belongs to. |
+| `ensDeployment` | `hackathon-test` or `sepolia-v2` | `hackathon-test` | Selects the ENS contract set. Becomes `BRAMBLE_ENS_DEPLOYMENT`; the daemon supplies the compatibility default even if its parent environment selects another deployment. |
 | `chainId` | number | | Chain id (Sepolia is 11155111). Informational. |
 | `rpcUrl` | http(s) URL | brambled default | Becomes `SEPOLIA_RPC_URL` for the node. Use the logging proxy, never a credentialed endpoint. |
 | `relayRegistry` | `0x` address | | Relay registry. Also `registries.relay`. |

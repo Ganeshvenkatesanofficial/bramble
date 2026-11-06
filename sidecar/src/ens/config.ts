@@ -1,19 +1,96 @@
-// Hackathon ENSv2 Sepolia deployment addresses.
-// Source: https://feature-permres-inode-refact.docs-bao.pages.dev/learn/deployments#sepolia-ensv2-beta
-// Cross-checked against Kevin | ENS's Discord post, Sept 4 2026, and verified
-// end to end by scripts/gate0.3-eac-check/index.mjs on Sept 5 2026.
+// ENSv2 Sepolia deployment addresses: the one place Bramble names an ENS
+// contract. Every package (sidecar, admincli, approval, relay-sidecar,
+// scripts) imports these exports; none hardcodes an address of its own.
 //
-// This is the hackathon-specific deployment, not the production/beta one —
-// see docs/04_TECH_STACK.md, "Hackathon ENSv2 Sepolia deployment."
-import { getAddress, parseAbi } from 'viem'
+// BRAMBLE_ENS_DEPLOYMENT selects the deployment:
+//
+// - `sepolia-v2` (opt-in during migration): the official ENSv2 deployment on Sepolia,
+//   deployed 2026-10-01. Sources, cross-checked on 2026-11-07:
+//   https://docs.ens.domains/learn/deployments/ ("Sepolia (ENSv2)"),
+//   https://github.com/ensdomains/contracts-v2/blob/07e55a056f5b6a9c90119f501bdd05714e67dddd/contracts/docs/addresses/sepolia.md
+//   (the immutable revision linked by the ENS docs). The Universal
+//   Resolver is the canonical UpgradableUniversalResolverProxy, which the
+//   docs say resolves through this deployment.
+// - `hackathon-test` (default until the new lifecycle passes): the earlier test deployment Bramble was built on.
+//   Source: https://feature-permres-inode-refact.docs-bao.pages.dev/learn/deployments#sepolia-ensv2-beta,
+//   verified by scripts/gate0.3-eac-check/index.mjs on 2026-09-05. Kept so
+//   a tailnet registered there keeps working until it is retired.
+//
+// The role constants and ABI fragments below are the same in both
+// deployments (checked against the deployed ABIs in contracts-v2's
+// contracts/deployments/sepolia/*.json and RegistryRolesLib.sol /
+// PermissionedResolverLib.sol at the same immutable revision).
+import { getAddress, parseAbi, type Address } from 'viem'
+import { sepolia } from 'viem/chains'
 
-export const ETH_REGISTRY = getAddress('0x1d78834d97c1d7b1a38c1dedbd1a287cfed3971e') // Permissioned Registry for .eth
-export const ETH_REGISTRAR = getAddress('0x7d1b7f586a62ac3f54b9a396849757814283270b')
-export const MOCK_USDC = getAddress('0xcbfd80f74375c54e545af34788ff465f96f66f05')
-export const VERIFIABLE_FACTORY = getAddress('0x894bc9cc8ff1ad96b8a288c86a8c71d662c07780')
-export const PERMISSIONED_RESOLVER_IMPL = getAddress('0xa9d3814ab151bf6e37a427432795371a8361614e')
-export const USER_REGISTRY_IMPL = getAddress('0x47b442d0cf617c41cabaff5f02f44dd1e5f72546')
-export const UNIVERSAL_RESOLVER = getAddress('0xd26f2040d083af1cd2962ba303f4bea0c4faf142') // UpgradableUniversalResolverProxy
+export interface EnsDeployment {
+  id: EnsDeploymentId
+  ethRegistry: Address // Permissioned Registry for .eth
+  ethRegistrar: Address
+  mockUsdc: Address // payment token for ETHRegistrar.register on Sepolia
+  verifiableFactory: Address
+  permissionedResolverImpl: Address
+  userRegistryImpl: Address
+  universalResolver: Address // UpgradableUniversalResolverProxy
+}
+
+export type EnsDeploymentId = 'sepolia-v2' | 'hackathon-test'
+
+export const ENS_DEPLOYMENTS: Record<EnsDeploymentId, EnsDeployment> = {
+  'sepolia-v2': {
+    id: 'sepolia-v2',
+    ethRegistry: getAddress('0xd4ebcbbdf463c9c45784603db0ddd499bc44a8b4'),
+    ethRegistrar: getAddress('0xf633e7fc17e2bbe0d0965d18ec1821dcb754a3d3'),
+    mockUsdc: getAddress('0x240b0316df57887dbbe58b586508b19e633a14aa'),
+    verifiableFactory: getAddress('0xda70306c98e97ece36f997a21368e53298572991'),
+    permissionedResolverImpl: getAddress('0x115eb53f0c60696633855f90b138178fb40b2b2c'),
+    userRegistryImpl: getAddress('0x9bd8a88719068d09ecee662f36c0e3856708366a'),
+    universalResolver: getAddress('0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe'),
+  },
+  'hackathon-test': {
+    id: 'hackathon-test',
+    ethRegistry: getAddress('0x1d78834d97c1d7b1a38c1dedbd1a287cfed3971e'),
+    ethRegistrar: getAddress('0x7d1b7f586a62ac3f54b9a396849757814283270b'),
+    mockUsdc: getAddress('0xcbfd80f74375c54e545af34788ff465f96f66f05'),
+    verifiableFactory: getAddress('0x894bc9cc8ff1ad96b8a288c86a8c71d662c07780'),
+    permissionedResolverImpl: getAddress('0xa9d3814ab151bf6e37a427432795371a8361614e'),
+    userRegistryImpl: getAddress('0x47b442d0cf617c41cabaff5f02f44dd1e5f72546'),
+    universalResolver: getAddress('0xd26f2040d083af1cd2962ba303f4bea0c4faf142'),
+  },
+}
+
+export const DEFAULT_ENS_DEPLOYMENT: EnsDeploymentId = 'hackathon-test'
+
+// selectEnsDeployment rejects an unknown id instead of falling back, so a
+// typo cannot silently point a node at the wrong contracts.
+export function selectEnsDeployment(value: string | undefined): EnsDeployment {
+  const id = value?.trim() || DEFAULT_ENS_DEPLOYMENT
+  if (!Object.hasOwn(ENS_DEPLOYMENTS, id)) {
+    throw new Error(`BRAMBLE_ENS_DEPLOYMENT must be one of ${Object.keys(ENS_DEPLOYMENTS).join(', ')}; got "${id}"`)
+  }
+  return ENS_DEPLOYMENTS[id as EnsDeploymentId]
+}
+
+export const ENS_DEPLOYMENT = selectEnsDeployment(process.env.BRAMBLE_ENS_DEPLOYMENT)
+
+export const ETH_REGISTRY = ENS_DEPLOYMENT.ethRegistry
+export const ETH_REGISTRAR = ENS_DEPLOYMENT.ethRegistrar
+export const MOCK_USDC = ENS_DEPLOYMENT.mockUsdc
+export const VERIFIABLE_FACTORY = ENS_DEPLOYMENT.verifiableFactory
+export const PERMISSIONED_RESOLVER_IMPL = ENS_DEPLOYMENT.permissionedResolverImpl
+export const USER_REGISTRY_IMPL = ENS_DEPLOYMENT.userRegistryImpl
+export const UNIVERSAL_RESOLVER = ENS_DEPLOYMENT.universalResolver
+
+// ensSepolia is viem's Sepolia chain with the selected deployment's
+// Universal Resolver. Pass it to every client that resolves names. viem's
+// built-in Sepolia address happens to equal the official one today, but
+// setting it here keeps `hackathon-test` correct and stops a future viem
+// bump from moving resolution silently (docs/04_TECH_STACK.md, "Universal
+// Resolver gotcha").
+export const ensSepolia = {
+  ...sepolia,
+  contracts: { ...sepolia.contracts, ensUniversalResolver: { address: UNIVERSAL_RESOLVER } },
+}
 
 // EAC role constants (values from the ENSv2 docs' Permissioned Registry /
 // Permissioned Resolver role tables, not guessed).

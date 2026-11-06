@@ -1,3 +1,4 @@
+import '../../admincli/src/env'
 // One-off: registers a second device subname ("device2") on the already
 // deployed dev tailnet subregistry, for Gate 0.2's real two-machine run
 // (needs two independently ENS-resolvable devices, one per machine). No
@@ -6,7 +7,7 @@
 // directly on the tailnet's own UserRegistry subregistry.
 //
 // Usage: bun run register-device2.ts <vps-pubkey-hex>
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -22,32 +23,17 @@ import {
   toHex,
   parseEventLogs,
 } from 'viem'
-import { sepolia } from 'viem/chains'
 import { privateKeyToAccount } from 'viem/accounts'
 import { normalize, packetToBytes } from 'viem/ens'
 import {
   VERIFIABLE_FACTORY,
   PERMISSIONED_RESOLVER_IMPL,
-  UNIVERSAL_RESOLVER,
+  ensSepolia,
   ALL_ROLES,
   RPC_URL,
 } from '../../sidecar/src/ens/config'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-
-const envPath = path.resolve(__dirname, '../../.env')
-if (existsSync(envPath)) {
-  const env = await Bun.file(envPath).text()
-  for (const line of env.split('\n')) {
-    const match = line.match(/^([^#=]+)=(.*)$/)
-    if (match && !process.env[match[1].trim()]) {
-      // Strip one layer of matching surrounding quotes — see
-      // admincli/src/setup.ts's identical loader for the full reasoning.
-      const rawValue = match[2].trim()
-      process.env[match[1].trim()] = rawValue.replace(/^(['"])(.*)\1$/, '$2')
-    }
-  }
-}
 
 const [vpsPubkey] = process.argv.slice(2)
 if (!vpsPubkey) throw new Error('usage: bun run register-device2.ts <vps-pubkey-hex>')
@@ -57,12 +43,8 @@ const rawKey = process.env.SEPOLIA_PRIVATE_KEY.trim()
 const privateKey = (rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`) as `0x${string}`
 const account = privateKeyToAccount(privateKey)
 
-const hackathonSepolia = {
-  ...sepolia,
-  contracts: { ...sepolia.contracts, ensUniversalResolver: { address: getAddress(UNIVERSAL_RESOLVER) } },
-}
-const publicClient = createPublicClient({ chain: hackathonSepolia, transport: http(RPC_URL) })
-const wallet = createWalletClient({ account, chain: hackathonSepolia, transport: http(RPC_URL) })
+const publicClient = createPublicClient({ chain: ensSepolia, transport: http(RPC_URL) })
+const wallet = createWalletClient({ account, chain: ensSepolia, transport: http(RPC_URL) })
 
 async function writeAndWait(label: string, args: Parameters<typeof wallet.writeContract>[0]) {
   const hash = await wallet.writeContract(args)

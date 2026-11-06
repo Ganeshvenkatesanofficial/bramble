@@ -1,3 +1,4 @@
+import '../../admincli/src/env'
 // Sets (or clears) a device's `mesh-ip` text record on its already-deployed
 // resolver — the same shape as set-pubkey.ts, generalized to the mesh-ip
 // record docs/adr/0009 adds. Exists for two cases enroll.ts's own
@@ -9,30 +10,15 @@
 // Usage: bun run set-mesh-ip.ts <device-label> <new-mesh-ip-or-empty>
 //   bun run set-mesh-ip.ts device2 ""              # clear
 //   bun run set-mesh-ip.ts device2 10.77.0.3/24     # assign
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createPublicClient, createWalletClient, http, parseAbi, getAddress, toHex } from 'viem'
-import { sepolia } from 'viem/chains'
+import { createPublicClient, createWalletClient, http, parseAbi, toHex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { normalize, packetToBytes } from 'viem/ens'
-import { UNIVERSAL_RESOLVER, RPC_URL } from '../../sidecar/src/ens/config'
+import { ensSepolia, RPC_URL } from '../../sidecar/src/ens/config'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-
-const envPath = path.resolve(__dirname, '../../.env')
-if (existsSync(envPath)) {
-  const env = await Bun.file(envPath).text()
-  for (const line of env.split('\n')) {
-    const match = line.match(/^([^#=]+)=(.*)$/)
-    if (match && !process.env[match[1].trim()]) {
-      // Strip one layer of matching surrounding quotes — see
-      // admincli/src/setup.ts's identical loader for the full reasoning.
-      const rawValue = match[2].trim()
-      process.env[match[1].trim()] = rawValue.replace(/^(['"])(.*)\1$/, '$2')
-    }
-  }
-}
 
 const [deviceLabel, newMeshIP] = process.argv.slice(2)
 if (deviceLabel === undefined || newMeshIP === undefined) {
@@ -44,12 +30,8 @@ const rawKey = process.env.SEPOLIA_PRIVATE_KEY.trim()
 const privateKey = (rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`) as `0x${string}`
 const account = privateKeyToAccount(privateKey)
 
-const hackathonSepolia = {
-  ...sepolia,
-  contracts: { ...sepolia.contracts, ensUniversalResolver: { address: getAddress(UNIVERSAL_RESOLVER) } },
-}
-const publicClient = createPublicClient({ chain: hackathonSepolia, transport: http(RPC_URL) })
-const wallet = createWalletClient({ account, chain: hackathonSepolia, transport: http(RPC_URL) })
+const publicClient = createPublicClient({ chain: ensSepolia, transport: http(RPC_URL) })
+const wallet = createWalletClient({ account, chain: ensSepolia, transport: http(RPC_URL) })
 
 const fixturePath = path.resolve(__dirname, '../../sidecar/test/fixtures/dev-tailnet.json')
 const fixture = JSON.parse(readFileSync(fixturePath, 'utf-8'))

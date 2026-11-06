@@ -1,3 +1,4 @@
+import '../src/env'
 // Gate 2.1 verification: table-driven EAC permit/deny test for enrollment,
 // rotation, and revocation — one case per {enroller, rotator, revoker,
 // no-role} account x {enroll, rotate, revoke} action. Only the diagonal may
@@ -30,7 +31,7 @@ process.env.BRAMBLE_TAILNET_NAME = fixture.tailnetName
 process.env.BRAMBLE_TAILNET_REGISTRY = fixture.tailnetRegistry
 
 import { RPC_URL, tailnetRegistry, ROLE_REGISTRAR } from '../../sidecar/src/ens/config'
-import { accountFromEnv, hackathonSepolia, publicClient } from '../src/setup'
+import { accountFromEnv, ensSepolia, publicClient } from '../src/setup'
 import { registryWriteAbi, resolverWriteAbi, pubkeySetter, revokedSetter } from '../src/roles'
 
 const results: Record<string, boolean> = {}
@@ -43,7 +44,7 @@ const zeroAddress = '0x0000000000000000000000000000000000000000' as const
 
 async function main() {
   const admin = accountFromEnv()
-  const wallet = createWalletClient({ account: admin, chain: hackathonSepolia, transport: http(RPC_URL) })
+  const wallet = createWalletClient({ account: admin, chain: ensSepolia, transport: http(RPC_URL) })
 
   async function writeAndWait(label: string, args: Parameters<typeof wallet.writeContract>[0]) {
     const hash = await wallet.writeContract(args)

@@ -1,20 +1,7 @@
 import { createPublicClient, http, keccak256, toHex } from 'viem'
-import { sepolia } from 'viem/chains'
 import { normalize } from 'viem/ens'
 import { torFetch } from '../tor'
-import { RPC_URL, UNIVERSAL_RESOLVER, registryAbi, tailnetName, tailnetRegistry } from './config'
-
-// viem ships a built-in Universal Resolver address for Sepolia that points at
-// the production/beta ENSv2 deployment, not the hackathon one. Overwriting it
-// is required — skipping this makes every resolution call silently target the
-// wrong contracts. See docs/04_TECH_STACK.md, "Universal Resolver gotcha."
-const hackathonSepolia = {
-  ...sepolia,
-  contracts: {
-    ...sepolia.contracts,
-    ensUniversalResolver: { address: UNIVERSAL_RESOLVER },
-  },
-}
+import { RPC_URL, ensSepolia, registryAbi, tailnetName, tailnetRegistry } from './config'
 
 // Every ENS read goes through Tor under the 'ens' isolation key (handoff 5.1,
 // docs/adr/0013). torFetch rejects until Tor is ready instead of falling back
@@ -25,7 +12,7 @@ const hackathonSepolia = {
 // lookup is lost.
 export function createEnsClient(fetchFn: typeof fetch) {
   return createPublicClient({
-    chain: hackathonSepolia,
+    chain: ensSepolia,
     transport: http(RPC_URL, { fetchFn, timeout: 60_000 }),
     ccipRead: false,
   })
