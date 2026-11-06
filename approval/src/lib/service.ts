@@ -12,6 +12,19 @@ import {
 } from './contracts'
 import type { AuditRecorder } from './audit'
 
+// logSignerFailure writes why the signer refused a grant or revoke to the service log (journald under systemd).
+// The API answer stays generic. The message is cut short and URLs are masked, because an RPC error can echo the
+// endpoint, and that endpoint may carry a credential.
+function logSignerFailure(operation: 'grant' | 'revoke', error: unknown): void {
+  const raw =
+    error instanceof Error
+      ? ((error as { shortMessage?: string }).shortMessage ?? error.message)
+      : String(error)
+  const message = raw.replace(/https?:\/\/\S+/g, '<url>').replace(/\s+/g, ' ').slice(0, 300)
+  const name = error instanceof Error ? error.name : typeof error
+  console.error(`approval: signer ${operation} failed (${name}): ${message}`)
+}
+
 export const systemClock: Clock = {
   now: () => Date.now(),
   schedule(action, delayMs) {
@@ -195,6 +208,7 @@ export class ApprovalService {
         serviceDigest = digest
       } catch (error) {
         if (!(error instanceof UnresolvedWriteError)) {
+          logSignerFailure('grant', error)
           record.status = 'pending'
           throw new ApiError(502, 'grant_failed', 'The signer did not confirm the grant.')
         }
@@ -357,6 +371,7 @@ export class ApprovalService {
           record.unresolvedWrite = unresolvedWrite
           return this.view(record)
         }
+        logSignerFailure('revoke', error)
         if (record) record.status = 'approved'
         throw new ApiError(502, 'revoke_failed', 'The signer did not confirm the revoke.')
       }
