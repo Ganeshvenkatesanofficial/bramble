@@ -238,3 +238,23 @@ Paths written in the browser and documentation revision:
 
 The no-feed browser assertion reproduces absent unavailable-field labels against
 the prior build. New browser screenshots and axe results follow final validation.
+
+Verified on 6 November 2026 after the revision: `pnpm verify` exits 0;
+126 approval tests pass; all 24 Playwright tests pass. Eight axe scans report zero
+violations. SVG color contrast remains incomplete for 12 text nodes in each live
+fixture scan and eight in each no-feed scan; explicit palette contrast checks
+pass. Inspected all four no-feed screenshots at desktop and phone widths in both
+themes. Automated checks do not establish complete manual WCAG conformance or
+live cloud connectivity.
+
+Read from source: implementation review finds zero documented standards
+violations and zero spec gaps. One optional duplicated-defaults smell remains in
+unavailable device construction. Grant/revoke service files remain unchanged.
+Cross-family review and merge remain Open.
+
+Evidence paths written:
+
+- `/home/anonjr/bramble-work/status/eth-317-revision-verify.log`
+- `/home/anonjr/bramble-work/status/eth-317-revision-browser.log`
+- `/home/anonjr/bramble-work/status/eth-317-revision-evidence/`
+- `approval/test-results/` (ignored screenshots and axe reports)
