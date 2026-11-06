@@ -45,6 +45,8 @@ export interface GetLogsCall {
   topics: (Hex | Hex[] | null)[]
   fromBlock: bigint
   toBlock: bigint
+  /** The request named toBlock "latest" instead of a block number. */
+  latest: boolean
 }
 
 const OWNER: Address = '0x000000000000000000000000000000000000b0b0'
@@ -93,12 +95,13 @@ export function fixtureClient(opts: {
     async request({ method, params }: { method: string; params?: unknown }) {
       if (method === 'eth_blockNumber') return numberToHex(opts.head)
       if (method === 'eth_getLogs') {
-        const [filter] = params as [{ address: string; topics: (Hex | Hex[] | null)[]; fromBlock: Hex; toBlock: Hex }]
+        const [filter] = params as [{ address: string; topics: (Hex | Hex[] | null)[]; fromBlock: Hex; toBlock: Hex | 'latest' }]
         const call = {
           address: filter.address,
           topics: filter.topics,
           fromBlock: BigInt(filter.fromBlock),
-          toBlock: BigInt(filter.toBlock),
+          toBlock: filter.toBlock === 'latest' ? opts.head : BigInt(filter.toBlock),
+          latest: filter.toBlock === 'latest',
         }
         calls.push(call)
         if (opts.failWith && (opts.failTimes === undefined || calls.length <= opts.failTimes)) {

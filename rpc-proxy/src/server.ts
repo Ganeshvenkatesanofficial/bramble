@@ -74,6 +74,13 @@ function isInvalidParams(text: string): boolean {
   }
 }
 
+// withLatestToBlock returns the single eth_getLogs call with toBlock replaced by "latest", or undefined when the
+// call has no filter object to change.
+function withLatestToBlock(call: unknown): string | undefined {
+  if (!isObject(call) || !Array.isArray(call.params) || !isObject(call.params[0])) return undefined
+  return JSON.stringify({ ...call, params: [{ ...call.params[0], toBlock: 'latest' }, ...call.params.slice(1)] })
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -142,29 +149,34 @@ export function createProxyServer(config: Config): ProxyServer {
     }
 
     try {
-      const callUpstream = () =>
+      const callUpstream = (body: string) =>
         fetch(config.upstreamUrl, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: raw,
+          body,
           redirect: 'error',
           signal: AbortSignal.timeout(config.upstreamTimeoutMs),
         })
-      let upstream = await callUpstream()
+      let upstream = await callUpstream(raw)
       let text = await upstream.text()
       // The upstream is a load-balanced pool. A getLogs whose toBlock is the head that eth_blockNumber just
       // returned can land on a backend that has not seen that block yet, and that backend answers -32602.
-      // The identical call succeeds a moment later (found live, 6 Nov 2026). Retry such a call once. The
-      // retry is not logged: the log records what clients sent, not what the proxy did.
+      // Asking the same pool again for the same block fails again about as often (the lag is shared), so the
+      // retry asks for toBlock "latest", which each backend resolves against its own head (found live, 6 Nov
+      // 2026: 3 of 20 identical retries still failed). Retry a single call once. The retry is not logged: the
+      // log records what clients sent, not what the proxy did.
       if (
         config.upstreamRetryDelayMs > 0 &&
         calls.length === 1 &&
         methods[0] === 'eth_getLogs' &&
         isInvalidParams(text)
       ) {
-        await new Promise((resolve) => setTimeout(resolve, config.upstreamRetryDelayMs))
-        upstream = await callUpstream()
-        text = await upstream.text()
+        const retryBody = withLatestToBlock(parsed)
+        if (retryBody !== undefined) {
+          await new Promise((resolve) => setTimeout(resolve, config.upstreamRetryDelayMs))
+          upstream = await callUpstream(retryBody)
+          text = await upstream.text()
+        }
       }
       // The response is rebuilt from allowed JSON-RPC fields: provider errors can echo the request URL in many forms.
       const safe = isJsonMediaType(upstream.headers.get('content-type') ?? '')

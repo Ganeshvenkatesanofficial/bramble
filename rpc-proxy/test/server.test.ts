@@ -102,6 +102,9 @@ describe('rpc-proxy', () => {
     const res = await post(base, call)
     expect(await res.json()).toEqual({ jsonrpc: '2.0', id: 1, result: 'ok:eth_getLogs' })
     expect(upstream.received).toHaveLength(2)
+    // The retry asks for "latest" instead of the head the client named.
+    expect(JSON.parse(upstream.received[0]!.body).params[0].toBlock).toBe('0x2')
+    expect(JSON.parse(upstream.received[1]!.body).params[0]).toEqual({ fromBlock: '0x1', toBlock: 'latest' })
     const view = (await (await fetch(base + '/log')).json()) as { entries: unknown[] }
     expect(view.entries).toHaveLength(1)
   })

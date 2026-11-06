@@ -22,6 +22,7 @@ describe('scanLogsChunked retry', () => {
 
     expect(out.map((l) => l.args.label)).toEqual(['relay1'])
     expect(calls).toHaveLength(3) // two rejections, then the answer
+    expect(calls.map((c) => c.latest)).toEqual([false, true, true]) // retries ask for "latest"
   })
 
   it('gives up after the last retry and reports the RPC error', async () => {

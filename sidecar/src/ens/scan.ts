@@ -36,10 +36,10 @@ type ScannedLog = Log & { args: Record<string, unknown> }
 // backend that already has the newest block, and the getLogs that follows can
 // reach a backend that does not, which rejects the window with -32602
 // "Invalid parameters" (found live on the cloud nodes, 6 Nov 2026: the worker
-// and the gateway each hit it on their first scan after start-up, and a
-// repeat of the identical request seconds later succeeded). A short wait lets
-// the lagging backend catch up. The delays total about 10 s, well inside
-// brambled's 8 minute budget for the call.
+// and the gateway each hit it on their first scan after start-up). Repeating
+// the identical request fails again about as often, because the lag is shared
+// across the pool, so a retry asks for "latest" instead of the head number.
+// The delays total about 10 s, well inside brambled's 8 minute budget.
 const RETRY_DELAYS_MS = [1_500, 3_000, 6_000]
 
 // PRUNED_HISTORY is the error code public nodes use when they no longer serve
@@ -73,11 +73,14 @@ export async function scanLogsChunked(
     const end = start + MAX_BLOCK_RANGE - 1n > head ? head : start + MAX_BLOCK_RANGE - 1n
     for (let attempt = 0; ; attempt++) {
       try {
+        // After a failure, the window that ends at head asks for "latest": each backend then resolves the
+        // bound against its own head, so a lagging backend cannot reject it (see RETRY_DELAYS_MS).
+        const toBlock = attempt > 0 && end === head ? 'latest' : end
         const chunk = await client.getLogs({
           address: params.address,
           event: params.event,
           fromBlock: start,
-          toBlock: end,
+          toBlock,
         })
         logs.push(...(chunk as ScannedLog[]))
         break
