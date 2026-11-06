@@ -218,6 +218,7 @@ Paths written in the API revision:
 - `approval/src/lib/api.ts`
 - `approval/src/app/api/[...path]/route.ts`
 - `approval/test/network.test.ts`
+- `approval/test/api.test.ts`
 - `docs/ai-usage/hedera-sol.md`
 
 Verified: the no-feed API regression fails before the revision and passes after

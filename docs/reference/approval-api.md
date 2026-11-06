@@ -7,14 +7,14 @@
 
 ## Endpoints
 
-| Method | Path                             | Auth  | Result                                                                     |
-| ------ | -------------------------------- | ----- | -------------------------------------------------------------------------- |
-| `POST` | `/api/requests`                  | token | Create a pending request. Returns `201`.                                   |
-| `GET`  | `/api/requests`                  | none  | `{ "requests": [...] }`, all requests in memory.                           |
-| `GET`  | `/api/requests/:id`              | none  | One request. `404 request_not_found` if unknown.                           |
-| `POST` | `/api/requests/:id/approve`      | token | Grant through the signer. Returns the request with `grantTransaction`.     |
-| `POST` | `/api/requests/:id/deny`         | token | Record the denial. No signing.                                             |
-| `POST` | `/api/grants/:agentLabel/revoke` | token | Clear that agent's ACL grants through the signer. No request id is needed. |
+| Method | Path                             | Auth  | Result                                                                      |
+| ------ | -------------------------------- | ----- | --------------------------------------------------------------------------- |
+| `POST` | `/api/requests`                  | token | Create a pending request. Returns `201`.                                    |
+| `GET`  | `/api/requests`                  | none  | `{ "requests": [...] }`, all requests in memory.                            |
+| `GET`  | `/api/requests/:id`              | none  | One request. `404 request_not_found` if unknown.                            |
+| `POST` | `/api/requests/:id/approve`      | token | Grant through the signer. Returns the request with `grantTransaction`.      |
+| `POST` | `/api/requests/:id/deny`         | token | Record the denial. No signing.                                              |
+| `POST` | `/api/grants/:agentLabel/revoke` | token | Clear that agent's ACL grants through the signer. No request id is needed.  |
 
 Reads send `Cache-Control: no-store`.
 
@@ -41,41 +41,41 @@ The service rejects unknown fields, a body over 16384 bytes, and any content typ
 
 Every response that carries a request has these fields.
 
-| Field               | Type   | Meaning                                                                              |
-| ------------------- | ------ | ------------------------------------------------------------------------------------ |
-| `id`                | string | Random UUID.                                                                         |
-| `status`            | string | See [Status values](#status-values).                                                 |
-| `createdAt`         | string | UTC timestamp.                                                                       |
-| `decidedAt`         | string | Set on approve or deny.                                                              |
-| `grantTransaction`  | object | `{ transactionHash }`. Set when the signer confirms the grant.                       |
-| `revokeTransaction` | object | `{ transactionHash }`. Set only when the signer confirms a revoke. Absent otherwise. |
-| `revokedAt`         | string | UTC timestamp. Set when the service marks the request `revoked`.                     |
-| `revokeReason`      | string | `manual`, `duration` or `external`. See [Status values](#status-values).             |
-| `expiresAt`         | string | UTC timestamp. Set on approval when `requestedDuration` was given.                   |
-| `serverTime`        | string | UTC timestamp of the response.                                                       |
-| `remainingSeconds`  | number | Nonnegative seconds to `expiresAt`, or null without a duration.                      |
-| `durationMode`      | string | `server-timer` when a duration was given, otherwise null.                            |
-| `expiryStatus`      | string | `none`, `scheduled`, `revoking`, `failed` or `revoked`.                              |
+| Field                 | Type   | Meaning                                                                                  |
+| --------------------- | ------ | ---------------------------------------------------------------------------------------- |
+| `id`                  | string | Random UUID.                                                                             |
+| `status`              | string | See [Status values](#status-values).                                                     |
+| `createdAt`           | string | UTC timestamp.                                                                           |
+| `decidedAt`           | string | Set on approve or deny.                                                                  |
+| `grantTransaction`    | object | `{ transactionHash }`. Set when the signer confirms the grant.                           |
+| `revokeTransaction`   | object | `{ transactionHash }`. Set only when the signer confirms a revoke. Absent otherwise.     |
+| `revokedAt`           | string | UTC timestamp. Set when the service marks the request `revoked`.                         |
+| `revokeReason`        | string | `manual`, `duration` or `external`. See [Status values](#status-values).                 |
+| `expiresAt`           | string | UTC timestamp. Set on approval when `requestedDuration` was given.                       |
+| `serverTime`          | string | UTC timestamp of the response.                                                           |
+| `remainingSeconds`    | number | Nonnegative seconds to `expiresAt`, or null without a duration.                          |
+| `durationMode`        | string | `server-timer` when a duration was given, otherwise null.                                |
+| `expiryStatus`        | string | `none`, `scheduled`, `revoking`, `failed` or `revoked`.                                  |
 
 ## Status values
 
-| Status      | Meaning                                                                                |
-| ----------- | -------------------------------------------------------------------------------------- |
-| `pending`   | Waiting for a human.                                                                   |
-| `approving` | The signer is writing the grant. Returns to `pending` if the write is not confirmed.   |
-| `approved`  | The signer confirmed the grant transaction.                                            |
-| `denied`    | A human denied the request. Terminal.                                                  |
-| `revoking`  | The signer is writing the revoke. Returns to `approved` if the write is not confirmed. |
-| `revoked`   | The agent has no grant, by one of the paths in the next table. Terminal.               |
+| Status      | Meaning                                                                                                                                         |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pending`   | Waiting for a human.                                                                                                                            |
+| `approving` | The signer is writing the grant. Returns to `pending` if the write is not confirmed.                                                            |
+| `approved`  | The signer confirmed the grant transaction.                                                                                                     |
+| `denied`    | A human denied the request. Terminal.                                                                                                           |
+| `revoking`  | The signer is writing the revoke. Returns to `approved` if the write is not confirmed.                                                          |
+| `revoked`   | The agent has no grant, by one of the paths in the next table. Terminal.                                                                        |
 
 `revoked` does not always mean this service sent a revoke transaction. `revokeReason` and `revokeTransaction` tell the paths apart.
 
-| `revokeReason` | How the request reaches `revoked`                                                                                         | `revokeTransaction` |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| `manual`       | A human calls the revoke endpoint and the signer confirms.                                                                | Set                 |
-| `duration`     | The expiry timer calls the same revoke path and the signer confirms.                                                      | Set                 |
+| `revokeReason` | How the request reaches `revoked`                                                                                       | `revokeTransaction` |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `manual`       | A human calls the revoke endpoint and the signer confirms.                                                              | Set                 |
+| `duration`     | The expiry timer calls the same revoke path and the signer confirms.                                                    | Set                 |
 | `duration`     | The expiry timer fires, a fresh ACL read shows no grant, and the service marks the request revoked without a signer call. | Absent              |
-| `external`     | A later approve for the same agent reads an empty ACL, so the service retires the older `approved` request.               | Absent              |
+| `external`     | A later approve for the same agent reads an empty ACL, so the service retires the older `approved` request.             | Absent              |
 
 A client shows a transaction link only when `revokeTransaction` is present.
 
@@ -103,19 +103,19 @@ The token gates the write surface. It does not prove who the agent is, and it do
 
 Errors use `{ "error": { "code": "<snake_case>", "message": "<text>" } }`.
 
-| Status   | Code                                            | When                                                              |
-| -------- | ----------------------------------------------- | ----------------------------------------------------------------- |
-| 400      | `invalid_request`, `invalid_json`               | Body or field fails validation.                                   |
-| 401      | `unauthorized`                                  | Wrong or missing token.                                           |
-| 404      | `request_not_found`, `route_not_found`          | Unknown id or path.                                               |
-| 409      | `request_not_pending`                           | Approve or deny on a request that already left `pending`.         |
-| 409      | `already_granted`                               | The agent already has a grant, so a second approve is refused.    |
-| 409      | `identity_not_active`                           | Agent or gateway has no active ENS identity with a published key. |
-| 409      | `not_granted`                                   | Revoke for an agent with no grant.                                |
-| 409      | `operation_in_progress`                         | Another write for the same agent is running.                      |
-| 413, 415 | `request_too_large`, `unsupported_media_type`   | Body size or content type.                                        |
-| 502      | `grant_failed`, `revoke_failed`                 | The signer did not confirm.                                       |
-| 503      | `signer_not_configured`, `token_not_configured` | Missing runtime configuration.                                    |
+| Status   | Code                                             | When                                                                  |
+| -------- | ------------------------------------------------ | --------------------------------------------------------------------- |
+| 400      | `invalid_request`, `invalid_json`                | Body or field fails validation.                                       |
+| 401      | `unauthorized`                                   | Wrong or missing token.                                               |
+| 404      | `request_not_found`, `route_not_found`           | Unknown id or path.                                                   |
+| 409      | `request_not_pending`                            | Approve or deny on a request that already left `pending`.             |
+| 409      | `already_granted`                                | The agent already has a grant, so a second approve is refused.        |
+| 409      | `identity_not_active`                            | Agent or gateway has no active ENS identity with a published key.     |
+| 409      | `not_granted`                                    | Revoke for an agent with no grant.                                    |
+| 409      | `operation_in_progress`                          | Another write for the same agent is running.                          |
+| 413, 415 | `request_too_large`, `unsupported_media_type`    | Body size or content type.                                            |
+| 502      | `grant_failed`, `revoke_failed`                  | The signer did not confirm.                                           |
+| 503      | `signer_not_configured`, `token_not_configured`  | Missing runtime configuration.                                        |
 
 A double approve, or a revoke of an ungranted agent, returns a 409 before any signer call. A failed or duplicate action never reports success.
 
@@ -125,19 +125,20 @@ A double approve, or a revoke of an ungranted agent, returns a 409 before any si
 - **Read from source:** every value above comes from `approval/src/lib` on `hackathon`.
 - **Open:** the 2 s visibility target against a running service and a real signer.
 
+
 ## Device joins and membership
 
 These endpoints implement ETH-177 shared contract v1 and the Atlas list-row decision on ETH-181. Device membership is separate from service ACL grants. Approving a join enrolls a device; it does not grant a private service.
 
-| Method | Path                     | Auth  | Result                                                                   |
-| ------ | ------------------------ | ----- | ------------------------------------------------------------------------ |
-| POST   | `/api/joins`             | none  | `201 {id,status:"pending"}`                                              |
-| GET    | `/api/joins/:id`         | none  | One join record; `404 join_not_found` for an unknown ID                  |
-| GET    | `/api/joins`             | token | `{joins:[...]}`                                                          |
-| POST   | `/api/joins/:id/approve` | token | Confirm enrollment and return the approved record                        |
-| POST   | `/api/joins/:id/deny`    | token | Deny a pending suggestion without signing                                |
-| POST   | `/api/joins/:id/revoke`  | token | Confirm `revoked=true` through admincli and return the revoked record    |
-| GET    | `/api/members`           | token | `{members:[...]}`, read from ENS registration events and current records |
+| Method | Path | Auth | Result |
+| --- | --- | --- | --- |
+| POST | `/api/joins` | none | `201 {id,status:"pending"}` |
+| GET | `/api/joins/:id` | none | One join record; `404 join_not_found` for an unknown ID |
+| GET | `/api/joins` | token | `{joins:[...]}` |
+| POST | `/api/joins/:id/approve` | token | Confirm enrollment and return the approved record |
+| POST | `/api/joins/:id/deny` | token | Deny a pending suggestion without signing |
+| POST | `/api/joins/:id/revoke` | token | Confirm `revoked=true` through admincli and return the revoked record |
+| GET | `/api/members` | token | `{members:[...]}`, read from ENS registration events and current records |
 
 `POST /api/joins` takes `{label,pubkey,tailnet}`. The label follows the access-request label rule and the full device name must pass ENS normalization. `pubkey` is exactly 64 hexadecimal characters representing the 32-byte WireGuard public key, normalized to lowercase. `tailnet` must match `APPROVAL_ENS_PARENT`. Unknown fields, malformed JSON and bodies over 16384 bytes are rejected.
 
@@ -155,14 +156,14 @@ Member enumeration includes unexpired registrations, including revoked devices. 
 
 ## Enrollment configuration
 
-| Variable                                           | Purpose                                                                 |
-| -------------------------------------------------- | ----------------------------------------------------------------------- |
-| `APPROVAL_ENS_PARENT`                              | ENS tailnet served by joins; must match `BRAMBLE_TAILNET_NAME`          |
-| `APPROVAL_DEMO_TOKEN`                              | Existing shared operator token; never sent by joining devices           |
-| `SEPOLIA_PRIVATE_KEY`                              | Existing software Sepolia transaction signer                            |
-| `BRAMBLE_TAILNET_NAME`, `BRAMBLE_TAILNET_REGISTRY` | Existing tailnet configuration                                          |
-| `BRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK`            | First block for bounded device registration-log scans                   |
-| `SEPOLIA_RPC_URL`                                  | Administrator RPC endpoint; never included in public node configuration |
+| Variable | Purpose |
+| --- | --- |
+| `APPROVAL_ENS_PARENT` | ENS tailnet served by joins; must match `BRAMBLE_TAILNET_NAME` |
+| `APPROVAL_DEMO_TOKEN` | Existing shared operator token; never sent by joining devices |
+| `SEPOLIA_PRIVATE_KEY` | Existing software Sepolia transaction signer |
+| `BRAMBLE_TAILNET_NAME`, `BRAMBLE_TAILNET_REGISTRY` | Existing tailnet configuration |
+| `BRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK` | First block for bounded device registration-log scans |
+| `SEPOLIA_RPC_URL` | Administrator RPC endpoint; never included in public node configuration |
 
 The existing ACL granter still uses `BRAMBLE_GRANTER_KEY_RING_PATH` and `BRAMBLE_RING_CLI=deploy/scripts/software-ring.sh`. Enrollment uses the same software Sepolia account and does not require Ledger hardware. Its on-chain transactions use testnet funds.
 

@@ -10,7 +10,11 @@ test('network topology is available only to the authenticated operator', async (
   expect((await api.handle(request('/network', 'GET', undefined, false))).status).toBe(401)
   const response = await api.handle(request('/network'))
   expect(response.status).toBe(200)
-  expect(await response.json()).toMatchObject({ state: 'not_configured', nodes: [], links: [] })
+  expect(await response.json()).toMatchObject({
+    state: 'not_configured',
+    nodes: [expect.objectContaining({ id: 'gateway', path: 'unavailable', admission: 'unavailable' })],
+    links: [],
+  })
 })
 
 function request(path = '/requests', method = 'GET', body?: unknown, authorized = true) {
