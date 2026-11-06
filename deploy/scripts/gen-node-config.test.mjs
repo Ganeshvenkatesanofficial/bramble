@@ -29,12 +29,36 @@ test('builds the launcher schema with defaults derived from the host names', () 
     rendezvous: '203.0.113.5:9420',
     stun: ['203.0.113.5:3478'],
     dataRelays: { 'relay-a': 'http://203.0.113.5:7891' },
+    rendezvousPaymentUrl: 'http://203.0.113.5:7891',
   })
+})
+
+// ETH-301: without it a metered relay rejects the device's rendezvous hello.
+test('pairs the rendezvous relay with its token sidecar', () => {
+  const other = base.replace('relay-a=http://203.0.113.5:7891', 'relay-a=http://203.0.113.9:7891')
+  assert.ok(!('rendezvousPaymentUrl' in build(other)))
+  assert.equal(
+    build(`${other}\nBRAMBLE_RENDEZVOUS_PAYMENT_URL=http://203.0.113.5:7891/`).rendezvousPaymentUrl,
+    'http://203.0.113.5:7891'
+  )
+  assert.throws(
+    () => build(`${base}\nBRAMBLE_RENDEZVOUS_PAYMENT_URL=http://u:p@203.0.113.5:7891`),
+    /rendezvousPaymentUrl/
+  )
+  assert.ok(!('rendezvousPaymentUrl' in build(base.replace(/BRAMBLE_RENDEZVOUS=.*/, ''))))
 })
 
 test('omits optional fields that are not set', () => {
   const c = build(base.replace(/BRAMBLE_(RELAY_REGISTRY|DATA_RELAYS|STUN_SERVERS|RENDEZVOUS)=.*/g, ''))
-  for (const k of ['relayRegistry', 'dataRelays', 'stun', 'rendezvous', 'relayPeers', 'services'])
+  for (const k of [
+    'relayRegistry',
+    'dataRelays',
+    'stun',
+    'rendezvous',
+    'rendezvousPaymentUrl',
+    'relayPeers',
+    'services',
+  ])
     assert.ok(!(k in c), k)
 })
 

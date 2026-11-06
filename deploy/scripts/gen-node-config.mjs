@@ -17,6 +17,7 @@ export const WANTED = [
   'BRAMBLE_PUBLIC_RPC_URL',
   'BRAMBLE_STUN_SERVERS',
   'BRAMBLE_RENDEZVOUS',
+  'BRAMBLE_RENDEZVOUS_PAYMENT_URL',
   'BRAMBLE_DATA_RELAYS',
   'BRAMBLE_RELAY_PEERS',
   'BRAMBLE_APPROVAL_URL',
@@ -115,6 +116,17 @@ export function buildConfig(env, version) {
     )
   }
   if (Object.keys(relays).length) config.dataRelays = relays
+  // A -meter relay rejects a hello without a token from its own sidecar, so a
+  // device with only `rendezvous` never exchanges endpoints (ETH-301). Use the
+  // explicit URL, else the data relay on the rendezvous host (same-machine
+  // convention, docs/adr/0008). With neither, the relay must be unmetered.
+  if (config.rendezvous) {
+    const host = config.rendezvous.slice(0, config.rendezvous.lastIndexOf(':')).toLowerCase()
+    const paired = env.BRAMBLE_RENDEZVOUS_PAYMENT_URL
+      ? publicUrl(env.BRAMBLE_RENDEZVOUS_PAYMENT_URL, 'rendezvousPaymentUrl').replace(/\/$/, '')
+      : Object.values(relays).find((u) => new URL(u).hostname.toLowerCase() === host)
+    if (paired) config.rendezvousPaymentUrl = paired
+  }
   const relayPeers = list(env.BRAMBLE_RELAY_PEERS).map((v) => label(v, 'relayPeers entry'))
   if (relayPeers.length) config.relayPeers = relayPeers
 
