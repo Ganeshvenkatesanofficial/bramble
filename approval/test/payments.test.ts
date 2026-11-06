@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
 import fixture from './fixtures/payments.json'
-import { createPaymentsApi } from '../src/lib/payments'
+import { createPaymentsApi, createSettlementSource } from '../src/lib/payments'
 
 const agent = { agentLabel: 'worker', payerAccountId: '0.0.123', budgetAtomic: '20000', since: '1700000000.000000000' }
 const servers: ReturnType<typeof Bun.serve>[] = []
@@ -203,4 +203,107 @@ test('concurrent polls share the fetch, cached bodies remain readable and a conf
   config = JSON.stringify([{ ...agent, budgetAtomic: '50000' }])
   expect((await (await api()).json()).agents[0].remainingAtomic).toBe('40000')
   expect(calls).toBe(2)
+})
+
+const usdc = '0.0.429274'
+const record = (id: string, timestamp: string, transfers: [string, number][], result = 'SUCCESS') => ({
+  transaction_id: id,
+  consensus_timestamp: timestamp,
+  result,
+  token_transfers: transfers.map(([account, amount]) => ({ token_id: usdc, account, amount })),
+})
+
+async function read(transactions: unknown[]) {
+  const server = Bun.serve({ port: 0, fetch: () => Response.json({ transactions, links: { next: null } }) })
+  servers.push(server)
+  return createSettlementSource({ config: () => JSON.stringify([agent]), mirrorUrl: server.url.origin })()
+}
+
+test('the settlement source reports each successful outgoing USDC payment with its payee and a well-formed txRef', async () => {
+  const { settled, unsupported } = await read([
+    ...fixture.transactions,
+    record('0.0.123-1700000007-42', '1700000007.000000042', [
+      ['0.0.123', -3000],
+      ['0.0.456', 3000],
+    ]),
+    record('0.0.123-1700000008-000000001', '1700000008.000000001', [], 'INSUFFICIENT_PAYER_BALANCE'),
+  ])
+  expect(settled).toContainEqual({
+    payer: '0.0.123',
+    payee: '0.0.456',
+    asset: usdc,
+    amountAtomic: '3000',
+    txRef: '0.0.123@1700000007.000000042',
+  })
+  expect(unsupported).toEqual([])
+  expect(settled.every((payment) => /^0\.0\.\d+@\d+\.\d{9}$/.test(payment.txRef))).toBe(true)
+  expect(settled.some((payment) => payment.txRef.includes('1700000008'))).toBe(false)
+})
+
+test('records that share a transaction ID are netted into one payment, not collapsed to the first', async () => {
+  const { settled, unsupported } = await read([
+    record('0.0.123-1700000010-000000005', '1700000010.000000005', [
+      ['0.0.123', -2000],
+      ['0.0.456', 2000],
+    ]),
+    record('0.0.123-1700000010-000000005', '1700000010.000000006', [
+      ['0.0.123', -1000],
+      ['0.0.456', 1000],
+    ]),
+  ])
+  expect(settled).toEqual([
+    { payer: '0.0.123', payee: '0.0.456', asset: usdc, amountAtomic: '3000', txRef: '0.0.123@1700000010.000000005' },
+  ])
+  expect(unsupported).toEqual([])
+  // Same transaction ID, but the second record pays someone else: no single payee exists.
+  const split = await read([
+    record('0.0.123-1700000010-000000005', '1700000010.000000005', [
+      ['0.0.123', -2000],
+      ['0.0.456', 2000],
+    ]),
+    record('0.0.123-1700000010-000000005', '1700000010.000000006', [
+      ['0.0.123', -1000],
+      ['0.0.789', 1000],
+    ]),
+  ])
+  expect(split.settled).toEqual([])
+  expect(split.unsupported).toEqual(['0.0.123@1700000010.000000005'])
+})
+
+test('a split, multi-payer or fee-taking transfer is reported as unsupported and never as a single-payee payment', async () => {
+  const { settled, unsupported } = await read([
+    record('0.0.123-1700000011-1', '1700000011.000000001', [
+      ['0.0.123', -3000],
+      ['0.0.456', 2900],
+      ['0.0.789', 100],
+    ]),
+    record('0.0.123-1700000012-1', '1700000012.000000001', [
+      ['0.0.123', -1000],
+      ['0.0.555', -500],
+      ['0.0.456', 1500],
+    ]),
+    record('0.0.123-1700000013-1', '1700000013.000000001', [
+      ['0.0.123', -1000],
+      ['0.0.456', 900],
+    ]),
+    record('0.0.123-1700000014-1', '1700000014.000000001', [
+      ['0.0.123', -1000],
+      ['0.0.456', 1000],
+    ]),
+  ])
+  expect(settled.map((payment) => payment.txRef)).toEqual(['0.0.123@1700000014.000000001'])
+  expect(unsupported).toEqual([
+    '0.0.123@1700000011.000000001',
+    '0.0.123@1700000012.000000001',
+    '0.0.123@1700000013.000000001',
+  ])
+})
+
+test('the settlement source throws rather than report a partial read', async () => {
+  const server = Bun.serve({ port: 0, fetch: () => new Response('unavailable', { status: 503 }) })
+  servers.push(server)
+  await expect(
+    createSettlementSource({ config: () => JSON.stringify([agent]), mirrorUrl: server.url.origin })()
+  ).rejects.toThrow()
+  await expect(createSettlementSource({ config: () => undefined, mirrorUrl: server.url.origin })()).rejects.toThrow()
 })

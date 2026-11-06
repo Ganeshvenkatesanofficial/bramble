@@ -1,5 +1,6 @@
 import {
   clearAcl,
+  computeGrantDigests,
   deviceName,
   grantAcl,
   parseAclRecord,
@@ -10,12 +11,12 @@ import {
 } from '../../../admincli/src/lib'
 import {
   UnresolvedWriteError,
+  type GrantReceipt,
   type GrantSigner,
   type IdentityFacts,
   type IdentityResolver,
   type RequestInput,
   type SettleOutcome,
-  type TransactionReceipt,
 } from './contracts'
 
 /** What a device read must report; `readDevice` in ens-reader.ts satisfies it. */
@@ -47,6 +48,8 @@ export interface ChainAdapters {
   signer: GrantSigner
   resolver: IdentityResolver
 }
+
+const withPrefix = (digest: string) => (digest.startsWith('0x') ? digest : `0x${digest}`)
 
 export function createChainAdapters(config: ChainConfig): ChainAdapters {
   const { resolver, tailnetName } = config
@@ -86,15 +89,16 @@ export function createChainAdapters(config: ChainConfig): ChainAdapters {
   async function settleAfterFailure(
     operation: 'grant' | 'revoke',
     hash: string,
-    original: unknown
-  ): Promise<TransactionReceipt> {
+    original: unknown,
+    serviceDigest?: string
+  ): Promise<GrantReceipt> {
     for (let attempt = 0; attempt < attempts; attempt++) {
       if (attempt > 0) await sleep(delayMs)
       const outcome = await settleOnce(hash)
-      if (outcome === 'confirmed') return { transactionHash: hash }
+      if (outcome === 'confirmed') return { transactionHash: hash, ...(serviceDigest ? { serviceDigest } : {}) }
       if (outcome === 'reverted') throw original
     }
-    throw new UnresolvedWriteError(operation, hash, () => settleOnce(hash))
+    throw new UnresolvedWriteError(operation, hash, () => settleOnce(hash), serviceDigest)
   }
 
   return {
@@ -118,22 +122,36 @@ export function createChainAdapters(config: ChainConfig): ChainAdapters {
     signer: {
       async grant(input: Pick<RequestInput, 'agentLabel' | 'gatewayLabel' | 'service'>) {
         const tracked = track()
-        const deps = { resolver, signer: tracked.signer, tailnetName }
+        // Pubkey reads and the granter key are pinned for this grant, so the digest computed here
+        // is exactly the one grantAcl writes and a later read of changed state cannot alter it.
+        const pubkeys = new Map<string, Promise<string | null>>()
+        const pinned: Resolver = {
+          getText(name, key) {
+            if (key !== 'pubkey') return resolver.getText(name, key)
+            const id = `${name}|${key}`
+            if (!pubkeys.has(id)) pubkeys.set(id, resolver.getText(name, key))
+            return pubkeys.get(id)!
+          },
+        }
+        let granterKey: Promise<string> | undefined
+        const deps = { resolver: pinned, signer: tracked.signer, tailnetName }
         const params = {
           deviceLabel: input.agentLabel,
           gatewayLabel: input.gatewayLabel,
           granterLabel: config.granterLabel,
           serviceNames: [input.service],
-          loadGranterKey: config.loadGranterKey,
+          loadGranterKey: () => (granterKey ??= config.loadGranterKey()),
         }
+        const { digests } = await computeGrantDigests(deps, params)
+        const serviceDigest = digests[0] ? withPrefix(digests[0]) : undefined
         try {
           const change = await grantAcl(deps, params)
           if (!change.txHash) throw new Error('grant produced no transaction')
-          return { transactionHash: change.txHash }
+          return { transactionHash: change.txHash, ...(serviceDigest ? { serviceDigest } : {}) }
         } catch (error) {
           const hash = tracked.submittedHash()
           if (!hash) throw error
-          return settleAfterFailure('grant', hash, error)
+          return settleAfterFailure('grant', hash, error, serviceDigest)
         }
       },
 
