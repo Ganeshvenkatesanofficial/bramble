@@ -12,7 +12,6 @@
 set -eu
 
 HOME_DIR="${BRAMBLE_HOME:-$HOME/.bramble}"
-BIN_DIR="$HOME_DIR/bin"
 IFACE=bramble0
 ASSUME_YES=0
 KEEP_DATA=0
@@ -32,13 +31,31 @@ for arg in "$@"; do
   esac
 done
 
-# Refuse a path that could delete something that is not ours.
-case "$HOME_DIR" in
-  / | "$HOME" | "$HOME/" | "") die "refusing to remove $HOME_DIR; set BRAMBLE_HOME to a directory dedicated to Bramble" ;;
-esac
+# Resolve dot segments, repeated slashes and symlinks before comparing or deleting.
 if [ ! -d "$HOME_DIR" ]; then
   say "Nothing to remove: $HOME_DIR does not exist."
   exit 0
+fi
+case "$HOME_DIR" in /*) ;; *) HOME_DIR="$PWD/$HOME_DIR" ;; esac
+HOME_DIR="$(CDPATH= cd -P "$HOME_DIR" && pwd -P)" || die "cannot resolve BRAMBLE_HOME"
+USER_HOME="$(CDPATH= cd -P "$HOME" && pwd -P)" || die "cannot resolve HOME"
+case "$USER_HOME/" in
+  "$HOME_DIR/"*) die "refusing to remove a home directory or its ancestor; set BRAMBLE_HOME to a directory dedicated to Bramble" ;;
+esac
+[ "$HOME_DIR" != / ] || die "refusing to remove /"
+BIN_DIR="$HOME_DIR/bin"
+[ ! -L "$BIN_DIR" ] || die "refusing a symlinked bin directory"
+[ ! -L "$HOME_DIR/.bramble-install" ] || die "refusing a symlinked installation marker"
+# Current installs have a marker. Accept the earlier installer's known layout
+# too, so the safety fix does not strand an existing installation.
+if [ -f "$HOME_DIR/.bramble-install" ] &&
+   [ "$(cat "$HOME_DIR/.bramble-install")" = bramble-install-v1 ]; then
+  :
+elif [ -f "$HOME_DIR/config.url" ] && [ ! -L "$HOME_DIR/config.url" ] &&
+     [ -x "$BIN_DIR/bramble" ] && [ ! -L "$BIN_DIR/bramble" ]; then
+  :
+else
+  die "refusing to remove a directory without evidence of a Bramble installation"
 fi
 
 say "This will:"
@@ -62,28 +79,60 @@ if [ "$ASSUME_YES" != 1 ]; then
   fi
 fi
 
-# --- Stop. Only processes whose command is inside our bin dir, never a bare name match. ---
+# --- Stop. Recheck ownership before every signal, including escalation. ---
+owned_process() {
+  case "$1" in '' | *[!0-9]* | 0*) return 1 ;; esac
+  [ "$1" != "$$" ] || return 1
+  kill -0 "$1" 2>/dev/null || return 1
+  if [ -d /proc ]; then
+    executable="$(readlink "/proc/$1/exe" 2>/dev/null || true)"
+    case "$executable" in
+      "$BIN_DIR/"*) [ -f "$executable" ] && return 0 ;;
+    esac
+    # Shell-script bundles are used by the public-host smoke test. A shell must
+    # have our script as its first argument; an arbitrary argument is not proof.
+    case "$executable" in
+      /bin/sh | /usr/bin/sh | /bin/dash | /usr/bin/dash | /bin/bash | /usr/bin/bash | /bin/busybox | /usr/bin/busybox)
+        script="$(tr '\000' '\n' < "/proc/$1/cmdline" 2>/dev/null | sed -n '2p')"
+        case "$script" in
+          "$BIN_DIR/"*)
+            script_name="${script#"$BIN_DIR/"}"
+            case "$script_name" in '' | */* | . | ..) return 1 ;; esac
+            [ -f "$script" ] && [ ! -L "$script" ] && return 0
+            ;;
+        esac
+        ;;
+    esac
+  else
+    # On macOS, comm is the executable path (args can contain unrelated paths).
+    executable="$(ps -p "$1" -o comm= 2>/dev/null || true)"
+    case "$executable" in "$BIN_DIR/"*) [ -f "$executable" ] && return 0 ;; esac
+  fi
+  return 1
+}
 pid="$(cat "$HOME_DIR/bramble.pid" 2>/dev/null || true)"
-pids=
-case "$pid" in '' | *[!0-9]*) ;; *) kill -0 "$pid" 2>/dev/null && pids="$pid" ;; esac
-if command -v pgrep >/dev/null 2>&1; then
-  pids="$pids $(pgrep -f "^$BIN_DIR/" 2>/dev/null || true)"
-fi
+pids="$pid $(ps -e -o pid= 2>/dev/null || ps -o pid= 2>/dev/null || true)"
 stopped=0
+stopping=
 for p in $pids; do
-  [ "$p" = "$$" ] && continue
-  if kill "$p" 2>/dev/null; then stopped=$((stopped + 1)); fi
+  case " $stopping " in *" $p "*) continue ;; esac
+  if owned_process "$p" && kill -TERM "$p" 2>/dev/null; then
+    stopped=$((stopped + 1))
+    stopping="$stopping $p"
+  fi
 done
 if [ "$stopped" -gt 0 ]; then
   i=0
   while [ $i -lt 20 ]; do
     alive=0
-    for p in $pids; do [ "$p" = "$$" ] || { kill -0 "$p" 2>/dev/null && alive=1; }; done
+    for p in $stopping; do if owned_process "$p"; then alive=1; fi; done
     [ "$alive" = 0 ] && break
     sleep 0.5 2>/dev/null || sleep 1
     i=$((i + 1))
   done
-  for p in $pids; do [ "$p" = "$$" ] || kill -9 "$p" 2>/dev/null || true; done
+  for p in $stopping; do
+    if owned_process "$p"; then kill -KILL "$p" 2>/dev/null || true; fi
+  done
   say "Stopped $stopped process(es)."
 else
   say "bramble was not running."
@@ -97,6 +146,8 @@ fi
 
 # --- Files. ---
 if [ "$KEEP_DATA" = 1 ]; then
+  # Retain evidence so a later full uninstall can remove the preserved data.
+  printf '%s\n' bramble-install-v1 > "$HOME_DIR/.bramble-install"
   rm -rf "$BIN_DIR"
   rm -f "$HOME_DIR/ui.url" "$HOME_DIR/bramble.pid"
   say "Removed $BIN_DIR. Kept the rest of $HOME_DIR."

@@ -46,8 +46,22 @@ case "$HOST" in
 esac
 case "$BASE" in
   https://*) ;;
-  http://127.0.0.1 | http://127.0.0.1:* | http://localhost | http://localhost:*) ;;
-  *) die "refusing a non-https install URL: $BASE" ;;
+  http://*)
+    authority="${BASE#http://}"
+    case "$authority" in
+      127.0.0.1 | localhost) ;;
+      127.0.0.1:* | localhost:*)
+        port="${authority#*:}"
+        case "$port" in
+          '' | *[!0-9]*) die "refusing a non-https install URL; HTTP requires a loopback host and numeric port" ;;
+        esac
+        [ "${#port}" -le 5 ] && [ "$port" -gt 0 ] && [ "$port" -le 65535 ] ||
+          die "refusing a non-https install URL; HTTP port must be 1-65535"
+        ;;
+      *) die "refusing a non-https install URL; HTTP requires a loopback host" ;;
+    esac
+    ;;
+  *) die "refusing a non-https install URL" ;;
 esac
 
 # --- What this machine is. ---
@@ -152,6 +166,8 @@ for f in "$TMP/stage"/*; do
 done
 printf '%s\n' "$BASE/.well-known/bramble.json" > "$HOME_DIR/config.url"
 chmod 600 "$HOME_DIR/config.url"
+printf '%s\n' bramble-install-v1 > "$TMP/install-marker"
+mv -f "$TMP/install-marker" "$HOME_DIR/.bramble-install"
 say "Installed to $BIN_DIR: $(cd "$BIN_DIR" && ls | tr '\n' ' ')"
 
 # --- The one place root is used, and only on request. ---
