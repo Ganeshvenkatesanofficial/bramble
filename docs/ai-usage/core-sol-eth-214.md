@@ -25,3 +25,4 @@ Operational files written outside git:
 - `/home/anonjr/bramble-work/status/eth-214-public-verification.json`
 - `/home/anonjr/bramble-work/status/eth-214-console-revoked.png`
 - `/home/anonjr/bramble-work/status/eth-214-report.md`
+- `/home/anonjr/.cache/agent-tmp/core-sol-eth-214-handoff.md` (review handoff)
