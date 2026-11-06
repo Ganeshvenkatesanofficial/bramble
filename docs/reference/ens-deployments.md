@@ -52,4 +52,12 @@ The enrolled identities are `mumbai-gateway`, `mumbai-worker` and `mumbai-grante
 
 The separate relay registry is `0x94F99d10eda494aF86D7d6E8431Ecd189E97412d` (deployment block `12078414`). `mumbai-relay.relays.bramble-mumbai-20261107.eth` carries the existing relay's public rendezvous, sidecar and price records.
 
-Open: official-tailnet cloud cutover and demo beats 1, 2, 3 and 5 require live evidence before changing the default or retiring the old configuration.
+## Cutover (verified November 7, 2026)
+
+The public console, installer (release `a29809f`), approval service, gateway and worker run on `bramble-mumbai-20261107.eth` on the official deployment. A full worker lifecycle passed there: denied by the gateway, grant written to the registry in 15 s, successful call after 44 s, revoke confirmed in 19 s, refusal on the next call.
+
+On the cloud nodes, `/etc/systemd/system/bramble-{gateway,worker}.service.d/ensv2.conf` loads `/etc/bramble/ensv2-stage.env` over the original environment. To roll back, delete both drop-ins, run `systemctl daemon-reload` and restart the units; the original environment files were not changed. The approval service reads the new values from its environment file; its pre-cutover copy is `approval.env.bak-pre-ensv2-cutover`.
+
+The repository default deployment stays `hackathon-test`; the public installer selects `sepolia-v2` through its served `bramble.json`.
+
+Open: a fresh device installing on macOS has not been run.

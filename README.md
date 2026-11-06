@@ -53,7 +53,9 @@ These sections support demo beats 1–6. **Read from source** describes implemen
 
 **New for Mumbai:** the node sidecar routes ENS reads through `torFetch('ens')`, with CCIP-Read disabled to prevent off-chain lookups bypassing that transport ([client](sidecar/src/ens/client.ts)). This protects the node's source IP from the RPC provider; names, requested records and timing remain visible. It does not cover every admin or console read. Beats 1, 2 and 5 show the authorization lifecycle; beat 6 needs provider-log evidence of the privacy change.
 
-**Deployment (reported).** The demo tailnet is `bramble-dev-c91e55e9.eth` on Sepolia (chain ID `11155111`). The operator's ETH-244 comment of 6 November, 12:14 UTC, reports the device registry at `0xEdA4b78CcA4472522bf2b521A6D2987306579058` and the relay registry at `0x3276eA61D05001586d6eE450F982312B345746a6`. This author has not queried either contract.
+**Current demo tailnet (verified 7 November 2026).** `bramble-mumbai-20261107.eth` on the official ENSv2 Sepolia deployment, with device registry `0xF9c3cEa16cD75A1E8efBEE89fF0C1c04aB3F4148` and relay registry `0x94F99d10eda494aF86D7d6E8431Ecd189E97412d`. The installer is served at `https://get-bramble.whyash5114.com`.
+
+**Earlier deployment (reported).** The first demo tailnet was `bramble-dev-c91e55e9.eth` on Sepolia (chain ID `11155111`). The operator's ETH-244 comment of 6 November, 12:14 UTC, reports the device registry at `0xEdA4b78CcA4472522bf2b521A6D2987306579058` and the relay registry at `0x3276eA61D05001586d6eE450F982312B345746a6`. This author has not queried either contract.
 
 **Prize entry:** Bramble enters ENS for ENSv2 in an existing project, on the Sepolia tailnet above.
 
@@ -145,7 +147,7 @@ See [the architecture document](docs/03_ARCHITECTURE.md) and [ADRs](docs/adr/) f
 ## Quick start: install a device
 
 ```sh
-curl -fsSL https://console.13-233-181-104.sslip.io/install.sh | sh
+curl -fsSL https://get-bramble.whyash5114.com/install.sh | sh
 ```
 
 The installer verifies the archive checksum, installs `bramble`, `brambled` and `bramble-sidecar` under `~/.bramble/bin/`, and starts the local UI. Open the printed loopback address (normally `http://127.0.0.1:7777`). Name the device, join the prefilled `bramble-dev-c91e55e9.eth` tailnet, and ask the operator to approve enrollment in the console. A service grant is a separate approval. No Go, Bun, Node.js, pnpm or sudo is needed on the device in default userspace mode. On a headless device, append `-s -- --no-open` to `sh` and open the printed URL manually.
