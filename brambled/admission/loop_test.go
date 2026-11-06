@@ -458,3 +458,20 @@ func TestSyncOnce_EmitsEventPerPeer(t *testing.T) {
 		t.Fatalf("unexpected events: %+v", events)
 	}
 }
+
+func TestAddPeers_SkipsTrackedLabelsAndAddsNewOnes(t *testing.T) {
+	loop := &Loop{Peers: []Peer{{Label: "a", AllowedIP: netip.MustParsePrefix("10.0.0.2/32")}}}
+
+	added := loop.AddPeers([]Peer{
+		{Label: "a", AllowedIP: netip.MustParsePrefix("10.0.0.9/32")},
+		{Label: "b", AllowedIP: netip.MustParsePrefix("10.0.0.3/32")},
+		{Label: "b", AllowedIP: netip.MustParsePrefix("10.0.0.4/32")},
+	})
+
+	if len(added) != 1 || added[0].Label != "b" || added[0].AllowedIP != netip.MustParsePrefix("10.0.0.3/32") {
+		t.Fatalf("added = %v, want only b at 10.0.0.3/32", added)
+	}
+	if got := loop.trackedPeers(); len(got) != 2 || got[0].AllowedIP != netip.MustParsePrefix("10.0.0.2/32") {
+		t.Fatalf("tracked = %v, want a unchanged plus b", got)
+	}
+}

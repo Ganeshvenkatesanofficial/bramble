@@ -88,6 +88,8 @@ export interface AccessRequest extends RequestInput {
   revokeTransaction?: TransactionReceipt
   expiresAt?: string
   revokedAt?: string
+  /** When this service accepted the revoke, before the signer was called. The cut-off measurement starts here. */
+  revokeRequestedAt?: string
   revokeReason?: 'manual' | 'duration' | 'external'
   expiryStatus: 'none' | 'scheduled' | 'revoking' | 'failed' | 'revoked'
   /** Feed row ids of the commitments posted for this request's grant and revoke. */

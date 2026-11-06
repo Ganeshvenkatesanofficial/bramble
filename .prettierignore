@@ -19,3 +19,6 @@ dashboard/
 
 # The approval package formats itself, excluding its generated Next.js tree.
 approval/
+
+# The local-ui package formats itself via its own format scripts.
+local-ui/

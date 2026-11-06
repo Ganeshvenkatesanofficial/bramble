@@ -3,7 +3,9 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRequests } from '../hooks/use-requests'
+import { ActivityFeed } from './activity-feed'
 import { RequestCard } from './request-card'
+import { HcsPanel } from './hcs-panel'
 import { JoinConsole } from './join-console'
 import { Button } from './ui/button'
 
@@ -55,93 +57,99 @@ export function ApprovalConsole() {
             <strong>{requests ? history.length : '—'}</strong>
           </div>
         </div>
-        <section className="authorization" aria-label="Operator authorization">
-          <div>
-            <h2>Operator authorization</h2>
-            <p className="muted">
-              {token
-                ? 'Decision controls unlocked. The API checks each action.'
-                : 'Enter the shared demo token to enable decisions.'}
-            </p>
+        <div className="console-layout">
+          <div className="console-main">
+            <section className="authorization" aria-label="Operator authorization">
+              <div>
+                <h2>Operator authorization</h2>
+                <p className="muted">
+                  {token
+                    ? 'Decision controls unlocked. The API checks each action.'
+                    : 'Enter the shared demo token to enable decisions.'}
+                </p>
+              </div>
+              {token ? (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setToken('')
+                    setDraft('')
+                  }}
+                >
+                  Lock console
+                </Button>
+              ) : (
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    setToken(draft.trim())
+                    setDraft('')
+                  }}
+                >
+                  <label className="sr-only" htmlFor="demo-token">
+                    Demo token
+                  </label>
+                  <input
+                    id="demo-token"
+                    type="password"
+                    autoComplete="off"
+                    placeholder="Demo token"
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                  />
+                  <Button variant="outline" type="submit" disabled={!draft.trim()}>
+                    Unlock
+                  </Button>
+                </form>
+              )}
+            </section>
+            {error && (
+              <p role="alert" className="notice negative">
+                {error}
+              </p>
+            )}
+            {!requests && !error && (
+              <p role="status" className="empty">
+                Loading access requests…
+              </p>
+            )}
+            <section aria-labelledby="requests-title">
+              <div className="section-heading">
+                <h2 id="requests-title">Request queue</h2>
+                <span className="muted">Human approval required</span>
+              </div>
+              {requests && pending.length === 0 && (
+                <p className="empty">No pending requests. New agent requests appear here automatically.</p>
+              )}
+              {pending.map((request) => (
+                <RequestCard key={request.id} request={request} token={token} offline={!!error} />
+              ))}
+            </section>
+            <section aria-labelledby="grants-title">
+              <div className="section-heading">
+                <h2 id="grants-title">Granted access</h2>
+                <span className="muted">Scoped to the requested service</span>
+              </div>
+              {requests && grants.length === 0 && <p className="empty">No active grants in this queue.</p>}
+              {grants.map((request) => (
+                <RequestCard key={request.id} request={request} token={token} offline={!!error} />
+              ))}
+            </section>
+            {history.length > 0 && (
+              <section aria-labelledby="history-title">
+                <div className="section-heading">
+                  <h2 id="history-title">Decision history</h2>
+                </div>
+                {history.map((request) => (
+                  <RequestCard key={request.id} request={request} token={token} offline={!!error} />
+                ))}
+              </section>
+            )}
+            <JoinConsole token={token} />
+            <HcsPanel key={token} token={token} />
           </div>
-          {token ? (
-            <Button
-              variant="outline"
-              onClick={() => {
-                setToken('')
-                setDraft('')
-              }}
-            >
-              Lock console
-            </Button>
-          ) : (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault()
-                setToken(draft.trim())
-                setDraft('')
-              }}
-            >
-              <label className="sr-only" htmlFor="demo-token">
-                Demo token
-              </label>
-              <input
-                id="demo-token"
-                type="password"
-                autoComplete="off"
-                placeholder="Demo token"
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-              />
-              <Button variant="outline" type="submit" disabled={!draft.trim()}>
-                Unlock
-              </Button>
-            </form>
-          )}
-        </section>
-        {error && (
-          <p role="alert" className="notice negative">
-            {error}
-          </p>
-        )}
-        {!requests && !error && (
-          <p role="status" className="empty">
-            Loading access requests…
-          </p>
-        )}
-        <section aria-labelledby="requests-title">
-          <div className="section-heading">
-            <h2 id="requests-title">Request queue</h2>
-            <span className="muted">Human approval required</span>
-          </div>
-          {requests && pending.length === 0 && (
-            <p className="empty">No pending requests. New agent requests appear here automatically.</p>
-          )}
-          {pending.map((request) => (
-            <RequestCard key={request.id} request={request} token={token} offline={!!error} />
-          ))}
-        </section>
-        <section aria-labelledby="grants-title">
-          <div className="section-heading">
-            <h2 id="grants-title">Granted access</h2>
-            <span className="muted">Scoped to the requested service</span>
-          </div>
-          {requests && grants.length === 0 && <p className="empty">No active grants in this queue.</p>}
-          {grants.map((request) => (
-            <RequestCard key={request.id} request={request} token={token} offline={!!error} />
-          ))}
-        </section>
-        {history.length > 0 && (
-          <section aria-labelledby="history-title">
-            <div className="section-heading">
-              <h2 id="history-title">Decision history</h2>
-            </div>
-            {history.map((request) => (
-              <RequestCard key={request.id} request={request} token={token} offline={!!error} />
-            ))}
-          </section>
-        )}
-        <JoinConsole token={token} />
+          <ActivityFeed />
+        </div>
         <footer className="page-footer">
           <span>Requests are suggestions. ENS identity is rechecked before every grant.</span>
           <span>{updatedAt ? `Last received ${updatedAt}` : 'Waiting for API'}</span>

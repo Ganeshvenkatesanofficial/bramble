@@ -30,6 +30,11 @@ WireGuard device's peer table from it.
     (`docs/adr/0010-full-mesh-peer-discovery.md`); any `-peer` given at all
     disables this and uses exactly what was typed. A discovered device with
     no usable `mesh-ip` is skipped with a warning, not a startup failure.
+  - `-rediscover` — with auto-discovery, how often to re-list the tailnet
+    and start tracking devices enrolled after startup, with no restart
+    (default `15s`, `0` turns it off). A new device goes through the same
+    admission and ACL checks as a startup peer. A skipped device is retried
+    on every pass (`docs/adr/0010`, "Rediscovery").
   - `-local-addr` — this node's address and mesh subnet, CIDR. Omit to
     resolve it from `-label`'s own on-chain `mesh-ip` record instead
     (`docs/adr/0009`); an explicit value always wins.
@@ -73,6 +78,20 @@ WireGuard device's peer table from it.
     `-relay-peer <peer-label>` (repeatable) — select an explicit paid
     data-relay pool for peers that cannot use the direct candidate. Each
     purchase requests `-relay-session-bytes` (default `10000`).
+  - `-sponsored-relay` — get the rendezvous token and the data-relay session
+    from each relay's operator-sponsored routes instead of paying on Hedera,
+    for a device with no Hedera key. The relay must run `-sponsor-enrolled`;
+    it checks `-label` is enrolled, grants a capped free session and sees the
+    device's source IP (`../docs/adr/0018-sponsored-relay-sessions.md`).
+    When a session reaches its cap or TTL, the failover watcher asks the pool
+    for a new one.
+  - `-sponsored-tokens-per-hour` (default `30`) — with `-sponsored-relay`,
+    the relay's `-sponsor-max-per-hour`. For peers it adopts, brambled polls
+    the relay only while the peer's traffic has stalled, and keeps its polling
+    a fifth under this limit so connects and renewals still get a token.
+  - `-relay-first` — treat every tracked peer as a `-relay-peer`. Opens one
+    session per peer; on a large tailnet name the cloud labels with
+    `-relay-peer` instead.
   - `-max-relay-price-per-byte` (default `10` atomic USDC) and
     `-max-relay-session-cost` (default `100000`, or 0.10 USDC) — reject an
     otherwise-discovered relay quote before purchase if either budget is

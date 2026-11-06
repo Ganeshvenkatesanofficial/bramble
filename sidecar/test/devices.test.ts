@@ -23,7 +23,7 @@ process.env.BRAMBLE_TAILNET_NAME = fixture.tailnetName
 process.env.BRAMBLE_TAILNET_REGISTRY = fixture.tailnetRegistry
 process.env.BRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK = DEPLOY_BLOCK.toString()
 
-const { listDeviceLabels } = await import('../src/ens/devices')
+const { listDeviceLabels, incrementalDeviceLabels } = await import('../src/ens/devices')
 const { publicClient } = await import('../src/ens/client')
 
 const registry = fixture.tailnetRegistry as `0x${string}`
@@ -79,6 +79,56 @@ describe('listDeviceLabels (fixture RPC)', () => {
     })
 
     await expect(listDeviceLabels(client)).rejects.toThrow(/pruned history unavailable/)
+  })
+})
+
+describe('incrementalDeviceLabels (fixture RPC)', () => {
+  // brambled serve polls /devices every 15 s for devices enrolled after it
+  // started (docs/adr/0010, "Rediscovery").
+  it('full-scans once, then scans one window from 8,000 blocks behind the last head and adds new labels', async () => {
+    const opts = { head: HEAD, logs: [...logs] }
+    const { client, calls } = fixtureClient(opts)
+    const list = incrementalDeviceLabels(client)
+
+    expect(await list()).toEqual(['device1', 'device2', 'device3', 'agent1'])
+    expect(calls).toHaveLength(3)
+
+    // A device enrolls after the first scan.
+    opts.head = HEAD + 5n
+    opts.logs.push(labelRegisteredLog(registry, 'late-device', HEAD + 5n))
+    calls.length = 0
+
+    // too-new (HEAD + 1) is inside the new range now, so it is listed too.
+    expect(await list()).toEqual(['device1', 'device2', 'device3', 'agent1', 'too-new', 'late-device'])
+    expect(calls.map((c) => [c.fromBlock, c.toBlock])).toEqual([[HEAD - 8_000n, HEAD + 5n]])
+  })
+
+  it('retries the same range after a failed scan instead of skipping it', async () => {
+    const opts: Parameters<typeof fixtureClient>[0] = { head: HEAD, logs: [...logs] }
+    const { client, calls } = fixtureClient(opts)
+    const list = incrementalDeviceLabels(client, [0])
+    await list()
+
+    opts.head = HEAD + 100n
+    opts.logs.push(labelRegisteredLog(registry, 'late-device', HEAD + 50n))
+    // 4444 is not retried by scanLogsChunked, so the failure surfaces at once.
+    opts.failWith = { code: 4444, message: 'pruned history unavailable' }
+    await expect(list()).rejects.toThrow(/pruned history/)
+
+    opts.failWith = undefined
+    calls.length = 0
+    expect(await list()).toContain('late-device')
+    expect(calls.map((c) => [c.fromBlock, c.toBlock])).toEqual([[HEAD - 8_000n, HEAD + 100n]])
+  })
+
+  it('shares one scan between concurrent calls', async () => {
+    const { client, calls } = fixtureClient({ head: HEAD, logs })
+    const list = incrementalDeviceLabels(client)
+
+    const [a, b] = await Promise.all([list(), list()])
+
+    expect(a).toEqual(b)
+    expect(calls).toHaveLength(3)
   })
 })
 

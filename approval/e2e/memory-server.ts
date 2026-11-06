@@ -1,5 +1,6 @@
 /** Browser-only harness. Never imported by the Next runtime. No chain writes. */
 import { createApprovalApi } from '../src/lib/api'
+import { createPaymentsSource, createStatusSource } from '../src/lib/activity'
 import { MemoryChain } from '../test/memory-chain'
 import { memoryEnrollChain } from '../../admincli/src/enroll-memory'
 import { createJoinChain } from '../src/lib/join-chain'
@@ -18,13 +19,49 @@ chain.revoke = async (label) => {
   return { transactionHash: `0x${'2'.repeat(64)}` }
 }
 let offline = false
+// Set BRAMBLED_STATUS_URL to read a real brambled statusapi instead of the in-memory events.
+const gatewayEvents: unknown[] = []
+const status = createStatusSource({
+  baseUrl: () => process.env.BRAMBLED_STATUS_URL ?? 'http://gateway.test',
+  fetchImpl: process.env.BRAMBLED_STATUS_URL
+    ? undefined
+    : ((async () => Response.json(gatewayEvents)) as unknown as typeof fetch),
+})
+const payments = createPaymentsSource({
+  configured: () => true,
+  handler: async () =>
+    Response.json({
+      observedAt: new Date().toISOString(),
+      agents: [
+        {
+          agentLabel: 'agent-1',
+          payerAccountId: '0.0.123',
+          budgetAtomic: '1000000',
+          since: '2026-01-01T00:00:00Z',
+          perPaymentCapAtomic: '100000',
+          spentAtomic: '10000',
+          remainingAtomic: '990000',
+          payments: [
+            {
+              transactionId: '0.0.123-1-1',
+              consensusTimestamp: `${Math.floor(Date.now() / 1000)}.000000001`,
+              amountAtomic: '10000',
+              hashscanUrl: 'https://hashscan.io/testnet/transaction/1.000000001',
+            },
+          ],
+        },
+      ],
+    }),
+})
+
 function freshApi() {
-  const memory = memoryEnrollChain({ tailnetName: 'mesh.eth' })
+  const memory = memoryEnrollChain({ tailnetName: 'bramble.eth' })
   return createApprovalApi({
     token: () => 'browser-test-only',
     signer: chain,
     resolver: chain,
-    ensParent: 'mesh.eth',
+    ensParent: 'bramble.eth',
+    activity: { status, payments },
     joinChain: createJoinChain({
       ...memory,
       readbackDelayMs: 0,
@@ -38,9 +75,9 @@ function freshApi() {
         return Promise.all(
           [...memory.registered].map(async (label) => ({
             label,
-            pubkey: await memory.resolver.getText(`${label}.mesh.eth`, 'pubkey'),
-            meshIp: await memory.resolver.getText(`${label}.mesh.eth`, 'mesh-ip'),
-            revoked: (await memory.resolver.getText(`${label}.mesh.eth`, 'revoked')) === 'true',
+            pubkey: await memory.resolver.getText(`${label}.bramble.eth`, 'pubkey'),
+            meshIp: await memory.resolver.getText(`${label}.bramble.eth`, 'mesh-ip'),
+            revoked: (await memory.resolver.getText(`${label}.bramble.eth`, 'revoked')) === 'true',
             expiry: 4102444800,
           }))
         )
@@ -58,8 +95,13 @@ Bun.serve({
       offline = false
       chain.grants.clear()
       chain.failGrant = false
+      gatewayEvents.length = 0
       api = freshApi()
       return Response.json({ reset: true })
+    }
+    if (url.pathname === '/__test/gateway' && request.method === 'POST') {
+      gatewayEvents.push({ time: new Date().toISOString(), ...(await request.json()) })
+      return Response.json({ events: gatewayEvents.length })
     }
     if (url.pathname === '/__test/fail-grant' && request.method === 'POST') {
       chain.failGrant = true

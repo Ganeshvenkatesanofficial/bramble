@@ -2,6 +2,7 @@ packages:
   - sidecar
   - relay-sidecar
   - brambled
+  - node-daemon
   - relay
   - rpc-proxy
   - scripts/provision-dev-tailnet
@@ -12,3 +13,4 @@ packages:
   - hedera-audit
   - approval
   - join-ui
+  - local-ui

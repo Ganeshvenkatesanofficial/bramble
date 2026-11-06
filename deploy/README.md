@@ -68,6 +68,8 @@ Use the same commit on every machine. Record the commit in the demo log. Deploy 
 
 Run on 6 Nov 2026: all three machines at `a9db736` (merge of PR #18). The public clone worked with no deploy key.
 
+To update a node to another commit, fetch and check it out as `bramble`, then rebuild as root with `sudo GOFLAGS=-buildvcs=false ./deploy/scripts/install.sh <role>`. Without the flag, `go build` stops with `error obtaining VCS status: exit status 128`, because root reads a checkout that `bramble` owns (Verified on `gateway` and `worker`, 6 Nov 2026, ETH-205).
+
 ### A5. Run the installer. Verified (cloud, 6 Nov 2026)
 
 ```sh
@@ -207,7 +209,7 @@ sudo systemctl enable --now bramble-demo-service bramble-gateway
 deploy/scripts/smoke.sh gateway
 ```
 
-Cloud evidence: `bramble-demo-service` is active on the gateway machine and `GET http://127.0.0.1:9100/task` returns the JSON task. Earlier evidence: `demo-service -port 19100` started and `GET /task` returned the JSON task on the development machine on 6 Nov 2026. `brambled serve` accepted every flag the unit passes (it stopped at the missing tailnet variables, as expected). The September runbook ran the same processes by hand on an EC2 machine (`brambled/README.md`, 8 to 10 Sept 2026). The node units (`bramble-gateway`, `bramble-worker`) ran on 6 Nov 2026. The node preflight, run on each node after the rebuild, passed `env`, `sepolia-rpc`, sidecar, Tor, STUN, registry and Hedera on both; `reach:*` cannot run on a node (it needs `DEMO_*_SSH` from the host) and `relay` timed out, see below. **Keep them stopped between runs**: with `BRAMBLE_TTL=30s` each node buys a rendezvous token about every 37 s, which cost the payer about 2.4 to 2.8 USDC per hour with both up. Start them shortly before a run and stop them after. The preflight `relay` check can time out at its 5 s limit over Tor (`/relays` took about 8 s); a direct `curl` to `127.0.0.1:7890/relays` on a node returns the relay list.
+Cloud evidence: `bramble-demo-service` is active on the gateway machine and `GET http://127.0.0.1:9100/task` returns the JSON task. Earlier evidence: `demo-service -port 19100` started and `GET /task` returned the JSON task on the development machine on 6 Nov 2026. `brambled serve` accepted every flag the unit passes (it stopped at the missing tailnet variables, as expected). The September runbook ran the same processes by hand on an EC2 machine (`brambled/README.md`, 8 to 10 Sept 2026). The node units (`bramble-gateway`, `bramble-worker`) ran on 6 Nov 2026. The node preflight, run on each node after the rebuild, passed `env`, `sepolia-rpc`, sidecar, Tor, STUN, registry and Hedera on both; `reach:*` cannot run on a node (it needs `DEMO_*_SSH` from the host) and `relay` timed out, see below. On 6 Nov 2026 the worker never rendezvoused (ETH-205): relay discovery at start-up got a `502` (`-32602 Invalid parameters` from the load-balanced upstream) and the node then ran for its whole life with no rendezvous relay, while the gateway paid for tokens and waited. Fixed in `54e9dd7`: the sidecar and `rpc-proxy` retry the rejected `eth_getLogs` with `toBlock: latest`, `brambled` re-queries discovery when it failed, and a peer that never answers is skipped for 30 s, 60 s, then 2 min. A node needs about 40 to 60 s after `systemctl start` before it logs `serving on`, because relay discovery reads the registry over Tor; wait about 2 minutes before the first call. **Keep them stopped between runs**: with `BRAMBLE_TTL=30s` each node buys a rendezvous token about every 37 s, which cost the payer about 2.4 to 2.8 USDC per hour with both up. Start them shortly before a run and stop them after. The preflight `relay` check can time out at its 5 s limit over Tor (`/relays` took about 8 s); a direct `curl` to `127.0.0.1:7890/relays` on a node returns the relay list.
 
 ## Part F: worker machine
 
@@ -251,6 +253,53 @@ Run these in order after parts B to F. They are the gate "agent denied, then suc
 5. Record the measured time from the revoke transaction to the first failure. Open.
 
 Measured on the cloud nodes with the plain node units, 6 Nov 2026 (Verified; no `bramble-node` namespace existed on the worker, one run, driven through the public console URL): deny failed with `denied for service "task"`; approval confirmed in 12 s; the first call after approval returned the task in 31 s; revoke confirmed in 11 s and the first failed call came 32 s after the revoke started. Every ENS read goes through Tor at about 1.1 s per `eth_call`, one `/device` resolve is seven calls (about 9 s), and one gateway decision resolves three records in turn, so a call takes about 27 to 32 s. Narrate that wait in the demo. Atlas accepted it (ETH-173): the gateway's decision window is 90 s, and no cache or concurrency change is planned.
+
+Measured again on 6 Nov 2026 after ETH-205 (Verified; build `54e9dd7`, both nodes started at 10:29 UTC, rendezvous adopted on both sides by 10:30, two runs in a row through the public console API with the demo token, the same calls the console buttons make):
+
+| Beat                                          | Run 1 (10:30 UTC) | Run 2 (10:32 UTC) |
+| --------------------------------------------- | ----------------- | ----------------- |
+| 1 Denied: call ends with `Connection reset`   | 83.7 s            | 15.6 s            |
+| 2 Approve confirmed                           | 12.2 s            | 12.5 s            |
+| 3 First call that returns the task, after 2   | 24.1 s            | 43.1 s            |
+| 5 Revoke confirmed                            | 11.4 s            | 15.8 s            |
+| 5 First failed call, after the revoke started | 27.5 s            | 45.6 s            |
+
+Each call is a `curl` as the `agent` user on `worker`. A call lasts as long as the gateway decision (three ENS reads over Tor), so the values for beats 1, 3 and 5 are upper bounds with that granularity. The 83.7 s deny in run 1 was the first call after start-up; the gateway log shows `denied for service "task" (no matching granted digest)` for every denied call. Narrate the wait.
+
+## Part H: publish the installer (relays machine)
+
+Goal: `curl -fsSL https://<console-name>/install.sh | sh` works from any device. Caddy serves static files from `/var/lib/bramble-dist` on the relays machine. For the URLs, flags and the env-to-config table, see `docs/reference/install-host.md`.
+
+### H1. Write the public env file. Open
+
+On the operator's machine (not on a cloud machine), copy `deploy/env/public.env.example` to a file outside the repository and fill in the public values: the two DNS names from item 4, the tailnet name, chain id and registry addresses from item 13, and the STUN, rendezvous and data-relay endpoints. The file holds no secret. The generator reads only the names in the template, so you can also pass a node env file.
+
+### H2. Publish a release. Verified (cloud, 6 Nov 2026, with a stub bundle)
+
+Build the release first (`scripts/release.sh`, ETH-178; it writes `release/bramble_<os>_<arch>.tar.gz` and `release/SHA256SUMS`). Then:
+
+```sh
+deploy/scripts/publish-release.sh --release release --version <version> \
+  --env <public.env> --init --caddy
+```
+
+`--init` creates `/var/lib/bramble-dist` on the first run (one `sudo`). `--caddy` installs the repository's `Caddyfile` with your two names, validates it on the machine first, keeps the old file as `/etc/caddy/Caddyfile.bak-<time>` and restores it if the reload fails. Drop both flags for later releases. `--dry-run` stages and checks without uploading.
+
+The script:
+
+1. checks `SHA256SUMS` against the tarballs;
+2. generates `/.well-known/bramble.json`;
+3. bakes the console name into `install.sh` and `uninstall.sh`;
+4. refuses to upload if a staged file looks like it holds a secret;
+5. uploads the tarballs and `SHA256SUMS` (replacing the previous release in `/dl`), then the node config, then `uninstall.sh`, and `install.sh` last.
+
+### H3. Smoke-test from outside. Verified (cloud, 6 Nov 2026, with a stub bundle; re-run after the v1 path change: see the ETH-179 comments)
+
+```sh
+deploy/scripts/smoke-public.sh https://<console-name> <tailnet-name> [--run-install]
+```
+
+The script checks, over verified TLS: the `install.sh` content type and cache header, the baked host, every tarball against `SHA256SUMS`, the node config fields and a secret scan of it, 404 for unknown files, directory listings and path traversal, and that the console route still answers. With `--run-install` it also runs `curl -fsSL <base>/install.sh | sh -s -- --no-open` and then `uninstall.sh --yes`, both with a throwaway `HOME`.
 
 ## Part N: two NATs
 

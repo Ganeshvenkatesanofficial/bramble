@@ -1,7 +1,10 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 
 const head = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], { encoding: 'utf8' }).trim()
+
+// The HCS panel has its own alerts; the queue specs only assert on queue notices.
+const queueAlert = (page: Page) => page.getByRole('main').getByRole('alert').filter({ hasNotText: 'HCS verification' })
 
 const headers = { authorization: 'Bearer browser-test-only' }
 const input = {
@@ -55,20 +58,84 @@ test('human approves and revokes an API request, then denies a new request', asy
   await expect(page.getByLabel('Demo token', { exact: true })).toHaveValue('')
 })
 
+test('the live feed shows every beat and measures the cut-off on revoke', async ({ page, request }, info) => {
+  const gateway = (event: object) => request.post('/__test/gateway', { data: event })
+  const label = 'agent-1.bramble.eth'
+  const service = 'staging-tasks'
+  await page.goto('/')
+  const feed = page.getByRole('complementary', { name: 'Live activity' })
+  await expect(feed.getByText('Payments: live')).toBeVisible({ timeout: 4000 })
+  await expect(feed.getByText('Gateway: live')).toBeVisible()
+  await request.post('/api/requests', { data: input, headers })
+  await expect(feed.locator('[data-kind="request-received"]')).toBeVisible({ timeout: 3000 })
+  await gateway({
+    kind: 'gateway',
+    label,
+    outcome: 'denied',
+    service,
+    message: `denied "${service}": no matching granted digest (${label})`,
+  })
+  await expect(feed.locator('[data-kind="gateway-denied"]')).toBeVisible({ timeout: 3000 })
+  await page.getByLabel('Demo token', { exact: true }).fill('browser-test-only')
+  await page.getByRole('button', { name: 'Unlock', exact: true }).click()
+  await page.getByRole('button', { name: 'Approve', exact: true }).click()
+  await expect(feed.locator('[data-kind="access-granted"]')).toBeVisible({ timeout: 6000 })
+  await expect(feed.locator('[data-kind="payment-settled"]')).toBeVisible()
+  await gateway({
+    kind: 'gateway',
+    label,
+    outcome: 'allowed',
+    service,
+    message: `allowed "${service}": proxying to http://127.0.0.1:9100 (${label})`,
+  })
+  await expect(feed.locator('[data-kind="gateway-allowed"]')).toBeVisible({ timeout: 3000 })
+  await page.screenshot({
+    path: info.outputPath(`beat-3-feed-allowed-${info.project.name}-${head}.png`),
+    fullPage: true,
+  })
+  await page.getByRole('button', { name: 'Revoke access' }).click()
+  await expect(page.getByText('Waiting for transaction confirmation…')).toBeVisible()
+  await page.waitForTimeout(1200)
+  await gateway({
+    kind: 'gateway',
+    label,
+    outcome: 'denied',
+    service,
+    message: `denied "${service}": no matching granted digest (${label})`,
+  })
+  await gateway({
+    kind: 'peer',
+    label,
+    outcome: 'dropped',
+    message: 'dropped from the WireGuard peer table: no longer authorized',
+  })
+  await expect(feed.locator('[data-kind="access-revoked"]')).toBeVisible({ timeout: 6000 })
+  await expect(feed.locator('[data-kind="peer-dropped"]')).toBeVisible({ timeout: 3000 })
+  const cutoff = feed.locator('[data-kind="cutoff-measured"]')
+  await expect(cutoff).toBeVisible({ timeout: 3000 })
+  await expect(cutoff.locator('.activity-cutoff')).toHaveText(/^\d+\.\d s$/)
+  await expect(cutoff).toContainText('clock')
+  await page.screenshot({
+    path: info.outputPath(`beat-5-feed-cutoff-${info.project.name}-${head}.png`),
+    fullPage: true,
+  })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
+
 test('failed authorization and signer failures never report a grant', async ({ page, request }) => {
   await request.post('/api/requests', { data: input, headers })
   await page.goto('/')
   await page.getByLabel('Demo token', { exact: true }).fill('incorrect')
   await page.getByRole('button', { name: 'Unlock', exact: true }).click()
   await page.getByRole('button', { name: 'Approve', exact: true }).click()
-  await expect(page.getByRole('main').getByRole('alert')).toContainText('valid demo bearer token')
+  await expect(queueAlert(page)).toContainText('valid demo bearer token')
   await expect(page.getByText('Access granted', { exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Lock console' }).click()
   await page.getByLabel('Demo token', { exact: true }).fill('browser-test-only')
   await page.getByRole('button', { name: 'Unlock', exact: true }).click()
   await request.post('/__test/fail-grant')
   await page.getByRole('button', { name: 'Approve', exact: true }).click()
-  await expect(page.getByRole('main').getByRole('alert')).toContainText('did not confirm the grant')
+  await expect(queueAlert(page)).toContainText('did not confirm the grant')
   await expect(page.getByText('Access granted', { exact: true })).toHaveCount(0)
 })
 
@@ -80,11 +147,11 @@ test('a stale queue pauses decisions until a fresh API read succeeds', async ({ 
   const approve = page.getByRole('button', { name: 'Approve', exact: true })
   await expect(approve).toBeEnabled()
   await request.post('/__test/offline')
-  await expect(page.getByRole('main').getByRole('alert')).toContainText('decisions are paused')
+  await expect(queueAlert(page)).toContainText('decisions are paused')
   await expect(approve).toBeDisabled()
   await request.post('/__test/reset')
   await request.post('/api/requests', { data: input, headers })
-  await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0)
+  await expect(queueAlert(page)).toHaveCount(0)
   await expect(approve).toBeEnabled()
 })
 
@@ -98,7 +165,7 @@ test('open device join is visible within two seconds, then the operator approves
   await expect(page.getByRole('region', { name: 'Pending device joins' })).toBeVisible()
   const start = Date.now()
   const created = await request.post('/api/joins', {
-    data: { label: 'laptop', pubkey: 'ab'.repeat(32), tailnet: 'mesh.eth' },
+    data: { label: 'laptop', pubkey: 'ab'.repeat(32), tailnet: 'bramble.eth' },
   })
   expect(created.status()).toBe(201)
   const pending = page
@@ -111,7 +178,7 @@ test('open device join is visible within two seconds, then the operator approves
   await expect(member.getByText('Mesh IP: 10.77.0.2')).toBeVisible()
   await member.getByRole('button', { name: 'Revoke', exact: true }).click()
   await expect(member.getByText('revoked', { exact: true })).toBeVisible()
-  await request.post('/api/joins', { data: { label: 'phone', pubkey: 'cd'.repeat(32), tailnet: 'mesh.eth' } })
+  await request.post('/api/joins', { data: { label: 'phone', pubkey: 'cd'.repeat(32), tailnet: 'bramble.eth' } })
   const phone = page
     .getByRole('region', { name: 'Pending device joins' })
     .getByRole('article', { name: 'Device phone' })

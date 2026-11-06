@@ -1,7 +1,8 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { readJson, transactionUrl, type RequestView } from '../lib/console-api'
+import { readJson, type RequestView } from '../lib/console-api'
+import { transactionUrl } from '../lib/explorer'
 import { IdentityFacts } from './identity-facts'
 import { Button } from './ui/button'
 

@@ -1,4 +1,6 @@
 import { createApprovalApi } from '../../../lib/api'
+import { createPaymentsSource, createStatusSource } from '../../../lib/activity'
+import { paymentsHandler } from '../../../lib/payments-handler'
 import { auditTrailFromEnv } from '../../../lib/audit-runtime'
 import { ConfigError, realAdaptersFromEnv, realJoinChainFromEnv } from '../../../lib/chain-env'
 import { createSettlementSource } from '../../../lib/payments'
@@ -41,6 +43,13 @@ const api = createApprovalApi({
   settlements: process.env.APPROVAL_PAYMENT_AGENTS
     ? createSettlementSource({ config: () => process.env.APPROVAL_PAYMENT_AGENTS })
     : undefined,
+  activity: {
+    status: createStatusSource({ baseUrl: () => process.env.BRAMBLED_STATUS_URL }),
+    payments: createPaymentsSource({
+      handler: paymentsHandler,
+      configured: () => !!process.env.APPROVAL_PAYMENT_AGENTS,
+    }),
+  },
 })
 
 export const GET = (request: Request) => api.handle(request)

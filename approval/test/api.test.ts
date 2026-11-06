@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test'
+import { expect, spyOn, test } from 'bun:test'
 import { randomUUID } from 'node:crypto'
 import { createApprovalApi } from '../src/lib/api'
 
@@ -218,6 +218,27 @@ test('signer failures preserve state, suppress adapter diagnostics and allow a s
   expect((await (await api.handle(request(`/requests/${created.id}`))).json()).status).toBe('approved')
   chain.failRevoke = false
   expect((await api.handle(request('/grants/agent-1/revoke', 'POST'))).status).toBe(200)
+})
+
+test('a signer failure is logged without the endpoint URL, and the API answer stays generic', async () => {
+  const chain = new MemoryChain()
+  chain.grant = async () => {
+    throw new Error('HTTP request failed. URL: https://rpc.example/v3/SECRET-KEY Details: decrypt failed')
+  }
+  const api = createApprovalApi({ token: () => token, signer: chain, resolver: chain })
+  const created = await (await api.handle(request('/requests', 'POST', input))).json()
+  const log = spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    const failed = await api.handle(request(`/requests/${created.id}/approve`, 'POST'))
+    expect(failed.status).toBe(502)
+    expect(await failed.text()).not.toContain('decrypt')
+    const line = String(log.mock.calls[0]?.[0])
+    expect(line).toContain('signer grant failed')
+    expect(line).toContain('decrypt failed')
+    expect(line).not.toContain('SECRET-KEY')
+  } finally {
+    log.mockRestore()
+  }
 })
 
 test('the real server scheduler revokes after one second without a GET trigger', async () => {

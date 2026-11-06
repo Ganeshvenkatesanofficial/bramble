@@ -117,6 +117,54 @@ The [browser verification how-to](../docs/how-to-test-approval-console.md) descr
 setup and execution. Screenshots use simulated receipts and do not verify a
 real Sepolia transaction or peer cutoff.
 
+## Live activity feed reference
+
+The console shows a unified feed beside the queue for beats 1, 3 and 5. `GET /api/activity`
+returns `{ events, sources, observedAt }`, newest first, at most 100 entries. The console
+polls it every second. The endpoint is read-only and public like the other reads.
+
+| Kind               | Source                       | Meaning                                         |
+| ------------------ | ---------------------------- | ----------------------------------------------- |
+| `request-received` | approval service             | An agent asked for a service                    |
+| `request-denied`   | approval service             | The operator denied the request                 |
+| `access-granted`   | approval service             | The grant transaction confirmed                 |
+| `access-revoked`   | approval service             | The revoke confirmed (or the grant vanished)    |
+| `gateway-denied`   | gateway (`statusapi`)        | The gateway blocked a call                      |
+| `gateway-allowed`  | gateway (`statusapi`)        | The gateway forwarded a call                    |
+| `peer-admission`   | gateway (`statusapi`)        | An admission check changed state                |
+| `peer-dropped`     | gateway (`statusapi`)        | The peer left the WireGuard peer table          |
+| `payment-settled`  | Hedera mirror (`/payments`)  | A testnet payment settled                       |
+| `cutoff-measured`  | approval service and gateway | Time from the revoke request to the first block |
+
+`sources` reports `ok`, `not_configured` or `unavailable` for the gateway and the payments
+feed, so a missing source is visible rather than silent. Set `BRAMBLED_STATUS_URL` to the
+base URL of the gateway node's `brambled/statusapi` (for example `http://127.0.0.1:7899`, the default `-status-port`).
+The server reads only `GET /activity`, rejects redirects and URLs with credentials, and
+times out after three seconds. It stops reading and cancels any body over 1 MB. Without the
+variable the gateway source is `not_configured`.
+The payments source needs `APPROVAL_PAYMENT_AGENTS` (see below).
+
+The feed never forwards raw gateway or resolver error text, because it can contain RPC
+URLs. Known gateway detail prefixes map to fixed phrases and anything else reads
+"Details withheld from this view."
+
+**Cut-off.** The measured cut-off is the first call to the revoked service that the gateway
+denied with "no matching granted digest", or the first peer drop, for that agent at or
+after the approval server accepted the revoke, minus that
+acceptance time (`revokeRequestedAt`). The window ends if the agent is granted again. The
+two timestamps come from two machines' clocks, so the number is only as accurate as their
+agreement. Keep both on NTP and treat a very small result as possible clock
+error. No cut-off is shown until the gateway reports a block; a revoke removed outside the
+console is not measured. Other denials, such as an unknown service or a failed ACL read,
+do not count.
+
+A gateway label matches a console agent when it is that agent's bare label or
+`<label>.<APPROVAL_ENS_PARENT>`. A full name under another parent never matches, and is
+shown in full in the feed. Without `APPROVAL_ENS_PARENT`, only bare labels match.
+
+The statusapi records an admission event only when the result changes, and records a
+`peer` event once when a peer goes from authorized to unauthorized and is removed.
+
 The agent payments UI is available at `/payments`. `GET /api/payments` is a
 read-only testnet mirror feed attributed through `APPROVAL_PAYMENT_AGENTS`.
 The panel refreshes every two seconds; the node's sidecar remains the payer.
@@ -184,3 +232,15 @@ and the topic entries then stay unverifiable.
 
 The tests use a fake topic client. They need no network and no secret:
 `pnpm --filter @bramble/approval test`.
+
+## HCS audit panel (beat 3)
+
+The approval console shows the HCS audit panel below the request queue. Unlock it with the demo token to read `/api/audit/verification`. This read requires bearer authorization, sends `Cache-Control: no-store`, and returns verification summaries. Openings, salts and event fields stay in process.
+
+`/audit/fixtures` is an explicitly labeled offline preview. It reads synthetic, independently calculated mirror-response fixtures and recomputes their commitments with the merged `hedera-audit` verifier. It never submits transactions or queries a network. Its HashScan links show the format; the synthetic records do not exist on testnet.
+
+The verifier looks up the receipt's exact topic and sequence, checks the message kind and commitment, then opens it with the retained event and salt. A match means the configured mirror returned matching bytes. It does not independently prove consensus, the source transaction, or completeness. Missing openings, malformed records, mismatches, post failures, mirror delays and mirror failures have separate labels. Failed refreshes mark retained results stale. Locking clears the panel. The view checks up to the latest 50 retained rows.
+
+The live route reads the service's own in-process `AuditRecorder` (`list()` and `opening(id)`), so it shows the grant, revoke and payment rows the service posts. The `createApprovalApi` option `auditSource` overrides that source for tests. No fallback fixture enters the live route. Durable opening retention and live HashScan browser verification remain open. H4 screenshot approval remains required.
+
+Run `bun test approval/test/audit-verification.test.ts` from the root for the verification boundary, and `pnpm --filter @bramble/approval test:ui` after the production build for screenshots and stale/lock behavior at 1280 px and 390 px. Public-console testing by a different Sol tester and human H4 approval are separate gates.

@@ -11,8 +11,11 @@ import { JoinService } from './joins'
 import { ApprovalService, systemClock } from './service'
 import { AuditRecorder, type AuditTrail } from './audit'
 import { parsePayment, readInput, readPayment, readJoin, label } from './validation'
+import { createAuditVerificationApi, type AuditSource } from './audit-verification'
+import { loadActivity, type PaymentsSource, type StatusSource } from './activity'
 
 interface ApiOptions {
+  auditSource?: AuditSource
   joinChain?: JoinChain
   signer?: GrantSigner
   resolver?: IdentityResolver
@@ -29,11 +32,14 @@ interface ApiOptions {
   /** Delay between settlement polls. Defaults to 30 seconds. */
   settlementPollMs?: number
   token: () => string | undefined
+  /** Read-only feed sources. An omitted source reports `not_configured`. */
+  activity?: { status?: StatusSource; payments?: PaymentsSource }
 }
 
 export function createApprovalApi(options: ApiOptions) {
   const clock = options.clock ?? systemClock
   const audit = new AuditRecorder(options.auditTrail, clock)
+  const verifyAudit = createAuditVerificationApi({ token: options.token, source: () => options.auditSource ?? audit })
   const service = new ApprovalService(options.signer, options.resolver, clock, audit, options.ensParent)
   const joins = new JoinService(options.joinChain, options.ensParent, clock)
   const json = (value: unknown, status = 200) =>
@@ -88,6 +94,7 @@ export function createApprovalApi(options: ApiOptions) {
             throw new ApiError(401, 'unauthorized', 'A valid demo bearer token is required.')
           }
         }
+        if (path === '/api/audit/verification' && request.method === 'GET') return verifyAudit(request)
         if (openJoin) {
           joins.limit()
           return json(joins.create(await readJoin(request)), 201)
@@ -108,6 +115,11 @@ export function createApprovalApi(options: ApiOptions) {
           return json(service.create(await readInput(request)), 201)
         }
         if (path === '/api/requests' && request.method === 'GET') return json({ requests: service.list() })
+        if (path === '/api/activity' && request.method === 'GET') {
+          return json(
+            await loadActivity({ requests: service.list(), ...options.activity, ensParent: options.ensParent })
+          )
+        }
         if (path === '/api/audit' && request.method === 'GET') return json({ entries: service.auditFeed() })
         if (path === '/api/payments/settled' && request.method === 'POST') {
           return json(service.recordPayment(await readPayment(request)), 202)
