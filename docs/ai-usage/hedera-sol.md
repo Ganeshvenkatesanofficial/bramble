@@ -15,7 +15,7 @@ Verified:
   lifecycle test. This exercises in-memory ENS and loopback WireGuard.
 - `cd node-daemon && go test -race ./...` passed.
 - The built `brambled` accepts `serve -sponsored-relay -relay-first -label
-  review-device` with an isolated environment. It reaches the expected
+review-device` with an isolated environment. It reaches the expected
   missing-tailnet configuration error instead of rejecting the flags.
 
 Read from source: child output stays in memory; the crash summary excludes
@@ -90,7 +90,6 @@ Additional local evidence paths written in this wake:
 - `/home/anonjr/bramble-work/status/eth-243-release-auth-receipts.json`
 - `/home/anonjr/.cache/agent-tmp/eth-243-post-release-handoff.md` (handoff references the saved task report)
 
-
 ## ETH-243 running-slot validation
 
 Demo beats 1, 2, 3 and 5. Verified two isolated Pi access-lifecycle runs at
@@ -117,7 +116,6 @@ Additional handoff paths:
 
 - `/home/anonjr/bramble-work/status/eth-243/artifact-helper/` (upload receipts)
 - `/home/anonjr/.cache/agent-tmp/eth-243-running-slot-handoff.md`
-
 
 ## ETH-308 PR 42 documentation conflict resolution
 
@@ -208,7 +206,6 @@ against DNS-named relays. A failing API test reproduces that issue; bounded
 server-side DNS resolution fixes it and keeps unresolved paths unknown.
 The network module also avoids importing browser fetch types into server consumers.
 
-
 ## 2026-11-06 — ETH-317 requested no-feed revision
 
 Demo beats: 2, 4 and 5. Retains the same branch and PR #66. Builds topology from
@@ -226,3 +223,17 @@ Paths written in the API revision:
 Verified: the no-feed API regression fails before the revision and passes after
 it with `network` omitted and `BRAMBLED_STATUS_URL` unset. Seven network API tests
 pass, including real loopback HTTP checks, grant/revoke state and response redaction.
+
+Paths written in the browser and documentation revision:
+
+- `approval/src/app/globals.css`
+- `approval/src/components/network-panel.tsx`
+- `approval/e2e/memory-server.ts`
+- `approval/e2e/network.spec.ts`
+- `docs/reference/approval-network.md`
+- `docs/reference/approval-api.md`
+- `approval/README.md`
+- `README.md`
+
+The no-feed browser assertion reproduces absent unavailable-field labels against
+the prior build. New browser screenshots and axe results follow final validation.

@@ -249,9 +249,13 @@ Run `bun test approval/test/audit-verification.test.ts` from the root for the ve
 
 The operator console follows the system light/dark preference and reduced-motion
 preference. Decisions remain keyboard operable. Network status is visible after
-unlock and refreshes every five seconds. Device checks use the gateway tunnel
-ping. Relay checks report HTTP health RTT from the approval server.
+unlock and refreshes every five seconds. Approval records supply the graph
+without a gateway status feed. Missing live admission, path and handshake fields
+render as unavailable. Configured relay and rendezvous checks report HTTP health
+RTT from the console host. Devices without a supported target show disabled
+buttons with a reason.
 
-The existing `BRAMBLED_STATUS_URL` supplies the gateway status API. No new
-configuration is required. See the [network reference](../docs/reference/approval-network.md)
+The existing `BRAMBLE_DATA_RELAYS` and `BRAMBLE_RENDEZVOUS_PAYMENT_URL` configure
+console-host checks. Optional `BRAMBLED_STATUS_URL` enriches live paths and enables
+tracked-device tunnel ping. See the [network reference](../docs/reference/approval-network.md)
 for response fields, private-data redaction, inferred paths and verification limits.

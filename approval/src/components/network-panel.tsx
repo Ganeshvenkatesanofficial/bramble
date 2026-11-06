@@ -5,8 +5,19 @@ import type { NetworkNode, NetworkPing, NetworkView } from '../lib/network'
 import { readJson } from '../lib/console-api'
 import { Button } from './ui/button'
 
-const admissionText = { authorized: 'Admitted', not_authorized: 'Not admitted', unknown: 'Admission unknown' }
-const pathText = { direct: 'Direct', relayed: 'Relayed', unknown: 'Path unknown', none: 'No observed link' }
+const admissionText = {
+  authorized: 'Admitted',
+  not_authorized: 'Not admitted',
+  unknown: 'Admission unknown',
+  unavailable: 'Admission unavailable',
+}
+const pathText = {
+  direct: 'Direct',
+  relayed: 'Relayed',
+  unknown: 'Path unknown',
+  none: 'No observed link',
+  unavailable: 'Path unavailable',
+}
 const grantText = {
   pending: 'Pending',
   approving: 'Grant pending',
@@ -35,8 +46,9 @@ function NetworkGraph({ view }: { view: NetworkView }) {
       <svg viewBox={`0 0 360 ${height}`} role="img" aria-labelledby="network-svg-title network-svg-desc">
         <title id="network-svg-title">Observed tailnet connections</title>
         <desc id="network-svg-desc">
-          Gateway perspective. Solid lines indicate direct paths, dashed lines relayed paths and dotted lines unknown
-          paths. Node details, state and handshake times follow in the node list.
+          Approval records with optional gateway observations. Solid lines indicate direct paths, dashed lines relayed
+          paths and dotted lines unknown or unavailable paths. Node details, state and handshake times follow in the
+          node list.
         </desc>
         {view.links.map((link) => {
           const a = points.get(link.from),
@@ -92,9 +104,14 @@ function NetworkGraph({ view }: { view: NetworkView }) {
             <span className="legend-line unknown" />
             Unknown
           </li>
+          <li>
+            <span className="legend-line unavailable" />
+            Unavailable (approval records)
+          </li>
         </ul>
         <p className="muted">
-          Paths are inferred from the gateway’s current peer and relay tables. A line does not prove reachability.
+          Approval records connect devices to the gateway. Unavailable links have no live path source. Optional gateway
+          observations enrich paths; a line does not prove reachability.
         </p>
         {view.nodes.length > visible.length && (
           <p>
@@ -154,7 +171,7 @@ function NodeCard({ node, token, stale }: { node: NetworkNode; token: string; st
             {node.lastHandshake ? (
               <time dateTime={node.lastHandshake}>{new Date(node.lastHandshake).toLocaleString()}</time>
             ) : (
-              'Not observed'
+              'Unavailable'
             )}
           </p>
           {node.grants.length ? (
@@ -172,19 +189,37 @@ function NodeCard({ node, token, stale }: { node: NetworkNode; token: string; st
         </>
       )}
       {node.kind === 'gateway' && (
-        <p className="muted">Local status observer. Devices and links reflect this node’s view.</p>
+        <p className="muted">
+          Gateway identified by the approval namespace or recorded grant. Live observations are optional.
+        </p>
       )}
       {node.kind === 'relay' && (
-        <p className="muted">Configured data relay. Check measures HTTP health RTT from the approval server.</p>
+        <p className="muted">
+          Configured relay or rendezvous service. Check measures HTTP health RTT from the console host; it does not
+          prove tunnel connectivity or forwarding.
+        </p>
       )}
-      {node.kind !== 'gateway' && (
-        <div className="node-probe">
-          <Button variant="outline" disabled={stale || !node.pingable || busy} onClick={() => void ping()}>
-            {busy ? 'Checking…' : node.kind === 'relay' ? 'Check relay' : 'Ping device'}
-          </Button>
-          {!node.pingable && <small>Probe unavailable for this node.</small>}
-        </div>
-      )}
+      <div className="node-probe">
+        <Button
+          variant="outline"
+          disabled={stale || !node.pingable || busy}
+          aria-describedby={!node.pingable ? `${node.id}-probe-reason` : undefined}
+          onClick={() => void ping()}
+        >
+          {busy
+            ? 'Checking…'
+            : node.kind === 'relay'
+              ? 'Check relay'
+              : node.kind === 'gateway'
+                ? 'Check gateway'
+                : 'Ping device'}
+        </Button>
+        {!node.pingable && (
+          <small id={`${node.id}-probe-reason`}>
+            {node.probeReason ?? 'No supported probe target is known for this node.'}
+          </small>
+        )}
+      </div>
       <div role="status" className={`probe-result ${result && !result.reachable ? 'negative' : ''}`}>
         {busy && 'Probe running…'}
         {result && (
@@ -222,7 +257,10 @@ export function NetworkPanel({ token }: { token: string }) {
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
         })
         if (controller.signal.aborted) return
-        if (next.state === 'unavailable') throw new Error('unavailable')
+        if (next.state === 'unavailable') {
+          setView((current) => current ?? next)
+          throw new Error('unavailable')
+        }
         setView(next)
         setError(null)
       } catch {
@@ -245,7 +283,7 @@ export function NetworkPanel({ token }: { token: string }) {
     <section className="network-panel" id="network" aria-labelledby="network-title">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Connectivity · gateway perspective</p>
+          <p className="eyebrow">Connectivity · approval records and observations</p>
           <h2 id="network-title">Tailnet network</h2>
         </div>
         {token && (
@@ -277,7 +315,8 @@ export function NetworkPanel({ token }: { token: string }) {
           )}
           {view?.state === 'not_configured' && (
             <p className="notice">
-              The gateway status service is not configured. Live paths and latency checks are unavailable.
+              Live peer admission, paths and handshakes are unavailable without the optional gateway feed. Approval
+              records and configured console-host checks remain available.
             </p>
           )}
           {view?.relayState === 'unavailable' && (
@@ -294,7 +333,12 @@ export function NetworkPanel({ token }: { token: string }) {
               <NetworkGraph view={view} />
               <div className="network-node-list">
                 {view.nodes.map((node) => (
-                  <NodeCard key={node.id} node={node} token={token} stale={!!error || loading || view.state !== 'ok'} />
+                  <NodeCard
+                    key={node.id}
+                    node={node}
+                    token={token}
+                    stale={!!error || loading || view.state === 'unavailable'}
+                  />
                 ))}
               </div>
             </div>

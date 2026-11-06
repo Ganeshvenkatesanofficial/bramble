@@ -521,7 +521,8 @@ summary:focus-visible {
 .graph-link.relayed {
   stroke-dasharray: 8 5;
 }
-.graph-link.unknown {
+.graph-link.unknown,
+.graph-link.unavailable {
   stroke: var(--muted-foreground);
   stroke-dasharray: 2 5;
 }
@@ -545,7 +546,8 @@ summary:focus-visible {
 .legend-line.relayed {
   border-top-style: dashed;
 }
-.legend-line.unknown {
+.legend-line.unknown,
+.legend-line.unavailable {
   border-top: 2px dotted var(--muted-foreground);
 }
 .network-node-list {

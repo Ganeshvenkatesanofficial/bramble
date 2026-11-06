@@ -85,10 +85,10 @@ const payments = createPaymentsSource({
     }),
 })
 
-function freshApi() {
+function freshApi(noFeed = false) {
   const memory = memoryEnrollChain({ tailnetName: 'bramble.eth' })
   return createApprovalApi({
-    network,
+    network: noFeed ? undefined : network,
     token: () => 'browser-test-only',
     signer: chain,
     resolver: chain,
@@ -133,6 +133,13 @@ Bun.serve({
       api = freshApi()
       return Response.json({ reset: true })
     }
+    if (url.pathname === '/__test/no-feed' && request.method === 'POST') {
+      delete process.env.BRAMBLED_STATUS_URL
+      process.env.BRAMBLE_DATA_RELAYS = `relay-local=http://127.0.0.1:${process.env.BRAMBLE_TEST_API_PORT ?? 3101}`
+      api = freshApi(true)
+      return Response.json({ feed: false })
+    }
+    if (url.pathname === '/health') return Response.json({ ok: !probeFailed })
     if (url.pathname === '/__test/gateway' && request.method === 'POST') {
       gatewayEvents.push({ time: new Date().toISOString(), ...(await request.json()) })
       return Response.json({ events: gatewayEvents.length })
