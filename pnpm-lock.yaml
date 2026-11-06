@@ -97,15 +97,30 @@ importers:
 
   approval:
     dependencies:
+      class-variance-authority:
+        specifier: ^0.7.1
+        version: 0.7.1
+      cn:
+        specifier: ^0.2.6
+        version: 0.2.6
       next:
         specifier: 16.3.4
-        version: 16.3.4(@babel/core@7.29.7)(@types/node@20.19.43)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 16.3.4(@babel/core@7.29.7)(@playwright/test@1.65.0)(@types/node@20.19.43)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      radix-ui:
+        specifier: ^1.6.7
+        version: 1.6.7(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
         specifier: 19.2.8
         version: 19.2.8
       react-dom:
         specifier: 19.2.8
         version: 19.2.8(react@19.2.8)
+      shadcn:
+        specifier: ^4.21.0
+        version: 4.21.0(typescript@5.9.3)
+      tw-animate-css:
+        specifier: ^1.4.0
+        version: 1.4.0
       viem:
         specifier: ^2.56.3
         version: 2.56.3(typescript@5.9.3)(zod@3.25.76)
@@ -116,6 +131,9 @@ importers:
       '@noble/hashes':
         specifier: 1.8.0
         version: 1.8.0
+      '@playwright/test':
+        specifier: ^1.65.0
+        version: 1.65.0
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.3.3
@@ -162,7 +180,7 @@ importers:
         version: 1.43.0(react@19.2.8)
       next:
         specifier: 16.3.4
-        version: 16.3.4(@babel/core@7.29.7)(@types/node@20.19.43)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 16.3.4(@babel/core@7.29.7)(@playwright/test@1.65.0)(@types/node@20.19.43)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       radix-ui:
         specifier: ^1.6.7
         version: 1.6.7(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -207,6 +225,22 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  hedera-audit:
+    dependencies:
+      '@hiero-ledger/sdk':
+        specifier: 2.85.0
+        version: 2.85.0(bn.js@5.2.3)(react-native@0.87.1(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.2.8))
+    devDependencies:
+      '@types/node':
+        specifier: ^26.4.1
+        version: 26.4.1
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.0.0
+        version: 5.0.0(@types/node@26.4.1)(vite@8.2.2(@types/node@26.4.1)(jiti@2.7.0)(terser@5.51.2))
+
   relay: {}
 
   relay-sidecar:
@@ -216,7 +250,7 @@ importers:
         version: 2.25.0
       '@x402/hedera':
         specifier: ^2.25.0
-        version: 2.25.0(ansi-regex@6.2.2)(ansi-styles@6.2.3)(bn.js@5.2.3)(debug@4.4.1)(protobufjs@8.0.1)(react-native@0.87.1(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.2.8))(strip-ansi@7.1.2)
+        version: 2.25.0(ansi-regex@6.2.2)(ansi-styles@6.2.3)(bn.js@5.2.3)(debug@4.4.1)(protobufjs@8.0.1)(strip-ansi@7.1.2)
       '@x402/hono':
         specifier: ^2.25.0
         version: 2.25.0(ethers@6.16.0)(hono@4.13.7)(typescript@6.0.3)
@@ -233,6 +267,39 @@ importers:
       vitest:
         specifier: ^5.0.0
         version: 5.0.0(@types/node@26.4.1)(vite@8.2.2(@types/node@26.4.1)(jiti@2.7.0)(terser@5.51.2))
+
+  rpc-proxy:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.4.1
+        version: 26.4.1
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.0.0
+        version: 5.0.0(@types/node@26.4.1)(vite@8.2.2(@types/node@26.4.1)(jiti@2.7.0)(terser@5.51.2))
+
+  scripts/demo:
+    devDependencies:
+      '@noble/curves':
+        specifier: 1.9.1
+        version: 1.9.1
+      '@noble/hashes':
+        specifier: 1.8.0
+        version: 1.8.0
+      '@types/bun':
+        specifier: ^1.4.1
+        version: 1.4.1
+      '@types/node':
+        specifier: ^26.4.1
+        version: 26.4.1
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      viem:
+        specifier: ^2.56.3
+        version: 2.56.3(typescript@6.0.3)(zod@3.25.76)
 
   scripts/provision-dev-tailnet:
     dependencies:
@@ -260,10 +327,13 @@ importers:
         version: 2.25.0
       '@x402/hedera':
         specifier: ^2.25.0
-        version: 2.25.0(ansi-regex@6.2.2)(ansi-styles@6.2.3)(bn.js@5.2.3)(debug@4.4.1)(protobufjs@8.0.1)(react-native@0.87.1(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.2.8))(strip-ansi@7.1.2)
+        version: 2.25.0(ansi-regex@6.2.2)(ansi-styles@6.2.3)(bn.js@5.2.3)(debug@4.4.1)(protobufjs@8.0.1)(strip-ansi@7.1.2)
       hono:
         specifier: ^4.13.7
         version: 4.13.7
+      tor-js:
+        specifier: 0.4.4
+        version: 0.4.4
       viem:
         specifier: ^2.56.3
         version: 2.56.3(typescript@6.0.3)(zod@3.25.76)
@@ -1026,6 +1096,11 @@ packages:
 
   '@pinojs/redact@0.4.0':
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
+
+  '@playwright/test@1.65.0':
+    resolution: {integrity: sha512-iGURLGuKDLakSEl7Pgfv8h7f+XLT+V861Wfhz0zlEl5nyFuKUopdkFBPKqTllTUp06aOwPuH8iuUEb3yp3MpbQ==}
+    engines: {node: '>=20'}
+    hasBin: true
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -4545,6 +4620,16 @@ packages:
     resolution: {integrity: sha512-nDywThFk1i4BQK4twPQ6TA4RT8bDY96yeuCVBWL3ePARCiEKDRSrNGbFIgUJpLp+XeIR65v8ra7WuJOFUBtkMA==}
     engines: {node: '>=8'}
 
+  playwright-core@1.65.0:
+    resolution: {integrity: sha512-vNSKgH6YqtN7cdT/L334zo0a+YwkrpicyrHJlWWPIm/Q+Nn2SWInil01oT0mbu96U4GgoRtCYQD9CzJQgju+lA==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  playwright@1.65.0:
+    resolution: {integrity: sha512-F3AMWcR44qMBt4kq+6Kb6mX7bjGXshktKFOPULd7reED6ZJWevjbNRqysP7q+AATE9kdPEZBibex1BYsvpVoeA==}
+    engines: {node: '>=20'}
+    hasBin: true
+
   possible-typed-array-names@1.1.0:
     resolution: {integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==}
     engines: {node: '>= 0.4'}
@@ -5183,6 +5268,14 @@ packages:
   toidentifier@1.0.1:
     resolution: {integrity: sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==}
     engines: {node: '>=0.6'}
+
+  tor-js@0.4.4:
+    resolution: {integrity: sha512-0biVOvwZrar+kt+y4GIW4haGYITgspZs1Sv/iJriUIDq3Hs0mM/nkwyO5Ygk+oGjqf7gVuBQhV0uF0RMmTb1UA==}
+    peerDependencies:
+      '@kpstreams/quic-client': ^0.2.1
+    peerDependenciesMeta:
+      '@kpstreams/quic-client':
+        optional: true
 
   ts-api-utils@2.5.0:
     resolution: {integrity: sha512-OJ/ibxhPlqrMM0UiNHJ/0CKQkoKF243/AEmplt3qpRgkW8VG7IfOS41h7V8TjITqdByHzrjcS/2si+y4lIh8NA==}
@@ -6052,7 +6145,7 @@ snapshots:
   '@grpc/proto-loader@0.7.15':
     dependencies:
       lodash.camelcase: 4.3.0
-      long: 5.3.1
+      long: 5.3.2
       protobufjs: 7.6.6
       yargs: 17.7.3
 
@@ -6498,6 +6591,10 @@ snapshots:
   '@oxc-project/types@0.148.0': {}
 
   '@pinojs/redact@0.4.0': {}
+
+  '@playwright/test@1.65.0':
+    dependencies:
+      playwright: 1.65.0
 
   '@protobufjs/aspromise@1.1.2': {}
 
@@ -7852,7 +7949,7 @@ snapshots:
     dependencies:
       '@x402/core': 2.25.0
 
-  '@x402/hedera@2.25.0(ansi-regex@6.2.2)(ansi-styles@6.2.3)(bn.js@5.2.3)(debug@4.4.1)(protobufjs@8.0.1)(react-native@0.87.1(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.2.8))(strip-ansi@7.1.2)':
+  '@x402/hedera@2.25.0(ansi-regex@6.2.2)(ansi-styles@6.2.3)(bn.js@5.2.3)(debug@4.4.1)(protobufjs@8.0.1)(strip-ansi@7.1.2)':
     dependencies:
       '@hiero-ledger/proto': 2.31.0(ansi-regex@6.2.2)(ansi-styles@6.2.3)(debug@4.4.1)(protobufjs@8.0.1)(strip-ansi@7.1.2)
       '@hiero-ledger/sdk': 2.85.0(bn.js@5.2.3)(react-native@0.87.1(@babel/core@7.29.7)(@types/react@19.3.0)(react@19.2.8))
@@ -10011,7 +10108,7 @@ snapshots:
     dependencies:
       content-type: 2.1.0
 
-  next@16.3.4(@babel/core@7.29.7)(@types/node@20.19.43)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
+  next@16.3.4(@babel/core@7.29.7)(@playwright/test@1.65.0)(@types/node@20.19.43)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
     dependencies:
       '@next/env': 16.3.4
       '@swc/helpers': 0.5.23
@@ -10030,6 +10127,7 @@ snapshots:
       '@next/swc-linux-x64-musl': 16.3.4
       '@next/swc-win32-arm64-msvc': 16.3.4
       '@next/swc-win32-x64-msvc': 16.3.4
+      '@playwright/test': 1.65.0
       sharp: 0.35.4(@types/node@20.19.43)
     transitivePeerDependencies:
       - '@babel/core'
@@ -10321,6 +10419,12 @@ snapshots:
     dependencies:
       find-up: 3.0.0
 
+  playwright-core@1.65.0: {}
+
+  playwright@1.65.0:
+    dependencies:
+      playwright-core: 1.65.0
+
   possible-typed-array-names@1.1.0: {}
 
   postcss-selector-parser@7.1.6:
@@ -10422,7 +10526,7 @@ snapshots:
   protobufjs@8.2.0:
     dependencies:
       '@types/node': 26.4.1
-      long: 5.3.1
+      long: 5.3.2
 
   proxy-addr@2.0.7:
     dependencies:
@@ -11199,6 +11303,8 @@ snapshots:
       is-number: 7.0.0
 
   toidentifier@1.0.1: {}
+
+  tor-js@0.4.4: {}
 
   ts-api-utils@2.5.0(typescript@5.9.3):
     dependencies:
