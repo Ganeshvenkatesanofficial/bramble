@@ -31,6 +31,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"net/netip"
@@ -1228,7 +1229,7 @@ func runServe(args []string) error {
 	// dashboard's source for everything ENS/Hedera state alone can't show.
 	// It has no write path of its own: OnAdmissionEvent/OnGatewayDecision
 	// only ever record what the admission loop and gateway already decided.
-	status := &statusapi.Server{PeerTable: node, EndpointSource: node}
+	status := &statusapi.Server{PeerTable: node, EndpointSource: node, DataRelays: maps.Clone(dataRelays)}
 
 	loop := &admission.Loop{
 		Resolver: m,

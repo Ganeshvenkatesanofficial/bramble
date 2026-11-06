@@ -1,0 +1,1 @@
+The release build copies local-ui/out/* here before go build. See node-daemon/README.md.
