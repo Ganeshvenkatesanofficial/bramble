@@ -1,5 +1,5 @@
 /** Synthetic openings and mirror bytes. Imported only by the explicitly labeled fixture page and tests. */
-import fixture from '../fixtures/hcs-audit.json'
+import fixture from '../fixtures/hcs-audit.json' with { type: 'json' }
 import { MirrorTopicReader } from '../../../hedera-audit/src/mirror'
 import type { AuditOpening } from '../../../hedera-audit/src/types'
 import { verifyAuditFeed } from './audit-verification'

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import fixture from '../src/fixtures/hcs-audit.json'
+import fixture from '../src/fixtures/hcs-audit.json' with { type: 'json' }
 import { verifyAuditFeed } from '../src/lib/audit-verification'
 import type { AuditOpening } from '../../hedera-audit/src/types'
 import { MirrorTopicReader } from '../../hedera-audit/src/mirror'
