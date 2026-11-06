@@ -26,9 +26,13 @@ const RING_KEY_NAME = 'bramble-granter-key'
 // corrupting the ciphertext. Buffers in, Buffer out, no string in between
 // on the ciphertext side — this cost a real debugging cycle to find (the
 // corruption was invisible until decrypt failed with a generic error).
+//
+// BRAMBLE_RING_CLI replaces the `wallet-cli` binary with any program that
+// takes the same `ring encrypt|decrypt -k <name>` arguments. The cloud demo
+// uses deploy/scripts/software-ring.sh (a software key, no Ledger).
 function runRing(subcommand: 'encrypt' | 'decrypt', input: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('wallet-cli', ['ring', subcommand, '-k', RING_KEY_NAME], {
+    const proc = spawn(process.env.BRAMBLE_RING_CLI || 'wallet-cli', ['ring', subcommand, '-k', RING_KEY_NAME], {
       stdio: ['pipe', 'pipe', 'inherit'],
     })
     const chunks: Buffer[] = []

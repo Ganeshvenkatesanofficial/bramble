@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -42,11 +43,37 @@ type dataSession struct {
 type dataRelay struct {
 	mu       sync.Mutex
 	sessions map[string]*dataSession
+
+	// sponsorBytes is the per-session cap on operator-sponsored (unpaid)
+	// sessions; 0 means sponsorship is off and sponsored requests are
+	// refused. Set once at startup from -sponsor-bytes, before serving.
+	sponsorBytes int64
 }
 
 func newDataRelay() *dataRelay {
 	return &dataRelay{sessions: make(map[string]*dataSession)}
 }
+
+// allocateSponsored is allocate for a session the operator pays for (D11 of
+// the ETH-177 spec): the requested size is clamped to the relay's own
+// sponsorBytes cap, whatever the caller asked for. The cap is enforced here,
+// in the process that owns the forwarding socket, so a bug or compromise in
+// relay-sidecar's enrollment check cannot turn into an unbounded free
+// session.
+func (r *dataRelay) allocateSponsored(host string, bytes int64) (*dataSession, error) {
+	if r.sponsorBytes <= 0 {
+		return nil, errSponsorshipOff
+	}
+	if bytes <= 0 {
+		return nil, fmt.Errorf("bytes must be positive, got %d", bytes)
+	}
+	if bytes > r.sponsorBytes {
+		bytes = r.sponsorBytes
+	}
+	return r.allocate(host, bytes)
+}
+
+var errSponsorshipOff = errors.New("sponsored sessions are not enabled on this relay")
 
 // allocate opens a fresh ephemeral UDP port, starts forwarding on it, and
 // registers the session. Called only from the loopback /internal handler.
@@ -162,12 +189,18 @@ func (s *dataSession) bytesRemaining() int64 {
 // a secret; here TS hands Go a request).
 type internalAllocateRequest struct {
 	Bytes int64 `json:"bytes"`
+	// Sponsored marks a session the operator pays for instead of the
+	// client; the size is then clamped to -sponsor-bytes (allocateSponsored).
+	Sponsored bool `json:"sponsored,omitempty"`
 }
 
 type internalAllocateResponse struct {
 	SessionID string `json:"sessionId"`
 	Port      int    `json:"port"`
 	ExpiresAt int64  `json:"expiresAt"`
+	// Bytes is the allotment actually granted, which for a sponsored
+	// session can be smaller than the request.
+	Bytes int64 `json:"bytes"`
 }
 
 // internalAPIHandler builds the loopback-only allocation route. Separated
@@ -185,7 +218,17 @@ func internalAPIHandler(r *dataRelay, dataHost string) http.Handler {
 			http.Error(w, fmt.Sprintf("bad request: %v", err), http.StatusBadRequest)
 			return
 		}
-		s, err := r.allocate(dataHost, body.Bytes)
+		var s *dataSession
+		var err error
+		if body.Sponsored {
+			s, err = r.allocateSponsored(dataHost, body.Bytes)
+		} else {
+			s, err = r.allocate(dataHost, body.Bytes)
+		}
+		if errors.Is(err, errSponsorshipOff) {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -195,6 +238,7 @@ func internalAPIHandler(r *dataRelay, dataHost string) http.Handler {
 			SessionID: s.id,
 			Port:      s.conn.LocalAddr().(*net.UDPAddr).Port,
 			ExpiresAt: s.expiresAt.Unix(),
+			Bytes:     s.bytesAllotted,
 		})
 	})
 	return mux

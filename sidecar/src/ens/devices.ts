@@ -40,5 +40,65 @@ export async function listDeviceLabels(client: PublicClient): Promise<string[]> 
     event: labelRegisteredEvent,
     fromBlock: tailnetRegistryDeployBlock(),
   })
-  return [...new Set(logs.map((log) => log.args.label).filter((label): label is string => !!label))]
+  return [...new Set(labelsOf(logs))]
+}
+
+function labelsOf(logs: { args: Record<string, unknown> }[]): string[] {
+  return logs.map((log) => log.args.label).filter((label): label is string => typeof label === 'string' && !!label)
+}
+
+// RESCAN_MARGIN is how many blocks behind the last scanned head each
+// incremental scan starts. It covers reorgs and, mainly, an RPC pool whose
+// getLogs backend lags the backend that answered getBlockNumber
+// (docs/adr/0010 saw a 17,000-block spread on publicnode): a registration
+// such a backend missed is picked up on a later poll. 8,000 blocks plus a
+// poll's new blocks still fits in one 9,000-block getLogs window, so the
+// margin costs no extra calls.
+const RESCAN_MARGIN = 8_000n
+
+// incrementalDeviceLabels returns a lister for the sidecar's /devices route.
+// brambled serve polls that route every 15 s to pick up devices enrolled
+// after it started (docs/adr/0010, "Rediscovery"). A full scan from the
+// deploy block is dozens of getLogs calls over Tor, so the lister keeps the
+// labels it has seen and scans only from RESCAN_MARGIN blocks behind the
+// last head it reached: one getLogs call per poll. The first call is a full scan. Labels are only ever added: a
+// revoked or expired device is still listed, and admission.Loop refuses it.
+// A failed scan rejects and leaves the scanned range unchanged, so the next
+// call retries the same blocks. Concurrent calls share one scan.
+// admincli's enroll.ts keeps using listDeviceLabels: it runs once and needs
+// no cache.
+export function incrementalDeviceLabels(client: PublicClient): () => Promise<string[]> {
+  const seen = new Set<string>()
+  let scannedThrough: bigint | undefined
+  let pending: Promise<string[]> | undefined
+
+  async function scan(): Promise<string[]> {
+    const deployBlock = tailnetRegistryDeployBlock()
+    // cacheTime 0: viem otherwise reuses a head up to 4 s old.
+    const head = await client.getBlockNumber({ cacheTime: 0 })
+    let fromBlock = deployBlock
+    if (scannedThrough !== undefined && scannedThrough - RESCAN_MARGIN > deployBlock) {
+      fromBlock = scannedThrough - RESCAN_MARGIN
+    }
+    if (fromBlock <= head) {
+      const logs = await scanLogsChunked(client, {
+        address: tailnetRegistry(),
+        event: labelRegisteredEvent,
+        fromBlock,
+        toBlock: head,
+      })
+      for (const label of labelsOf(logs)) seen.add(label)
+    }
+    // An RPC pool can answer from a node a block or two behind; never move
+    // the scanned range backwards.
+    if (scannedThrough === undefined || head > scannedThrough) scannedThrough = head
+    return [...seen]
+  }
+
+  return () => {
+    pending ??= scan().finally(() => {
+      pending = undefined
+    })
+    return pending
+  }
 }

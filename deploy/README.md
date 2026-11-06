@@ -66,7 +66,7 @@ cd /opt/bramble && git checkout <commit>
 
 Use the same commit on every machine. Record the commit in the demo log. Deploy only a commit on `hackathon` that `pnpm verify` accepted. The checkout is owned by `bramble` after A5, and git refuses other users. Read it as root with the directory marked safe: `sudo git -c safe.directory=/opt/bramble -C /opt/bramble rev-parse --short HEAD`.
 
-Run on 6 Nov 2026: all three machines at `92dd04e` (merge of PR #25). The public clone worked with no deploy key.
+Run on 6 Nov 2026: all three machines at `a9db736` (merge of PR #18). The public clone worked with no deploy key.
 
 ### A5. Run the installer. Verified (cloud, 6 Nov 2026)
 
@@ -207,7 +207,7 @@ sudo systemctl enable --now bramble-demo-service bramble-gateway
 deploy/scripts/smoke.sh gateway
 ```
 
-Cloud evidence: `bramble-demo-service` is active on the gateway machine and `GET http://127.0.0.1:9100/task` returns the JSON task. `bramble-gateway` has not started (it needs the tailnet variables and the Hedera payer). Earlier evidence: `demo-service -port 19100` started and `GET /task` returned the JSON task on the development machine on 6 Nov 2026. `brambled serve` accepted every flag the unit passes (it stopped at the missing tailnet variables, as expected). The September runbook ran the same processes by hand on an EC2 machine (`brambled/README.md`, 8 to 10 Sept 2026). The node units (`bramble-gateway`, `bramble-worker`) have not run. Verification of the gateway node stays Open.
+Cloud evidence: `bramble-demo-service` is active on the gateway machine and `GET http://127.0.0.1:9100/task` returns the JSON task. Earlier evidence: `demo-service -port 19100` started and `GET /task` returned the JSON task on the development machine on 6 Nov 2026. `brambled serve` accepted every flag the unit passes (it stopped at the missing tailnet variables, as expected). The September runbook ran the same processes by hand on an EC2 machine (`brambled/README.md`, 8 to 10 Sept 2026). The node units (`bramble-gateway`, `bramble-worker`) ran on 6 Nov 2026. The node preflight, run on each node after the rebuild, passed `env`, `sepolia-rpc`, sidecar, Tor, STUN, registry and Hedera on both; `reach:*` cannot run on a node (it needs `DEMO_*_SSH` from the host) and `relay` timed out, see below. **Keep them stopped between runs**: with `BRAMBLE_TTL=30s` each node buys a rendezvous token about every 37 s, which cost the payer about 2.4 to 2.8 USDC per hour with both up. Start them shortly before a run and stop them after. The preflight `relay` check can time out at its 5 s limit over Tor (`/relays` took about 8 s); a direct `curl` to `127.0.0.1:7890/relays` on a node returns the relay list.
 
 ## Part F: worker machine
 
@@ -230,7 +230,7 @@ Before any grant, from the worker: `curl -sS http://127.0.0.1:8080/task`. In NAT
 
 ### F4. Prepare the agent user. Open
 
-Create a Unix user `agent` with no `sudo` and no read access to `/etc/bramble`. The agent calls only the forward on `127.0.0.1:8080`. The node's WireGuard key and Hedera payer key stay in `/etc/bramble/worker.env` (mode `0600`, owner `bramble`), so the agent never holds a backend credential. Install Claude Code for that user and authenticate it with item 11. The MCP server package (`agent-mcp/`, ETH-57) does not exist yet; its environment variable names are Open.
+Create a Unix user `agent` with no `sudo` and no read access to `/etc/bramble`. The agent calls only the forward on `127.0.0.1:8080`. The node's WireGuard key and Hedera payer key stay in `/etc/bramble/worker.env` (mode `0600`, owner `bramble`), so the agent never holds a backend credential. Install Claude Code for that user and authenticate it with item 11. Set `BRAMBLE_FORWARD_TIMEOUT_MS=120000` in the environment of the `agent` user's MCP server process (the variable `agent-mcp/src/config.ts` reads; where the launcher passes it is Open until the agent is deployed): the `agent-mcp` default is 10 s (`agent-mcp/src/config.ts`), shorter than the 27 to 32 s gateway decision (Part G), so `call_private_service` would time out first.
 
 **Launching the agent.** Without the NAT box, the agent runs as `agent` on the host and reaches the forward on the host's `127.0.0.1:8080`. With the NAT box, the node (and so the forward) sits in the `bramble-node` namespace, and a process on the host cannot reach it. Start the agent through the launcher, which enters the namespace as root and then drops to the `agent` user with no capabilities and `no_new_privs`:
 
@@ -249,6 +249,8 @@ Run these in order after parts B to F. They are the gate "agent denied, then suc
 3. Succeed with no restart: `curl -sS http://127.0.0.1:8080/task` on the worker returns the JSON task. Open.
 4. Revoke: `bun run src/revoke-acl.ts <agent-label> <gateway-label> <granter-label> <service>` or the console button. The next call fails. Open.
 5. Record the measured time from the revoke transaction to the first failure. Open.
+
+Measured on the cloud nodes with the plain node units, 6 Nov 2026 (Verified; no `bramble-node` namespace existed on the worker, one run, driven through the public console URL): deny failed with `denied for service "task"`; approval confirmed in 12 s; the first call after approval returned the task in 31 s; revoke confirmed in 11 s and the first failed call came 32 s after the revoke started. Every ENS read goes through Tor at about 1.1 s per `eth_call`, one `/device` resolve is seven calls (about 9 s), and one gateway decision resolves three records in turn, so a call takes about 27 to 32 s. Narrate that wait in the demo. Atlas accepted it (ETH-173): the gateway's decision window is 90 s, and no cache or concurrency change is planned.
 
 ## Part N: two NATs
 

@@ -24,7 +24,10 @@ const connectRequestLineDeadline = 5 * time.Second
 // gatewayDecisionDeadline bounds how long a local forward waits for the
 // gateway's OK or DENY. The gateway resolves the live ENS ACL before it can
 // answer, which can take longer than receiving the short CONNECT line itself.
-const gatewayDecisionDeadline = 20 * time.Second
+// Every ENS read goes through Tor and one decision resolves three records in
+// turn (about 9 s each on the cloud nodes, Verified 6 Nov 2026), so 20 s was
+// too short and the forward gave up before the gateway had answered.
+const gatewayDecisionDeadline = 90 * time.Second
 
 // Server is the gateway's single fixed-port CONNECT listener (adr/0005 §
 // "What Section C still owns", adr/0006). It never trusts a self-declared
@@ -57,6 +60,10 @@ type Server struct {
 	// note) — WireGuard's own allowed_ip binding makes this mapping
 	// trustworthy for an already-decrypted inbound connection.
 	PeerLabels map[netip.Addr]string
+	// LookupPeer, if set, replaces PeerLabels. Serve uses it when the
+	// tracked peer set can grow while the server runs (peer rediscovery,
+	// docs/adr/0010), so it must be safe for concurrent use.
+	LookupPeer func(netip.Addr) (string, bool)
 
 	// Logf receives one line per accepted/denied/proxied connection.
 	// Defaults to log.Printf if unset.
@@ -176,7 +183,13 @@ func (s *Server) readRequest(conn net.Conn) (requesterLabel, service string, rea
 	if !ok {
 		return "", "", nil, fmt.Errorf("unexpected remote address type %T", conn.RemoteAddr())
 	}
-	label, known := s.PeerLabels[remoteAddr.AddrPort().Addr()]
+	var label string
+	var known bool
+	if s.LookupPeer != nil {
+		label, known = s.LookupPeer(remoteAddr.AddrPort().Addr())
+	} else {
+		label, known = s.PeerLabels[remoteAddr.AddrPort().Addr()]
+	}
 	if !known {
 		return "", "", nil, fmt.Errorf("no tracked peer for tunnel address %s", remoteAddr.AddrPort().Addr())
 	}
