@@ -19,16 +19,16 @@ Run these from the repository root.
 
 ## Screens
 
-| Phase       | Screen                                                                                                |
-| ----------- | ----------------------------------------------------------------------------------------------------- |
-| `setup`     | Name this device. Shows the device fingerprint.                                                       |
-| `ready`     | Enter the network name and request to join.                                                           |
-| `pending`   | Waiting for approval, with Cancel.                                                                    |
-| `approved`  | Approved, setting up the address.                                                                     |
-| `denied`    | Not approved, with Start over.                                                                        |
+| Phase       | Screen                                                                                                   |
+| ----------- | -------------------------------------------------------------------------------------------------------- |
+| `setup`     | Name this device. Shows the device fingerprint.                                                          |
+| `ready`     | Enter the network name and request to join.                                                              |
+| `pending`   | Waiting for approval, with Cancel.                                                                       |
+| `approved`  | Approved, setting up the address.                                                                        |
+| `denied`    | Not approved, with Start over.                                                                           |
 | `connected` | Address, Private services with Open links, peers with a Direct or Relayed badge, Test connection, Leave. |
-| `error`     | The error message and next step from `state.error`, with Check again and Leave network or Start over. |
-| (no answer) | "Bramble is not running". A failed poll after a first answer keeps the last state and shows a banner. |
+| `error`     | The error message and next step from `state.error`, with Check again and Leave network or Start over.    |
+| (no answer) | "Bramble is not running". A failed poll after a first answer keeps the last state and shows a banner.    |
 
 When `isAdmin` is true, an Admin tab appears with a count of waiting requests. It lists join requests (Approve, Deny), devices on the network (Revoke, with a confirm) and closed requests. It calls `/api/admin/*` only.
 
