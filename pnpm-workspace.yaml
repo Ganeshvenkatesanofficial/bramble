@@ -5,5 +5,8 @@ packages:
   - relay
   - rpc-proxy
   - scripts/provision-dev-tailnet
+  - scripts/demo
   - admincli
   - dashboard
+  - hedera-audit
+  - approval
