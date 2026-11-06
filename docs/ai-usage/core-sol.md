@@ -3,14 +3,16 @@
 ## ETH-227: immediate revoke after confirmed approval (demo beat 5)
 
 Paths written: `approval/src/lib/service.ts`, `approval/src/lib/chain.ts`,
-`approval/test/chain.test.ts`, and this file.
+`approval/test/chain.test.ts`, `docs/reference/approval-api.md`, and this file.
 
 Verified: the agreed HTTP Request/Response regression reproduces `409 not_granted`
 with an older empty ENS snapshot after a confirmed grant. Removing that snapshot
 makes the loop pass. Bypassing only the service guard exposes `502 revoke_failed`
 because the admincli clear helper skips its write on the same snapshot. The fix
 uses the confirmed local grant and submits an ACL clear with its own receipt.
-The regression and approval typechecking pass. Tests inject ENS and signer
+The manual and timer regressions and approval typechecking pass. The stale-read
+chain suite passes 33 tests with 130 assertions, including reverted and unresolved
+writes, late grant confirmation, and duplicate-write blocking. Tests inject ENS and signer
 boundaries; live RPC propagation and gateway cut-off remain Open.
 
 ## ETH-293: concurrent rendezvous exchanges (demo beats 3 and 4)

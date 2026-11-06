@@ -265,6 +265,21 @@ describe('approval service over the admincli signer', () => {
     expect(s.chain.records.get(`agent-1.${TAILNET}|acl`)).toBe('')
     expect((await (await s.api.handle(call(`/requests/${created.id}`))).json()).status).toBe('revoked')
   })
+
+  test('an older empty ENS snapshot cannot retire a timed grant without a revoke receipt', async () => {
+    const s = service()
+    s.chain.state.stale = { afterWrites: 0, value: '' }
+    const created = await (await s.api.handle(call('/requests', 'POST', { ...input, requestedDuration: 1 }))).json()
+    expect((await s.approve(created.id)).status).toBe(200)
+    await s.clock.advance(1000)
+    const detail = await (await s.api.handle(call(`/requests/${created.id}`))).json()
+    expect(detail).toMatchObject({
+      status: 'revoked',
+      expiryStatus: 'revoked',
+      revokeReason: 'duration',
+      revokeTransaction: { transactionHash: `0x${'2'.padStart(64, '0')}` },
+    })
+  })
 })
 
 describe('ambiguous write failures are reconciled against chain state', () => {
@@ -326,7 +341,7 @@ describe('a reverted or unconfirmed write is never confirmed by ACL state', () =
     const created = await (await s.api.handle(call('/requests', 'POST', { ...input, requestedDuration: 60 }))).json()
     await s.approve(created.id)
     s.chain.state.wait = 'revert'
-    s.chain.state.stale = { afterWrites: s.chain.writes.length, value: '' }
+    s.chain.state.stale = { afterWrites: 0, value: '' }
     const response = await s.revoke()
     expect(response.status).toBe(502)
     expect((await response.json()).error.code).toBe('revoke_failed')
@@ -366,6 +381,7 @@ describe('a submitted grant whose outcome stays unknown', () => {
 
   async function unresolvedGrant(requestedDuration?: number) {
     const s = service()
+    s.chain.state.stale = { afterWrites: 0, value: null }
     s.chain.state.wait = 'fail-but-landed'
     s.chain.state.receiptLag = lagPastRetries
     const created = await (await s.api.handle(call('/requests', 'POST', { ...input, requestedDuration }))).json()
@@ -441,6 +457,7 @@ describe('a submitted grant whose outcome stays unknown', () => {
 describe('a submitted revoke whose outcome stays unknown', () => {
   async function unresolvedRevoke() {
     const s = service()
+    s.chain.state.stale = { afterWrites: 0, value: '' }
     const { id } = await s.suggest()
     await s.approve(id)
     s.chain.state.wait = 'fail-but-landed'
