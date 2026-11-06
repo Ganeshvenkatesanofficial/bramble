@@ -58,6 +58,7 @@ export class ApprovalService {
       return await action()
     } finally {
       this.busyAgents.delete(agentLabel)
+      this.audit?.flush()
     }
   }
 
@@ -148,7 +149,9 @@ export class ApprovalService {
   /** Posts one commitment for a settled payment. Reporting the same `txRef` again posts nothing. */
   recordPayment(payment: PaymentInput) {
     if (!this.audit) throw new ApiError(503, 'audit_not_configured', 'The audit trail is not configured.')
-    return this.audit.submit(`payment:${payment.txRef}`, 'payment', () => ({ kind: 'payment', ...payment }))
+    const entry = this.audit.submit(`payment:${payment.txRef}`, 'payment', () => ({ kind: 'payment', ...payment }))
+    this.audit.flush()
+    return entry
   }
 
   auditFeed() {

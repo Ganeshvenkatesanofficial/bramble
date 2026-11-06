@@ -212,6 +212,37 @@ test('a slow HCS post does not delay the access decision', async () => {
   expect((await feed())[0]).toMatchObject({ kind: 'grant', status: 'posted' })
 })
 
+test('posting starts only after the per-agent write lock is released', async () => {
+  const chain = new DigestChain()
+  const topic = new FakeTopic()
+  const real = new HcsAuditTrail({ client: topic, topicId: '0.0.9000' })
+  const probes: number[] = []
+  const api = createApprovalApi({
+    token: () => token,
+    signer: chain,
+    resolver: chain,
+    auditTrail: {
+      record: async (event) => {
+        if (event.kind === 'grant') probes.push((await call('/grants/agent-1/revoke', 'POST')).status)
+        return real.record(event)
+      },
+    },
+  })
+  function call(path: string, method = 'GET') {
+    return api.handle(
+      new Request(`http://localhost/api${path}`, {
+        method,
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        ...(path === '/requests' ? { body: JSON.stringify(input) } : {}),
+      })
+    )
+  }
+  const created = await (await call('/requests', 'POST')).json()
+  expect((await call(`/requests/${created.id}/approve`, 'POST')).status).toBe(200)
+  await api.audit.idle()
+  expect(probes).toEqual([200])
+})
+
 test('without a trail the decision still succeeds and the feed reports the audit as not configured', async () => {
   const chain = new DigestChain()
   const api = createApprovalApi({ token: () => token, signer: chain, resolver: chain })

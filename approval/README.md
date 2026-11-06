@@ -43,9 +43,9 @@ for each confirmed grant, each confirmed revoke (manual or duration expiry) and
 each settled payment reported to `POST /api/payments`. The commitment format is in
 `docs/16_HCS_AUDIT_RECORD_FORMAT.md`. The topic never holds plaintext.
 
-The post starts after the signer confirms and runs outside the per-agent write
-lock. A slow or failed post never delays or reverses the access decision. Each
-post has one feed row in `GET /api/audit`:
+The service captures the event while it holds the per-agent write lock, then the
+post starts only after the lock is released. A slow or failed post never delays or
+reverses the access decision. Each post has one feed row in `GET /api/audit`:
 
 | Field                                                      | Meaning                                                                                    |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------ |

@@ -39,12 +39,17 @@ export class AuditRecorder {
 
   private readonly inflight = new Set<Promise<void>>()
 
+  private readonly queued: (() => void)[] = []
+
   constructor(
     private readonly trail: AuditTrail | undefined,
     private readonly clock: Pick<Clock, 'now'>
   ) {}
 
-  /** Starts the post and returns its feed row at once. A repeated key returns the first row. */
+  /**
+   * Captures the event now and returns its feed row. Nothing is posted until `flush()`, so a
+   * caller holding a lock can release it first. A repeated key returns the first row.
+   */
   submit(key: string, kind: AuditKind, build: EventBuilder, requestId?: string): AuditEntry {
     const existing = this.byKey.get(key)
     if (existing) return existing
@@ -57,9 +62,25 @@ export class AuditRecorder {
     }
     this.rows.push(entry)
     this.byKey.set(key, entry)
-    const work = this.post(entry, build).finally(() => this.inflight.delete(work))
-    this.inflight.add(work)
+    const event = this.capture(build)
+    this.queued.push(() => {
+      const work = this.post(entry, event).finally(() => this.inflight.delete(work))
+      this.inflight.add(work)
+    })
     return entry
+  }
+
+  /** Starts every post captured by `submit` so far. */
+  flush() {
+    for (const start of this.queued.splice(0)) start()
+  }
+
+  private capture(build: EventBuilder): AuditEvent | null {
+    try {
+      return build()
+    } catch {
+      return null
+    }
   }
 
   private fail(entry: AuditEntry, error: AuditFailure) {
@@ -67,14 +88,8 @@ export class AuditRecorder {
     entry.error = error
   }
 
-  private async post(entry: AuditEntry, build: EventBuilder) {
+  private async post(entry: AuditEntry, event: AuditEvent | null) {
     if (!this.trail) return this.fail(entry, 'audit_not_configured')
-    let event: AuditEvent | null
-    try {
-      event = build()
-    } catch {
-      event = null
-    }
     if (!event) return this.fail(entry, 'audit_event_unavailable')
     try {
       const { message, opening, receipt } = await this.trail.record(event)
@@ -100,7 +115,7 @@ export class AuditRecorder {
     return this.kept.get(entryId)
   }
 
-  /** Resolves when every post started so far has finished. */
+  /** Resolves when every post started by `flush()` so far has finished. */
   async idle() {
     while (this.inflight.size > 0) await Promise.all([...this.inflight])
   }
