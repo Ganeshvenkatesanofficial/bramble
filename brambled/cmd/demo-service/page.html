@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:,">
+<title>Home server</title>
+<style>
+  :root {
+    --bg: #f6f4ef;
+    --card: #ffffff;
+    --text: #1d1c1a;
+    --muted: #57534c;
+    --line: #dedad2;
+    --ok-bg: #e3f1e7;
+    --ok: #1a6634;
+    --bad-bg: #fbe6e4;
+    --bad: #9e1f17;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151413;
+      --card: #201f1d;
+      --text: #f1eee8;
+      --muted: #b4aea4;
+      --line: #36332f;
+      --ok-bg: #173322;
+      --ok: #8fdca8;
+      --bad-bg: #3d1a17;
+      --bad: #ffaca4;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 56rem; margin: 0 auto; padding: 2.5rem 1.25rem 3rem; }
+  header { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between; }
+  h1 { font-size: 1.75rem; margin: 0; letter-spacing: -0.01em; }
+  .sub { margin: 0.25rem 0 0; color: var(--muted); }
+  .pill {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.4rem 0.8rem; border-radius: 999px;
+    font-weight: 600; font-size: 0.9rem;
+    background: var(--ok-bg); color: var(--ok);
+  }
+  .pill::before { content: ""; width: 0.6rem; height: 0.6rem; border-radius: 50%; background: currentColor; }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  section { margin-top: 2rem; }
+  h2 { font-size: 1.1rem; margin: 0 0 0.75rem; }
+  .album { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.75rem; }
+  figure { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 0.75rem; overflow: hidden; }
+  .shot { aspect-ratio: 4 / 3; }
+  figcaption { padding: 0.5rem 0.75rem; font-size: 0.9rem; color: var(--muted); }
+  .s1 { background: linear-gradient(160deg, #f6c177 0%, #e07a5f 55%, #3d405b 100%); }
+  .s2 { background: linear-gradient(200deg, #a8dadc 0%, #457b9d 60%, #1d3557 100%); }
+  .s3 { background: linear-gradient(140deg, #cce3c7 0%, #6a994e 50%, #386641 100%); }
+  .s4 { background: linear-gradient(180deg, #ffd6a5 0%, #ffadad 50%, #bdb2ff 100%); }
+  .s5 { background: linear-gradient(120deg, #e9edc9 0%, #ccd5ae 40%, #8d99ae 100%); }
+  .s6 { background: linear-gradient(210deg, #ffe5ec 0%, #fb6f92 60%, #6d2e46 100%); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.75rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 0.75rem; padding: 1rem 1.25rem; }
+  .card p { margin: 0.25rem 0 0; color: var(--muted); }
+  footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Home server</h1>
+      <p class="sub">A private service. It has no public address; this device reaches it through Bramble.</p>
+    </div>
+    <span id="status" class="pill" role="status" aria-live="polite">Reachable</span>
+  </header>
+
+  <section aria-labelledby="album">
+    <h2 id="album">Family album</h2>
+    <div class="album">
+      <figure><div class="shot s1" role="img" aria-label="Sunset placeholder"></div><figcaption>Evening walk</figcaption></figure>
+      <figure><div class="shot s2" role="img" aria-label="Sea placeholder"></div><figcaption>Beach day</figcaption></figure>
+      <figure><div class="shot s3" role="img" aria-label="Garden placeholder"></div><figcaption>Garden</figcaption></figure>
+      <figure><div class="shot s4" role="img" aria-label="Birthday placeholder"></div><figcaption>Birthday</figcaption></figure>
+      <figure><div class="shot s5" role="img" aria-label="Hills placeholder"></div><figcaption>Hills</figcaption></figure>
+      <figure><div class="shot s6" role="img" aria-label="Flowers placeholder"></div><figcaption>Flowers</figcaption></figure>
+    </div>
+  </section>
+
+  <section aria-labelledby="home">
+    <h2 id="home">At home</h2>
+    <div class="cards">
+      <div class="card"><strong>Shared notes</strong><p>Groceries, school dates and the Wi-Fi guest code.</p></div>
+      <div class="card"><strong>Backups</strong><p>Phones and laptops back up here, not to a cloud account.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Served by <code>{{.Host}}</code> at <code>{{.ServedAt}}</code>. Demo page: the album uses drawn placeholders, not real photos.</p>
+    <p id="checked">Checking the connection every 10 seconds.</p>
+  </footer>
+</main>
+<script>
+  // Polls /task (JSON) one request at a time. The service closes every
+  // connection, so each poll is a fresh access decision at the gateway.
+  (function () {
+    var status = document.getElementById('status');
+    var checked = document.getElementById('checked');
+    var lastOk = null;
+    function time(d) { return d.toLocaleTimeString(); }
+    function show(ok) {
+      var now = new Date();
+      if (ok) {
+        lastOk = now;
+        status.className = 'pill';
+        status.textContent = 'Reachable';
+        checked.textContent = 'Last answer from the home server: ' + time(now) + '.';
+      } else {
+        status.className = 'pill bad';
+        status.textContent = 'No access';
+        checked.textContent = 'This device can no longer reach the home server (checked ' + time(now) + '; last answer ' + (lastOk ? time(lastOk) : 'none') + ').';
+      }
+    }
+    function poll() {
+      var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+      var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 90000) : null;
+      fetch('/task', { headers: { Accept: 'application/json' }, cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (body) { show(!!body && body.status === 'healthy'); })
+        .catch(function () { show(false); })
+        .then(function () { if (timer) clearTimeout(timer); setTimeout(poll, 10000); });
+    }
+    setTimeout(poll, 10000);
+  })();
+</script>
+</body>
+</html>
