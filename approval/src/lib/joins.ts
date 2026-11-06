@@ -132,7 +132,9 @@ export class JoinService {
         .filter((member) => member.expiry > this.clock.now() / 1000)
         .map((member) => {
           const row = [...this.rows.values()].find(
-            (row) => row.label === member.label && (row.status === 'approved' || row.status === 'revoked')
+            (row) =>
+              row.label === member.label &&
+              (row.status === 'approved' || row.status === 'revoked' || this.progress.has(row.id))
           )
           return {
             ...(row
@@ -144,7 +146,7 @@ export class JoinService {
                   createdAt: '',
                   pubkey: member.pubkey ?? '',
                 }),
-            status: member.revoked ? 'revoked' : 'approved',
+            status: member.revoked ? 'revoked' : row?.status === 'pending' ? 'pending' : 'approved',
             ...(member.meshIp ? { meshIp: member.meshIp.split('/')[0] } : {}),
           }
         })

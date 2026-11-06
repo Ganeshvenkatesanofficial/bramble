@@ -100,6 +100,7 @@ test('partial enrollment resumes and signer failures do not report approval or e
   const pending = await (await call(`/joins/${id}`)).json()
   expect(pending.status).toBe('pending')
   expect(pending.meshIp).toBeUndefined()
+  expect((await (await call('/members')).json()).members[0].status).toBe('pending')
   expect((await call(`/joins/${id}/deny`, 'POST')).status).toBe(409)
   expect((await call(`/joins/${id}/approve`, 'POST')).status).toBe(200)
   expect(memory.steps.filter((step) => step === 'deploy')).toHaveLength(1)
