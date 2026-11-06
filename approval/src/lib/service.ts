@@ -19,7 +19,7 @@ function logSignerFailure(operation: 'grant' | 'revoke', error: unknown): void {
   const raw =
     error instanceof Error ? ((error as { shortMessage?: string }).shortMessage ?? error.message) : String(error)
   const message = raw
-    .replace(/https?:\/\/\S+/g, '<url>')
+    .replace(/(?:https?|wss?):\/\/\S+/g, '<url>')
     .replace(/\s+/g, ' ')
     .slice(0, 300)
   const name = error instanceof Error ? error.name : typeof error
@@ -209,8 +209,8 @@ export class ApprovalService {
         serviceDigest = digest
       } catch (error) {
         if (!(error instanceof UnresolvedWriteError)) {
-          logSignerFailure('grant', error)
           record.status = 'pending'
+          logSignerFailure('grant', error)
           throw new ApiError(502, 'grant_failed', 'The signer did not confirm the grant.')
         }
         // The grant may land later. Bound its duration from now, the earliest it could be live,
@@ -379,6 +379,7 @@ export class ApprovalService {
           record.status = 'approved'
           delete record.revokeRequestedAt
         }
+        logSignerFailure('revoke', error)
         throw new ApiError(502, 'revoke_failed', 'The signer did not confirm the revoke.')
       }
       const entry = this.submitRevokeAudit(agentLabel, transaction.transactionHash, record)

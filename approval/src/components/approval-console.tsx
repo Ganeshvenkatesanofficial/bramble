@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRequests } from '../hooks/use-requests'
 import { ActivityFeed } from './activity-feed'
 import { RequestCard } from './request-card'
+import { HcsPanel } from './hcs-panel'
 import { Button } from './ui/button'
 
 export function ApprovalConsole() {
@@ -143,6 +144,7 @@ export function ApprovalConsole() {
                 ))}
               </section>
             )}
+            <HcsPanel key={token} token={token} />
           </div>
           <ActivityFeed />
         </div>

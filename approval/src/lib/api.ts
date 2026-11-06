@@ -3,9 +3,11 @@ import { ApiError, type GrantSigner, type IdentityResolver, type Clock, type Pay
 import { ApprovalService, systemClock } from './service'
 import { AuditRecorder, type AuditTrail } from './audit'
 import { parsePayment, readInput, readPayment, label } from './validation'
+import { createAuditVerificationApi, type AuditSource } from './audit-verification'
 import { loadActivity, type PaymentsSource, type StatusSource } from './activity'
 
 interface ApiOptions {
+  auditSource?: AuditSource
   signer?: GrantSigner
   resolver?: IdentityResolver
   clock?: Clock
@@ -28,6 +30,7 @@ interface ApiOptions {
 export function createApprovalApi(options: ApiOptions) {
   const clock = options.clock ?? systemClock
   const audit = new AuditRecorder(options.auditTrail, clock)
+  const verifyAudit = createAuditVerificationApi({ token: options.token, source: () => options.auditSource ?? audit })
   const service = new ApprovalService(options.signer, options.resolver, clock, audit, options.ensParent)
   const json = (value: unknown, status = 200) =>
     Response.json(value, { status, headers: { 'cache-control': 'no-store' } })
@@ -77,6 +80,7 @@ export function createApprovalApi(options: ApiOptions) {
           }
         }
         const path = new URL(request.url).pathname.replace(/\/$/, '')
+        if (path === '/api/audit/verification' && request.method === 'GET') return verifyAudit(request)
         if (path === '/api/requests' && request.method === 'POST') {
           return json(service.create(await readInput(request)), 201)
         }

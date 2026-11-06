@@ -266,6 +266,41 @@ Measured again on 6 Nov 2026 after ETH-205 (Verified; build `54e9dd7`, both node
 
 Each call is a `curl` as the `agent` user on `worker`. A call lasts as long as the gateway decision (three ENS reads over Tor), so the values for beats 1, 3 and 5 are upper bounds with that granularity. The 83.7 s deny in run 1 was the first call after start-up; the gateway log shows `denied for service "task" (no matching granted digest)` for every denied call. Narrate the wait.
 
+## Part H: publish the installer (relays machine)
+
+Goal: `curl -fsSL https://<console-name>/install.sh | sh` works from any device. Caddy serves static files from `/var/lib/bramble-dist` on the relays machine. For the URLs, flags and the env-to-config table, see `docs/reference/install-host.md`.
+
+### H1. Write the public env file. Open
+
+On the operator's machine (not on a cloud machine), copy `deploy/env/public.env.example` to a file outside the repository and fill in the public values: the two DNS names from item 4, the tailnet name, chain id and registry addresses from item 13, and the STUN, rendezvous and data-relay endpoints. The file holds no secret. The generator reads only the names in the template, so you can also pass a node env file.
+
+### H2. Publish a release. Verified (cloud, 6 Nov 2026, with a stub bundle)
+
+Build the release first (`scripts/release.sh`, ETH-178; it writes `release/bramble_<os>_<arch>.tar.gz` and `release/SHA256SUMS`). Then:
+
+```sh
+deploy/scripts/publish-release.sh --release release --version <version> \
+  --env <public.env> --init --caddy
+```
+
+`--init` creates `/var/lib/bramble-dist` on the first run (one `sudo`). `--caddy` installs the repository's `Caddyfile` with your two names, validates it on the machine first, keeps the old file as `/etc/caddy/Caddyfile.bak-<time>` and restores it if the reload fails. Drop both flags for later releases. `--dry-run` stages and checks without uploading.
+
+The script:
+
+1. checks `SHA256SUMS` against the tarballs;
+2. generates `/.well-known/bramble.json`;
+3. bakes the console name into `install.sh` and `uninstall.sh`;
+4. refuses to upload if a staged file looks like it holds a secret;
+5. uploads the tarballs and `SHA256SUMS` (replacing the previous release in `/dl`), then the node config, then `uninstall.sh`, and `install.sh` last.
+
+### H3. Smoke-test from outside. Verified (cloud, 6 Nov 2026, with a stub bundle; re-run after the v1 path change: see the ETH-179 comments)
+
+```sh
+deploy/scripts/smoke-public.sh https://<console-name> <tailnet-name> [--run-install]
+```
+
+The script checks, over verified TLS: the `install.sh` content type and cache header, the baked host, every tarball against `SHA256SUMS`, the node config fields and a secret scan of it, 404 for unknown files, directory listings and path traversal, and that the console route still answers. With `--run-install` it also runs `curl -fsSL <base>/install.sh | sh -s -- --no-open` and then `uninstall.sh --yes`, both with a throwaway `HOME`.
+
 ## Part N: two NATs
 
 See `nat-lab/README.md`. Short form, on the gateway and worker machines:
