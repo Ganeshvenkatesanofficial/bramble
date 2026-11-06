@@ -343,11 +343,9 @@ export class ApprovalService {
       )
       if (expectedId && record?.id !== expectedId) return
       const requestedAt = new Date(this.clock.now()).toISOString()
-      if (!(await resolver.hasGrant(agentLabel))) {
-        if (reason === 'duration' && record) {
-          this.markRevoked(record, reason)
-          return this.view(record)
-        }
+      // A confirmed local grant can be newer than the node's ACL snapshot. Both manual
+      // and timed revokes must submit a clear and wait for its own receipt in that case.
+      if (!record?.grantTransaction && !(await resolver.hasGrant(agentLabel))) {
         throw new ApiError(409, 'not_granted', 'Agent has no grant to revoke.')
       }
       if (record) {

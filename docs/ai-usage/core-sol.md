@@ -1,5 +1,25 @@
 # Core-Sol
 
+## ETH-227: immediate revoke after confirmed approval (demo beat 5)
+
+Paths written: `approval/src/lib/service.ts`, `approval/src/lib/chain.ts`,
+`approval/test/chain.test.ts`, `docs/reference/approval-api.md`, and this file.
+
+Verified: the agreed HTTP Request/Response regression reproduces `409 not_granted`
+with an older empty ENS snapshot after a confirmed grant. Removing that snapshot
+makes the loop pass. Bypassing only the service guard exposes `502 revoke_failed`
+because the admincli clear helper skips its write on the same snapshot. The fix
+uses the confirmed local grant and submits an ACL clear with its own receipt.
+The manual and timer regressions and approval typechecking pass. The stale-read
+chain suite passes 33 tests with 130 assertions, including reverted and unresolved
+writes, late grant confirmation, and duplicate-write blocking. Tests inject ENS and signer
+boundaries; live RPC propagation and gateway cut-off remain Open.
+
+Verified on 6 November 2026: `pnpm verify` passes, including both invariant checks,
+formatting, deployment tests, typechecking, lint, production builds, and workspace
+tests. Approval passes 120 tests with 628 assertions. No cloud unit operations or
+chain writes run for this fix.
+
 ## ETH-293: concurrent rendezvous exchanges (demo beats 3 and 4)
 
 Paths written: `relay/main.go`, `relay/concurrent_exchange_test.go`, `brambled/rendezvous/client.go`, `brambled/rendezvous/client_test.go`, `brambled/concurrent_sponsored_relay_test.go`, `docs/reference/endpoint-exchange.md`, and this file.
