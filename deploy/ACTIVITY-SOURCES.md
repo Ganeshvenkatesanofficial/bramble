@@ -12,8 +12,26 @@ not authorize a deployment, service restart, new grant, revoke or payment.
    inside a network namespace, the path must reach that namespace's loopback
    listener. Do not make statusapi public. Confirm the listener and path with
    the deployment owner before changing a tunnel or node.
+
+   For the user-unit console, install the forward unit. It maps admin loopback
+   `127.0.0.1:17899` to the gateway's loopback `127.0.0.1:7899` over the
+   existing `bramble-gateway` SSH alias. It does not restart approval or a node.
+
+   ```sh
+   install -m 644 deploy/systemd/user/bramble-gateway-status-tunnel.service ~/.config/systemd/user/
+   export XDG_RUNTIME_DIR=/run/user/$(id -u)
+   systemctl --user daemon-reload
+   systemctl --user enable --now bramble-gateway-status-tunnel
+   curl --fail --silent --show-error --max-time 5 -o /dev/null http://127.0.0.1:17899/activity
+   ```
+
+   Verified on 6 November 2026 at 15:56 UTC with a temporary forward of the
+   same shape: the cloud gateway's statusapi listens on host loopback `7899`
+   (no network namespace), and `/activity` returned HTTP 200 with 24 events.
+
 2. In the approval service's existing environment file, set `BRAMBLED_STATUS_URL`
    to the base URL reachable through that private path. Do not append `/activity`.
+   With the forward unit above, the value is `http://127.0.0.1:17899`.
    Set `APPROVAL_ENS_PARENT` to the parent of the demo agent labels so full
    gateway ENS names match approval records. An absent parent can prevent
    cutoff correlation even when the gateway source is live.
