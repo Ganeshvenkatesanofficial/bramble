@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRequests } from '../hooks/use-requests'
@@ -22,7 +24,7 @@ export function ApprovalConsole() {
       <header className="nav">
         <div className="nav-inner">
           <Link href="/" className="brand">
-            <span className="brand-dot" />
+            <Image className="brand-mark" src="/bramble-logo.png" alt="" width={28} height={28} unoptimized />
             bramble
           </Link>
           <span className="nav-active">Approvals</span>

@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -19,7 +21,7 @@ export function Nav() {
     <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-sm">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-8 px-6">
         <Link href="/" className="flex items-center gap-2">
-          <span className="size-2.5 rounded-full bg-primary" />
+          <Image className="shrink-0" src="/bramble-logo.png" alt="" width={28} height={28} unoptimized />
           <span className="font-mono text-sm font-medium text-foreground">bramble</span>
         </Link>
         <nav className="flex h-full items-center gap-1">

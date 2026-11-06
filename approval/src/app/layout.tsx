@@ -7,6 +7,7 @@ const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] })
 
 export const metadata: Metadata = {
+  icons: { icon: { url: '/bramble-logo.png', type: 'image/png', sizes: '512x512' } },
   title: 'bramble · Approval console',
   description: 'Review agent identities and manage scoped access to private services.',
 }

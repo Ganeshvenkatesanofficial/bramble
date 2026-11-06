@@ -14,21 +14,22 @@
   --color-ring: var(--focus);
 }
 
-/* Dashboard globals.css palette and components/nav.tsx visual language. */
+/* Landing brand tokens in light mode; retain the contrast palette from PR #66. */
 :root {
   color-scheme: light dark;
-  --background: #f6f8f7;
+  --background: #fafafa;
   --surface: #ffffff;
-  --foreground: #182720;
-  --muted: #eaf0ec;
+  --foreground: #171717;
+  --muted: #f0fdf4;
   --muted-foreground: #4d6156;
   --border: #788a7f;
   --divider: #d3ddd6;
-  --primary: #14613c;
+  --primary: #15803d;
   --destructive: #a52b32;
   --pending: #795216;
   --on-primary: #ffffff;
   --focus: #165fbd;
+  --radius: 10px;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -141,6 +142,7 @@ code,
   overflow-wrap: anywhere;
 }
 .eyebrow {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   display: block;
   font-size: 12px;
   font-weight: 500;
@@ -170,11 +172,9 @@ code,
   align-items: center;
   gap: 8px;
 }
-.brand-dot {
-  background: var(--primary);
-  border-radius: 50%;
-  width: 10px;
-  height: 10px;
+.brand-mark {
+  display: block;
+  flex-shrink: 0;
 }
 .nav-active {
   min-height: 64px;
@@ -226,7 +226,7 @@ main {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   border: 1px solid var(--divider);
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--surface);
   margin: 32px 0 24px;
 }
@@ -277,7 +277,7 @@ main {
 .request-card {
   border: 1px solid var(--divider);
   border-left: 4px solid var(--pending);
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--surface);
   margin-bottom: 16px;
   padding: 24px;
@@ -483,7 +483,7 @@ summary:focus-visible {
   margin: 0;
   padding: 20px;
   border: 1px solid var(--divider);
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--surface);
 }
 .network-diagram svg {
@@ -558,7 +558,7 @@ summary:focus-visible {
 .network-node-card {
   padding: 20px;
   border: 1px solid var(--divider);
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--surface);
   font-size: 13px;
   min-width: 0;
@@ -835,7 +835,7 @@ summary:focus-visible {
   color-scheme: light;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
-  --primary: oklch(0.5 0.14 155);
+  --primary: #15803d;
   --muted-foreground: oklch(0.556 0 0);
   --border: oklch(0.922 0 0);
   --destructive: oklch(0.577 0.245 27.325);

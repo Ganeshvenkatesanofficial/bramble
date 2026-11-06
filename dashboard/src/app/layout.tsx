@@ -14,6 +14,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
+  icons: { icon: { url: '/bramble-logo.png', type: 'image/png', sizes: '512x512' } },
   title: 'bramble dashboard',
   description: 'Live read-only view over a bramble tailnet',
 }

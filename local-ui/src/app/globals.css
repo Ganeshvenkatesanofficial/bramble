@@ -35,7 +35,7 @@
 }
 .count {
   background: var(--primary);
-  color: white;
+  color: var(--on-primary);
   border-radius: 999px;
   font-size: 11px;
   min-width: 18px;
@@ -213,7 +213,7 @@
   padding: 10px 16px;
   border-radius: 6px;
   background: var(--primary);
-  color: white;
+  color: var(--on-primary);
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
