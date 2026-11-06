@@ -79,7 +79,7 @@ and updates `brambled/package.json` and this attribution file.
 The human-authored ETH-38 task and Mumbai handoff define the scope and invariants.
 The fixture supports W8 demo beat 4; it is not evidence of real NAT traversal.
 
-## Mumbai build: paths written by agents
+## Mumbai W10 audit module attribution
 
 - **`hedera-audit/`** — W10 option A, the HCS audit trail module, its tests and its README. Written by the Hedera-Claude agent (Claude), ticket ETH-46.
 - **`docs/16_HCS_AUDIT_RECORD_FORMAT.md`** and **`docs/adr/0011-w10-hedera-service-options.md`** — the record-format reference and the draft ADR with three options, for a human to decide. Written by the Hedera-Claude agent (Claude), ticket ETH-46.
@@ -89,14 +89,14 @@ The fixture supports W8 demo beat 4; it is not evidence of real NAT traversal.
 
 Agent: Net-Claude, committing as `Net-Claude (agent, Chaitanya Kelkar)` (Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026). Move these rows into the shared Paths table from ETH-27 when that lands.
 
-| Path | Kind |
-| --- | --- |
-| `brambled/rendezvous/endpoints.go` | Code |
-| `brambled/rendezvous/endpoints_test.go` | Test |
-| `brambled/rendezvous/endpoints_integration_test.go` | Test |
-| `brambled/endpoint_candidate_test.go` | Test |
-| `brambled/main.go` (`peerEndpointFromCandidate`) | Code |
-| `docs/reference/endpoint-exchange.md` | Documentation |
+| Path                                                | Kind          |
+| --------------------------------------------------- | ------------- |
+| `brambled/rendezvous/endpoints.go`                  | Code          |
+| `brambled/rendezvous/endpoints_test.go`             | Test          |
+| `brambled/rendezvous/endpoints_integration_test.go` | Test          |
+| `brambled/endpoint_candidate_test.go`               | Test          |
+| `brambled/main.go` (`peerEndpointFromCandidate`)    | Code          |
+| `docs/reference/endpoint-exchange.md`               | Documentation |
 
 ## Mumbai approval API (ETH-29)
 
@@ -126,7 +126,7 @@ The human-authored W8 task and Mumbai handoff set the scope and invariants.
 Net-Claude (Anthropic Claude) took over W8a after Net-Astra reached a provider limit. It reviewed and committed the opt-in bind wrapper in `brambled/stun/bind.go`, `brambled/stun/bind_test.go`, `brambled/wgnode/node.go`, `brambled/wgnode/stun.go`, `brambled/main.go`, `brambled/statusapi/stun_test.go`, `brambled/README.md` and `docs/eth-36-stun-spec.md`, and ran the checks. After review (ETH-89) it replaced the shared-endpoint `ClearSrc` call with a fresh endpoint per send and wrote `docs/adr/0017-stun-bind-wrapper-source-selection.md`.
 Net-Claude commits as `Net-Claude (agent, Chaitanya Kelkar)` with `chaitanyakelkar07@gmail.com` and the Paperclip co-author.
 
-## Mumbai agent-written paths
+## Mumbai build: agent-written paths
 
 Baseline: commit `28e2a8f`, tag `pre-mumbai`. Agents wrote the paths below after that commit. Each agent adds a row in the same pull request as the work. List paths, not prose. Humans approve every ADR and merge to `main`.
 
@@ -143,6 +143,7 @@ Each agent commits under the git identity shown here. Confirm yours with `git co
 | Tor-Claude | Tor (W9-1 audit, W9-3 ENS and payments; took over ETH-50 from Core-Claude) | `Tor-Claude (agent, Chaitanya Kelkar)` | Verified from commit authorship on `tor-claude/eth-60-tor-ens-pay` and the author of commit `06e52d9` |
 | Tor-Astra | Tor (W9-2 recovery) | `Tor-Astra (agent, Yash Kolekar)` | Verified from git author identity on 6 Nov 2026 |
 | Tor-Claude | Tor (took over ETH-50 from Core-Claude) | `Tor-Claude (agent, Chaitanya Kelkar)` | Verified from the author of commit `06e52d9` |
+| Hedera-Sol | Hedera | `Hedera-Sol (agent, Aayush Nair)` | Verified from `git var GIT_AUTHOR_IDENT` on 6 Nov 2026 |
 | Infra-Claude | Demo and infra (took over ETH-30) | `Infra-Claude (agent, Aayush Nair)` | Verified from `GIT_AUTHOR_NAME` on 6 Nov 2026 |
 | Other lane agents | Network, Tor, Hedera, Demo and infra | to be added by each agent | Open |
 
@@ -164,7 +165,7 @@ Each agent commits under the git identity shown here. Confirm yours with `git co
 | `docs/adr/0013-tor-transport.md`, Tor section of `sidecar/README.md` | ETH-59 | Keystone | Documentation |
 | `sidecar/src/ens/client.ts`, `sidecar/src/payments/client.ts`, `sidecar/src/payments/datarelay.ts`, `sidecar/test/ens-tor.test.ts`, `sidecar/test/helpers/fake-tor.ts`, Tor wiring in `sidecar/test/device.test.ts` and `sidecar/test/hedera-signer-network.test.ts`, `brambled/admission/tor_startup_test.go`, `brambled/sidecar/client.go` (per-operation budgets), `brambled/sidecar/client_budget_test.go`, `sidecar/src/ens/devices.ts` (required client), `sidecar/src/routes/devices.ts`, `admincli/src/enroll.ts`, `admincli/src/mesh-ip-scan.ts`, `admincli/src/mesh-ip-scan.test.ts`, `admincli/package.json`, `sidecar/src/serve.ts`, `sidecar/src/index.ts` (server timeout), `sidecar/test/serve.test.ts`, `sidecar/test/fixtures/slow-bun-server.ts` | ETH-60 | Tor-Claude | Code, tests |
 | `sidecar/src/tor/index.ts`, `sidecar/test/tor.test.ts`, `docs/adr/0013-tor-transport.md`, `docs/AI_USAGE.md` | ETH-59 | Tor-Astra | Shutdown cleanup races, regression tests, documentation |
-
+| `docs/adr/0014-hcs-audit-trail.md`, `docs/spikes/0014-hcs-audit-trail.md`, `hedera-audit/test/freeze-round-trip.ts`, `hedera-audit/test/sdk-freeze.test.ts`, `docs/AI_USAGE.md` | ETH-66 | Hedera-Sol (first draft), Infra-Claude (amendment, test) | Draft design, offline SDK check, documentation |
 
 ## Mumbai formatting gate correction (ETH-75)
 
@@ -197,7 +198,7 @@ Commit identity: `QA-Sol (agent, Aayush Nair) <aayushnair@gmail.com>`.
 ### ETH-34 — agent payments panel (Core-Sol)
 
 - Agent: Core-Sol; committing as `Core-Sol (agent, Yash Kolekar)
-  <153986822+whyash-paperclip@users.noreply.github.com>`.
+<153986822+whyash-paperclip@users.noreply.github.com>`.
 - Task/spec: ETH-34 and `docs/14_MUMBAI_BUILD_BRIEF.md` W3, superseded where
   applicable by `docs/15_MUMBAI_HANDOFF.md`; demo beat 3.
 - Prompt: inspect real rendezvous/data-relay purchase timing, reuse the read-only
