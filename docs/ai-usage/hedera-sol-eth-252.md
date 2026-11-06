@@ -25,3 +25,20 @@ Paths written:
 - `deploy/scripts/gen-node-key.sh`
 - `deploy/scripts/gen-node-key.test.sh`
 - `docs/ai-usage/hedera-sol-eth-252.md`
+
+Final baseline: merged `origin/hackathon` at `5724e2f` without conflicts and
+scanned its 35-file delta (679 tracked files total). The additional URL candidate
+is a synthetic credential-rejection fixture. Read from source: join submissions
+are public and rate-limited; join decisions and membership lists require the
+operator token, and join failures return fixed diagnostics.
+
+Verified: `pnpm verify` passes after the merge, including `pnpm test:deploy`,
+formatting, both invariant checks, typechecking, lint, builds, and tests. Turbo
+reports 12 successful test tasks, with 11 cached. The changed approval package
+runs 118 tests with 622 assertions. The standalone key CLI regression and the
+env ignore checks pass. Two-axis local review reports zero findings on each axis.
+
+Open: the operator-only admin CLI entrypoints still print raw failure objects,
+which can include a credentialed RPC URL. This is reported as P2 diagnostic
+hardening; no operator command with live credentials was run. Deployment artifact
+ownership and live Pi isolation also remain reported follow-ups.
