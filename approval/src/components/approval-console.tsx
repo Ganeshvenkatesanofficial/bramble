@@ -6,6 +6,7 @@ import { useRequests } from '../hooks/use-requests'
 import { ActivityFeed } from './activity-feed'
 import { RequestCard } from './request-card'
 import { HcsPanel } from './hcs-panel'
+import { JoinConsole } from './join-console'
 import { Button } from './ui/button'
 
 export function ApprovalConsole() {
@@ -144,6 +145,7 @@ export function ApprovalConsole() {
                 ))}
               </section>
             )}
+            <JoinConsole token={token} />
             <HcsPanel key={token} token={token} />
           </div>
           <ActivityFeed />

@@ -44,6 +44,14 @@ Core-Claude merged `hackathon` into the HCS panel branch, resolving `agent-mcp/t
 
 Merge-conflict resolution (AI-assisted): `docs/ai-usage/core-claude.md` and `docs/ai-usage/infra-claude.md` (both sides kept). No code conflicts.
 
+## ETH-181: merge `hackathon` into PR #41 (beats 2 and 5)
+
+Merge-conflict resolution (AI-assisted): `README.md` (hackathon rows kept, W1 row points at PR #41), `pnpm-workspace.yaml` (`join-ui` and `local-ui`), `approval/src/lib/api.ts` (audit verification route and the join routes), `approval/src/components/approval-console.tsx` (activity-feed layout with `JoinConsole` added to the main column), `approval/e2e/memory-server.ts` (activity sources and the in-memory join chain; ENS parent `bramble.eth` for both), `approval/e2e/console.spec.ts` (join tailnet `bramble.eth`), `pnpm-lock.yaml` (regenerated with `pnpm install`). It ran `pnpm verify` and the approval browser tests; no signing, keys or chain writes were involved.
+
+## ETH-181: PR #41 review round 1 fix (beats 2 and 5)
+
+AI-assisted (Core-Claude): `admincli/src/enroll-chain-viem.ts` (a write replaced by a cancellation or a different transaction is no longer counted as confirmed; a repriced copy returns the hash that was mined), `admincli/src/enroll-chain-viem.test.ts` (cancelled, replaced and repriced regressions), `approval/test/joins.test.ts` (a cancelled revoke through the API is not reported as revoked). Tests use a loopback RPC; no signing, keys or chain writes were involved.
+
 ## Earlier entries from `hackathon`
 
 - ETH-35 (live activity feed, beats 1, 3 and 5): `approval/src/lib/activity.ts`, `approval/src/lib/explorer.ts`, `approval/src/lib/payments-handler.ts`, `approval/src/hooks/use-activity.ts`, `approval/src/components/activity-feed.tsx`, `approval/src/components/approval-console.tsx`, `approval/src/components/request-card.tsx`, `approval/src/lib/{api,service,contracts,console-api}.ts`, `approval/src/app/api/{[...path],payments}/route.ts`, `approval/src/app/globals.css`, `approval/test/activity.test.ts`, `approval/test/fixtures/activity-status.json`, `approval/e2e/{console.spec.ts,memory-server.ts}`, `approval/README.md`, `brambled/statusapi/{server.go,server_test.go,activity_contract_test.go}`, `dashboard/README.md`, `docs/how-to-test-approval-console.md` and this file. AI-assisted (Core-Claude). The feed adds read-only HTTP reads and no write path. Human H4 screenshot approval and a live two-machine cut-off measurement are still required.
