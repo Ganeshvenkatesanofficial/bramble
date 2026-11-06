@@ -29,6 +29,8 @@ Run these commands as the admin user. Node.js, pnpm, Bun, OpenSSL and the
    the coordinated restart. The request API can answer successfully while both
    sources remain unconfigured. The console reverse tunnel carries browser
    requests to approval; it does not connect approval to the gateway status API.
+   Install `bramble-gateway-status-tunnel.service` for that path, as
+   [Activity source configuration](ACTIVITY-SOURCES.md) step 1 describes.
 
    For the software ring demo, set `BRAMBLE_RING_CLI` to the absolute path of
    `deploy/scripts/software-ring.sh` in the runtime clone. Set

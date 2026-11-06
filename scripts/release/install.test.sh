@@ -27,15 +27,19 @@ tarball="bramble_${os}_${arch}.tar.gz"
 mkdir -p "$work/site/dl" "$work/site/.well-known" "$work/stub"
 cat > "$work/stub/bramble" <<'EOF'
 #!/bin/sh
+# Like the real launcher, refuse to run without a subcommand.
+[ "$1" = up ] || { echo "usage: bramble up ..." >&2; exit 2; }
 d="${BRAMBLE_HOME:?}"
 mkdir -p "$d"
+printf '%s\n' "$*" > "$d/start-args"
 echo $$ > "$d/bramble.pid"
 echo "http://127.0.0.1:7777/" > "$d/ui.url"
 while :; do sleep 1; done
 EOF
 printf '#!/bin/sh\nexit 0\n' > "$work/stub/bramble-sidecar"
-chmod 755 "$work/stub/bramble" "$work/stub/bramble-sidecar"
-tar -C "$work/stub" -czf "$work/site/dl/$tarball" bramble bramble-sidecar
+printf '#!/bin/sh\nexit 0\n' > "$work/stub/brambled"
+chmod 755 "$work/stub/bramble" "$work/stub/brambled" "$work/stub/bramble-sidecar"
+tar -C "$work/stub" -czf "$work/site/dl/$tarball" bramble brambled bramble-sidecar
 (cd "$work/site/dl" && sha256sum "$tarball" > SHA256SUMS)
 cat > "$work/site/.well-known/bramble.json" <<'EOF'
 {"version": "test", "tailnet": "demo-net.eth", "chainId": 11155111, "rpcUrl": "https://rpc.example.com/",
@@ -64,7 +68,7 @@ for sh in "${shells[@]}"; do
   echo "--- $sh"
   out="$(run_install "$sh" "$home" 2>&1)"; rc=$?
   [ "$rc" -eq 0 ] && ok "$sh: install exits 0" || { bad "$sh: install exited $rc"; echo "$out"; }
-  [ -x "$home/bin/bramble" ] && [ -x "$home/bin/bramble-sidecar" ] && ok "$sh: binaries installed and executable" || bad "$sh: binaries missing"
+  [ -x "$home/bin/bramble" ] && [ -x "$home/bin/brambled" ] && [ -x "$home/bin/bramble-sidecar" ] && ok "$sh: binaries installed and executable" || bad "$sh: binaries missing"
   [ "$(stat -c %a "$home" 2>/dev/null || stat -f %Lp "$home")" = 700 ] && ok "$sh: data dir is mode 700" || bad "$sh: data dir is not mode 700"
   [ "$(cat "$home/config.url" 2>/dev/null)" = "$base/.well-known/bramble.json" ] && ok "$sh: config.url written" || bad "$sh: config.url wrong"
   echo "$out" | grep -q "demo-net.eth" && ok "$sh: prints the tailnet" || bad "$sh: tailnet not printed"
@@ -150,6 +154,29 @@ for sh in "${shells[@]}"; do
   HOME="$work" BRAMBLE_HOME="$home" $sh "$here/uninstall.sh" --yes >/dev/null 2>&1; rc=$?
   if [ "$rc" -eq 0 ] && [ ! -e "$home" ]; then ok "$sh: full uninstall after keep-data removes remaining installation"; else bad "$sh: full uninstall after keep-data failed"; fi
 done
+
+# TUN stays unsupported even if a capability grant would succeed; no real sudo.
+if [ "$os" = linux ]; then
+  mkdir -p "$work/fake-cap"
+  printf '#!/bin/sh\nexec "$@"\n' > "$work/fake-cap/sudo"
+  printf '#!/bin/sh\nexit "${FAKE_CAP_EXIT:-0}"\n' > "$work/fake-cap/setcap"
+  chmod +x "$work/fake-cap/sudo" "$work/fake-cap/setcap"
+  for sh in "${shells[@]}"; do
+    for cap_exit in 0 1; do
+      for tun_input in flag env; do
+        home="$work/tun-${sh// /-}-$cap_exit-$tun_input"
+        args=()
+        tun_env=0
+        if [ "$tun_input" = flag ]; then args=(--tun); else tun_env=1; fi
+        out="$(PATH="$work/fake-cap:$PATH" FAKE_CAP_EXIT="$cap_exit" BRAMBLE_INSTALL_TUN="$tun_env" run_install "$sh" "$home" "${args[@]}" 2>&1)"; rc=$?
+        pid="$(cat "$home/bramble.pid" 2>/dev/null)"
+        [ -z "$pid" ] || daemon_pids+=("$pid")
+        if [ "$rc" -eq 0 ] && [ "$(cat "$home/start-args" 2>/dev/null)" = 'up -open=false' ]; then ok "$sh: TUN $tun_input with capability result $cap_exit starts without -tun"; else bad "$sh: TUN $tun_input with capability result $cap_exit changes startup mode (rc=$rc)"; fi
+        if echo "$out" | grep -q 'TUN is unsupported'; then ok "$sh: TUN $tun_input reports unsupported"; else bad "$sh: TUN $tun_input does not report unsupported"; fi
+      done
+    done
+  done
+fi
 
 # Every alias of the user's home is protected, including physical symlinks.
 for suffix in / // /. /child/..; do

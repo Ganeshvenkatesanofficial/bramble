@@ -14,6 +14,8 @@ export const WANTED = [
   'BRAMBLE_CHAIN_ID',
   'BRAMBLE_TAILNET_REGISTRY',
   'BRAMBLE_RELAY_REGISTRY',
+  'BRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK',
+  'BRAMBLE_RELAY_REGISTRY_DEPLOY_BLOCK',
   'BRAMBLE_PUBLIC_RPC_URL',
   'BRAMBLE_STUN_SERVERS',
   'BRAMBLE_RENDEZVOUS',
@@ -100,8 +102,23 @@ export function buildConfig(env, version) {
     registry: address(env, 'BRAMBLE_TAILNET_REGISTRY'),
   }
   if (env.BRAMBLE_RELAY_REGISTRY) config.relayRegistry = address(env, 'BRAMBLE_RELAY_REGISTRY')
+  for (const [name, field] of [
+    ['BRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK', 'registryDeployBlock'],
+    ['BRAMBLE_RELAY_REGISTRY_DEPLOY_BLOCK', 'relayDeployBlock'],
+  ]) {
+    if (env[name] === undefined) continue
+    const block = Number(env[name])
+    if (!/^[1-9]\d*$/.test(env[name]) || !Number.isSafeInteger(block))
+      throw new Error(`${name} must be a positive safe integer`)
+    config[field] = block
+  }
   config.joinApi = publicUrl(join, 'joinApi').replace(/\/$/, '')
   if (rendezvous.length) config.rendezvous = rendezvous[0]
+  if (env.BRAMBLE_RENDEZVOUS_PAYMENT_URL)
+    config.rendezvousPaymentUrl = publicUrl(env.BRAMBLE_RENDEZVOUS_PAYMENT_URL, 'rendezvousPaymentUrl').replace(
+      /\/$/,
+      ''
+    )
   const stun = list(env.BRAMBLE_STUN_SERVERS).map((v) => hostPort(v, 'stun'))
   if (stun.length) config.stun = stun
 
@@ -118,13 +135,11 @@ export function buildConfig(env, version) {
   if (Object.keys(relays).length) config.dataRelays = relays
   // A -meter relay rejects a hello without a token from its own sidecar, so a
   // device with only `rendezvous` never exchanges endpoints (ETH-301). Use the
-  // explicit URL, else the data relay on the rendezvous host (same-machine
+  // explicit URL above, else the data relay on the rendezvous host (same-machine
   // convention, docs/adr/0008). With neither, the relay must be unmetered.
-  if (config.rendezvous) {
+  if (config.rendezvous && !config.rendezvousPaymentUrl) {
     const host = config.rendezvous.slice(0, config.rendezvous.lastIndexOf(':')).toLowerCase()
-    const paired = env.BRAMBLE_RENDEZVOUS_PAYMENT_URL
-      ? publicUrl(env.BRAMBLE_RENDEZVOUS_PAYMENT_URL, 'rendezvousPaymentUrl').replace(/\/$/, '')
-      : Object.values(relays).find((u) => new URL(u).hostname.toLowerCase() === host)
+    const paired = Object.values(relays).find((u) => new URL(u).hostname.toLowerCase() === host)
     if (paired) config.rendezvousPaymentUrl = paired
   }
   const relayPeers = list(env.BRAMBLE_RELAY_PEERS).map((v) => label(v, 'relayPeers entry'))

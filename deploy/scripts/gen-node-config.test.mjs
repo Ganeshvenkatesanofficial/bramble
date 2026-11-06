@@ -52,6 +52,8 @@ test('omits optional fields that are not set', () => {
   const c = build(base.replace(/BRAMBLE_(RELAY_REGISTRY|DATA_RELAYS|STUN_SERVERS|RENDEZVOUS)=.*/g, ''))
   for (const k of [
     'relayRegistry',
+    'registryDeployBlock',
+    'relayDeployBlock',
     'dataRelays',
     'stun',
     'rendezvous',
@@ -109,4 +111,18 @@ test('rejects missing and malformed values', () => {
 test('rejects a 64-digit hex string anywhere in the output', () => {
   const key = '1'.repeat(64)
   assert.throws(() => build(`${base}\nBRAMBLE_PUBLIC_SERVICES=worker:task:/${key}`), /looks like a key/)
+})
+
+// The real sidecar refuses peer/relay discovery without scan start blocks.
+test('publishes the registry scan start blocks required by a fresh device', () => {
+  const config = build(
+    `${base}\nBRAMBLE_TAILNET_REGISTRY_DEPLOY_BLOCK=12074600\nBRAMBLE_RELAY_REGISTRY_DEPLOY_BLOCK=12074601`
+  )
+  assert.equal(config.registryDeployBlock, 12074600)
+  assert.equal(config.relayDeployBlock, 12074601)
+})
+
+test('publishes the metered rendezvous payment route for credential-free devices', () => {
+  const config = build(`${base}\nBRAMBLE_RENDEZVOUS_PAYMENT_URL=http://203.0.113.5:7891`)
+  assert.equal(config.rendezvousPaymentUrl, 'http://203.0.113.5:7891')
 })

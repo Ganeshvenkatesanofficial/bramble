@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
-# Builds the device release: for each target, `bramble` (Go) and
-# `bramble-sidecar` (the TypeScript sidecar compiled with `bun build
-# --compile`) in release/bramble_<os>_<arch>.tar.gz, plus release/SHA256SUMS.
-# Needs Go, Bun, pnpm-installed sidecar dependencies and GNU tar. Run it on
+# Builds the device release: for each target, three executables in
+# release/bramble_<os>_<arch>.tar.gz, plus release/SHA256SUMS.
+#   bramble          the node daemon (node-daemon/, Go) with the local web UI embedded
+#   brambled         the helper the daemon supervises (brambled/, Go)
+#   bramble-sidecar  the TypeScript sidecar compiled with `bun build --compile`
+# Needs Go, Bun, Node.js, pnpm-installed dependencies and GNU tar. Run it on
 # Linux. See docs/reference/node-release.md.
 #
 # Usage: scripts/release.sh [os/arch ...]
 #   targets default to linux/amd64 linux/arm64 darwin/arm64 darwin/amd64
-#   BRAMBLE_LAUNCHER_PKG  Go package under brambled/ built as `bramble`
-#                         (default "." = brambled itself, until ETH-177c lands)
-#   VERSION               label printed in the log (default: git describe)
+#   VERSION            label printed in the log and baked into `bramble version`
+#                      (default: git describe)
+#   BRAMBLE_SKIP_UI=1  skip the local UI build and embed whatever is already in
+#                      node-daemon/ui/dist (CI that built it earlier)
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,16 +22,24 @@ targets=("$@")
 if [ "${#targets[@]}" -eq 0 ]; then
   targets=(linux/amd64 linux/arm64 darwin/arm64 darwin/amd64)
 fi
-launcher_pkg="${BRAMBLE_LAUNCHER_PKG:-.}"
 version="${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || echo unknown)}"
 out="$root/release"
 stage="$out/.stage"
 
-for tool in go bun tar gzip sha256sum; do
+for tool in go bun node pnpm tar gzip sha256sum; do
   command -v "$tool" >/dev/null || { echo "release.sh: $tool is required" >&2; exit 1; }
 done
 tar --version | grep -q 'GNU tar' || { echo "release.sh: GNU tar is required" >&2; exit 1; }
 [ -d sidecar/node_modules ] || { echo "release.sh: run pnpm install first" >&2; exit 1; }
+
+# The local web UI is embedded into the node daemon, so it is built once, before any target.
+if [ "${BRAMBLE_SKIP_UI:-0}" != 1 ]; then
+  [ -d local-ui/node_modules ] || { echo "release.sh: run pnpm install first (local-ui has no node_modules)" >&2; exit 1; }
+  echo "== local UI"
+  pnpm --filter @bramble/local-ui build
+  pnpm --filter @bramble/local-ui embed
+fi
+[ -f node-daemon/ui/dist/index.html ] || { echo "release.sh: node-daemon/ui/dist has no UI build; the daemon would serve its placeholder page" >&2; exit 1; }
 
 # Same mtime for every file, so rebuilding one commit gives the same tarball.
 mtime="@$(git log -1 --format=%ct 2>/dev/null || echo 0)"
@@ -43,7 +54,7 @@ esac
 mkdir -p "$out"
 rm -rf "$stage"
 
-echo "release $version, launcher package brambled/$launcher_pkg"
+echo "release $version"
 for target in "${targets[@]}"; do
   os="${target%/*}"
   arch="${target#*/}"
@@ -58,8 +69,10 @@ for target in "${targets[@]}"; do
   mkdir -p "$dir"
   echo "== $os/$arch"
 
+  (cd node-daemon && CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+    go build -trimpath -ldflags="-s -w -X main.version=$version" -o "$dir/bramble" .)
   (cd brambled && CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-    go build -trimpath -ldflags="-s -w" -o "$dir/bramble" "$launcher_pkg")
+    go build -trimpath -ldflags="-s -w" -o "$dir/brambled" .)
   bun build --compile --minify --target="bun-$os-$bun_arch" \
     sidecar/src/index.ts --outfile "$dir/bramble-sidecar" >/dev/null
 
@@ -69,7 +82,7 @@ for target in "${targets[@]}"; do
 
   tarball="$out/bramble_${os}_${arch}.tar.gz"
   tar --sort=name --owner=0 --group=0 --numeric-owner --mode='u=rwx,go=rx' \
-    --mtime="$mtime" -C "$dir" -cf - bramble bramble-sidecar | gzip -n >"$tarball"
+    --mtime="$mtime" -C "$dir" -cf - bramble brambled bramble-sidecar | gzip -n >"$tarball"
 done
 rm -rf "$stage"
 
