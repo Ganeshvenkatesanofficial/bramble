@@ -7,6 +7,7 @@ This project was built with AI assistance (Claude Code and OpenAI Codex) through
 - **`docs/11_SOURCE_NOTES.md`** — a research log: partner-workshop findings reconciled against the spec, including contradictions found and how they were resolved, and implementation-time findings (e.g. a docs-vs-deployed-bytecode mismatch caught while validating Gate 0.3).
 - **`docs/sources/`** — cleaned transcripts of the two partner workshops used as primary research input.
 - **`scripts/gate0.3-eac-check/`** — a validation script (not production code) used to empirically verify a Day-0 feasibility gate against the live hackathon ENSv2 deployment; see its README.
+- **`AGENTS.md`** — operating rules for AI agents, including how agents read the Sepolia key (`${SEPOLIA_PRIVATE_KEY:-$SEPOLIA_PK}`) without exposing it.
 
 AI assistance also covered implementation and tests, not only the planning documents. In particular, it was used to draft, revise, and review code in:
 
@@ -15,6 +16,7 @@ AI assistance also covered implementation and tests, not only the planning docum
 - **`admincli/src/`** — EAC enrollment and role/ACL commands, Ledger signing and Key Ring integration, and their tests (for example `admincli/src/enroll.ts`, `admincli/src/ledger-eth-sign.ts`, `admincli/src/set-acl.ts`).
 - **`admincli/src/lib.ts`, `admincli/src/lib-viem.ts`, `admincli/src/lib.test.ts`** — written by the Core-Claude agent (ETH-28) during the Mumbai build: importable grant/revoke functions extracted from `set-acl.ts`, `revoke-acl.ts` and `revoke.ts`, the viem-backed `Resolver`/`Signer`, and in-memory unit tests. The same change rewrote `admincli/src/set-acl.ts`, `revoke-acl.ts` and `revoke.ts` as thin wrappers and removed `admincli/src/acl-grant.ts`.
 - **`dashboard/`** — the read-only application UI and API routes.
+- **`deploy/`** — the cloud topology runbook, systemd units, install and check scripts, env-var name templates, and the NAT test setup (`deploy/README.md`, `deploy/REFERENCE.md`, `deploy/TOPOLOGY.md`, `deploy/systemd/`, `deploy/scripts/`, `deploy/nat-lab/`, `deploy/env/`, `deploy/caddy/`, `deploy/stun/`, `deploy/sysctl/`, `deploy/scripts/stun-probe.py`, `deploy/scripts/agent-in-box.sh`) and the ADR `docs/adr/0015-cloud-demo-topology.md`. Written by Infra-Claude under ETH-49 and reviewed by another model family.
 
 Mumbai-hackathon agent work (paths written by agents; commits use each agent's own git identity):
 
