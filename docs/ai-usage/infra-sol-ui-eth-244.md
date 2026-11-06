@@ -34,3 +34,10 @@ Additional recovery paths and checks:
 - Added `w2-accept.py` and further `sol-w2-*` evidence under the existing status directory.
 - ETH-274 extends the same generator/example/test paths with the existing daemon's public metered-rendezvous payment URL.
 - Internal review ran twice. The second round accepted the installer TUN correction. The later metered-rendezvous manifest addition has passing generator tests and `pnpm verify`; other-family GitHub review remains pending.
+
+Final evidence and cleanup paths:
+
+- Added `/home/anonjr/bramble-work/status/eth-244/w2-final-test.py` and `w2-cleanup.py` to record the failed relay API test and confirmed revokes.
+- Wrote `sol-w2-local-ui-waiting.png`, `sol-w2-local-ui-waiting.json`, `sol-w2-evidence.zip`, and the final status/report evidence in the same status directory. The evidence archive excludes the private device home.
+- Stopped the owned test daemon, verified both cloud node services inactive, and handed their slot to ETH-243. Final gateway public flags retain auto-discovery, its direct candidate and sponsored mode.
+- Removed only this worktree's generated release tarballs after publication to recover local disk quota. Public distribution archives and recorded checksums remain available.
