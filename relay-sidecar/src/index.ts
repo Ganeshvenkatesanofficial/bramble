@@ -18,7 +18,7 @@ import {
 } from './config'
 import { mintToken } from './token'
 import { dataRelayRoute, dataRelayPrice } from './routes/datarelay'
-import { createSponsorRoute, type SponsorSession } from './sponsor'
+import { allocateViaInternalAPI, createSponsorRoute } from './sponsor'
 import { createEnrollmentReader } from './ens'
 
 const facilitatorClient = new HTTPFacilitatorClient({ url: BLOCKY402_FACILITATOR_URL })
@@ -87,15 +87,7 @@ if (sponsorEnabled()) {
     createSponsorRoute({
       readEnrollment: createEnrollmentReader({ rpcUrl, tailnetName, registry }),
       mintToken: () => mintToken(tokenSecret()),
-      allocate: async (bytes) => {
-        const res = await fetch(`${internalAPIURL()}/internal/data-relay-session`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bytes, sponsored: true }),
-        })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return (await res.json()) as SponsorSession
-      },
+      allocate: allocateViaInternalAPI(internalAPIURL),
       bytes: sponsorBytes(),
       maxPerHour: sponsorMaxPerHour(),
     })

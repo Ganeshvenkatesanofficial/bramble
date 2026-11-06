@@ -29,6 +29,20 @@ export type SponsorDeps = {
   now?: () => number
 }
 
+// allocateViaInternalAPI asks the Go relay's loopback API for a session the
+// operator pays for; the relay clamps the size to its own -sponsor-bytes.
+export function allocateViaInternalAPI(internalAPIURL: () => string): SponsorDeps['allocate'] {
+  return async (bytes) => {
+    const res = await fetch(`${internalAPIURL()}/internal/data-relay-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bytes, sponsored: true }),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return (await res.json()) as SponsorSession
+  }
+}
+
 export function createSponsorRoute(deps: SponsorDeps): Hono {
   const now = deps.now ?? Date.now
   const uses = new Map<string, number[]>()
