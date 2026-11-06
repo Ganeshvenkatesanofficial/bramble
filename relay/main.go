@@ -158,7 +158,17 @@ func main() {
 	dataHost := flag.String("data-host", "0.0.0.0", "host interface data-relay session sockets bind to — needs to be reachable by both peers, unlike -addr's rendezvous listener")
 	internalPort := flag.Int("internal-port", 7895, "loopback-only port relay-sidecar calls to allocate a data-relay session after payment settles")
 	pricePerByte := flag.String("price-per-byte", "1", "atomic USDC price per byte forwarded, passed through to relay-sidecar's DynamicPrice (docs/adr/0008); ignored unless -data-relay is set")
+	sponsor := flag.Bool("sponsor-enrolled", false, "grant a capped free data-relay session and rendezvous token to any device enrolled in the tailnet registry (operator-sponsored, off by default; requires -meter and -data-relay; reads BRAMBLE_TAILNET_NAME, BRAMBLE_TAILNET_REGISTRY and SEPOLIA_RPC_URL from the environment)")
+	sponsorBytes := flag.Int64("sponsor-bytes", defaultSponsorBytes, "byte allotment of one sponsored session; larger requests are clamped to this")
+	sponsorMaxPerHour := flag.Int("sponsor-max-per-hour", defaultSponsorMaxPerHour, "sponsored sessions, and separately sponsored rendezvous tokens, one enrolled device may take per hour")
 	flag.Parse()
+
+	if *sponsor {
+		if err := validateSponsorFlags(*meter, *dataRelayFlag, *sponsorBytes, *sponsorMaxPerHour, os.Getenv); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+	}
 
 	if *dataRelayFlag && !*meter {
 		fmt.Fprintln(os.Stderr, "error: -data-relay requires -meter (relay-sidecar handles both rendezvous and data-relay payment)")
@@ -182,6 +192,9 @@ func main() {
 		psConfig := paySidecarConfig{Dir: *sidecarDir, Port: *sidecarPort, Payee: *payee}
 		if *dataRelayFlag {
 			dr = newDataRelay()
+			if *sponsor {
+				dr.sponsorBytes = *sponsorBytes
+			}
 			go func() {
 				if err := serveInternalAPI(dr, *internalPort, *dataHost); err != nil {
 					fmt.Fprintln(os.Stderr, "data-relay: internal API stopped:", err)
@@ -190,6 +203,9 @@ func main() {
 			psConfig.DataRelay = true
 			psConfig.InternalAPIURL = fmt.Sprintf("http://127.0.0.1:%d", *internalPort)
 			psConfig.PricePerByte = *pricePerByte
+			psConfig.Sponsor = *sponsor
+			psConfig.SponsorBytes = *sponsorBytes
+			psConfig.SponsorMaxPerHour = *sponsorMaxPerHour
 		}
 
 		fmt.Fprintln(os.Stderr, "starting relay-sidecar...")
@@ -203,6 +219,9 @@ func main() {
 		log.Printf("metering enabled: rendezvous-token required, relay-sidecar on :%d", *sidecarPort)
 		if *dataRelayFlag {
 			log.Printf("data-relay enabled: sessions bind on %s, internal API on 127.0.0.1:%d", *dataHost, *internalPort)
+		}
+		if *sponsor {
+			log.Printf("sponsorship enabled: enrolled devices get %d-byte free sessions, at most %d per hour each; the operator pays nothing on-chain and sees the device's source IP", *sponsorBytes, *sponsorMaxPerHour)
 		}
 	}
 

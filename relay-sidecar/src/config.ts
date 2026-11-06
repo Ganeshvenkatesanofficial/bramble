@@ -50,3 +50,21 @@ export function internalAPIURL(): string {
 export function pricePerByteAtomic(): bigint {
   return BigInt(requiredEnv('DATA_RELAY_PRICE_PER_BYTE'))
 }
+
+// Operator-sponsored sessions (docs/adr/0018). Set by the spawning
+// `relay -sponsor-enrolled` flag; off unless SPONSOR_ENROLLED=1.
+export function sponsorEnabled(): boolean {
+  return process.env.SPONSOR_ENROLLED === '1'
+}
+
+export function sponsorBytes(): number {
+  const n = Number(requiredEnv('SPONSOR_BYTES'))
+  if (!Number.isInteger(n) || n <= 0) throw new Error('SPONSOR_BYTES must be a positive integer')
+  return n
+}
+
+export function sponsorMaxPerHour(): number {
+  const n = Number(requiredEnv('SPONSOR_MAX_PER_HOUR'))
+  if (!Number.isInteger(n) || n <= 0) throw new Error('SPONSOR_MAX_PER_HOUR must be a positive integer')
+  return n
+}
