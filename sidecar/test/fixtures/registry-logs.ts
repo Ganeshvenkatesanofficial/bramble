@@ -78,7 +78,13 @@ export function labelRegisteredLog(registry: Address, label: string, blockNumber
 // request is recorded in `calls` and answered with only the logs inside its
 // address and block range, the way a real node does. Set `failWith` to make
 // eth_getLogs reject with a JSON-RPC error instead.
-export function fixtureClient(opts: { head: bigint; logs: RawLog[]; failWith?: { code: number; message: string } }): {
+export function fixtureClient(opts: {
+  head: bigint
+  logs: RawLog[]
+  failWith?: { code: number; message: string }
+  // Fail only the first N eth_getLogs requests, then serve normally.
+  failTimes?: number
+}): {
   client: PublicClient
   calls: GetLogsCall[]
 } {
@@ -95,7 +101,9 @@ export function fixtureClient(opts: { head: bigint; logs: RawLog[]; failWith?: {
           toBlock: BigInt(filter.toBlock),
         }
         calls.push(call)
-        if (opts.failWith) throw Object.assign(new Error(opts.failWith.message), opts.failWith)
+        if (opts.failWith && (opts.failTimes === undefined || calls.length <= opts.failTimes)) {
+          throw Object.assign(new Error(opts.failWith.message), opts.failWith)
+        }
         return opts.logs.filter(
           (log) =>
             log.address.toLowerCase() === call.address.toLowerCase() &&
