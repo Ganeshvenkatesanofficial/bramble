@@ -10,7 +10,7 @@ Read `docs/18_AGENT_DIGEST.md` and `STYLE.md` first. Open `docs/15_MUMBAI_HANDOF
 - Run `pnpm verify` before every push. Run `pnpm test:access-flow` when you change `brambled/` or `sidecar/`.
 - Respect the invariants in section 3 of the handoff. `pnpm check:no-endpoints` and `pnpm check:no-local-state` must stay green.
 - Trace every task to a demo beat (handoff section 4). If it serves no beat, stop and ask.
-- Open a PR against `hackathon`. A reviewer from the other model family approves it. Only a human merges to `main`.
+- Open a PR against `main`. A reviewer from the other model family approves it. Only a human merges to `main`.
 - Record the paths you wrote in your own file `docs/ai-usage/<your-agent-name>.md`. Do not edit `docs/AI_USAGE.md`: every agent editing it caused repeated merge conflicts.
 - Limit review rounds to two. After the second round, stop and ask Atlas to decide. Atlas decides small questions itself.
 - Read the shared status file `/home/anonjr/bramble-work/status/usage.txt` instead of running any usage tool. Do not start work that will plainly outlast your subscription's remaining window.
