@@ -802,7 +802,7 @@ func watchDataRelayFailover(ctx context.Context, node *wgnode.Node, m relayPayer
 		// RxBytes still isn't moving; failoverBackoff spaces out the rest.
 		relays, err := relaySet()
 		if err != nil {
-			failures++
+			// No token or session was bought, so this does not count toward failoverBackoff.
 			fmt.Fprintf(os.Stderr, "data-relay: %s: failover attempt failed, will retry: %v\n", peerLabel, err)
 			continue
 		}
