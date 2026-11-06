@@ -299,7 +299,7 @@ func TestSponsoredRelay_RenewsSessionAtCapWithOneRelay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	go watchDataRelayFailover(ctx, p.device, devicePayer, state, "cloud1", netip.PrefixFrom(p.cloudIP, 32), p.pool, 10_000,
+	go watchDataRelayFailover(ctx, p.device, devicePayer, state, "cloud1", p.pool, 10_000,
 		unrestrictedDataRelayPurchasePolicy, staticRendezvous(p.relays), p.devicePub, 20*time.Second)
 	cloudPayer := &countingPayer{relayPayer: &sponsor.Payer{Label: "cloud1"}}
 	go watchDataRelayAdopt(ctx, p.cloud, cloudPayer, "device1", p.cloudPub, p.devicePub, "",

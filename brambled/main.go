@@ -573,22 +573,25 @@ func relayRoutedEndpoint(node keepaliveSetter, m relayPayer, pool dataRelayFlag,
 			return nil, nil, fmt.Errorf("buying data-relay session: %w", err)
 		}
 	}
-	endpoint, err := publishDataRelaySession(node, m, session, relays, own, peerPubkey, ttl)
-	return endpoint, session, err
+	relayEndpoint, err := netip.ParseAddrPort(session.candidate)
+	if err != nil {
+		return nil, session, fmt.Errorf("data-relay candidate %q unparseable: %w", session.candidate, err)
+	}
+	if err := node.SetPersistentKeepalive(peerPubkey, dataRelayKeepaliveSeconds); err != nil {
+		return nil, session, err
+	}
+	if err := publishDataRelaySession(m, session, relays, own, peerPubkey, ttl); err != nil {
+		return nil, session, err
+	}
+	return &relayEndpoint, session, nil
 }
 
 // publishDataRelaySession re-offers a still-valid allocation. A rendezvous ack
 // does not prove that the other peer has started sending WireGuard packets.
-func publishDataRelaySession(node keepaliveSetter, m relayPayer, session *dataRelaySession, relays []sidecar.RendezvousRelay, own, peerPubkey string, ttl time.Duration) (*netip.AddrPort, error) {
+// Publication never changes the peer table; admission owns membership.
+func publishDataRelaySession(m relayPayer, session *dataRelaySession, relays []sidecar.RendezvousRelay, own, peerPubkey string, ttl time.Duration) error {
 	if !time.Now().Before(session.expiresAt) {
-		return nil, fmt.Errorf("data-relay session expired before publication")
-	}
-	relayEndpoint, err := netip.ParseAddrPort(session.candidate)
-	if err != nil {
-		return nil, fmt.Errorf("data-relay candidate %q unparseable: %w", session.candidate, err)
-	}
-	if err := node.SetPersistentKeepalive(peerPubkey, dataRelayKeepaliveSeconds); err != nil {
-		return nil, fmt.Errorf("arming persistent keepalive for %s: %w", peerPubkey, err)
+		return fmt.Errorf("data-relay session expired before publication")
 	}
 	if session.settlementTxID == "" {
 		fmt.Fprintf(os.Stderr, "data-relay: publishing sponsored session %s from %s (%d bytes, no payment), routing %s via %s\n",
@@ -601,9 +604,9 @@ func publishDataRelaySession(node keepaliveSetter, m relayPayer, session *dataRe
 		fmt.Fprintf(os.Stderr, "  %s\n", u)
 	}
 	if _, _, err := exchangeAnyMetered(relays, m, own, peerPubkey, session.candidate, ttl); err != nil {
-		return nil, err
+		return err
 	}
-	return &relayEndpoint, nil
+	return nil
 }
 
 // Section D failover (docs/adr/0008, docs/05_BUILD_PLAN.md Gate 4.3): how
@@ -660,6 +663,16 @@ func (s *relayState) session(peerLabel, pubkey string) *dataRelaySession {
 		return nil
 	}
 	return s.sessions[peerLabel]
+}
+
+func (s *relayState) replace(peerLabel, pubkey string, previous, next *dataRelaySession) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pubkey[peerLabel] != pubkey || s.sessions[peerLabel] != previous {
+		return false
+	}
+	s.sessions[peerLabel] = next
+	return true
 }
 
 // setPubkey records peerLabel's current pubkey without touching the relay
@@ -773,7 +786,19 @@ func exchangeAnyMetered(relays []sidecar.RendezvousRelay, m relayPayer, ownPubke
 //
 // relaySet is read on every attempt, so a rendezvous set recovered after a
 // start-up discovery failure reaches this watcher.
-func watchDataRelayFailover(ctx context.Context, node *wgnode.Node, m relayPayer, state *relayState, peerLabel string, allowedIP netip.Prefix, pool dataRelayFlag, sessionBytes int64, policy dataRelayPurchasePolicy, relaySet rendezvousSource, ownPubkey string, ttl time.Duration) {
+func relayPeerSnapshot(node *wgnode.Node, pubkey string) (wgnode.PeerInfo, bool) {
+	peers, err := node.Peers()
+	if err == nil {
+		for _, peer := range peers {
+			if peer.PublicKeyHex == pubkey {
+				return peer, true
+			}
+		}
+	}
+	return wgnode.PeerInfo{}, false
+}
+
+func watchDataRelayFailover(ctx context.Context, node *wgnode.Node, m relayPayer, state *relayState, peerLabel string, pool dataRelayFlag, sessionBytes int64, policy dataRelayPurchasePolicy, relaySet rendezvousSource, ownPubkey string, ttl time.Duration) {
 	excluded := map[string]bool{}
 	failures := 0
 	var observed *dataRelaySession
@@ -799,23 +824,11 @@ func watchDataRelayFailover(ctx context.Context, node *wgnode.Node, m relayPayer
 		if err := datarelay.WaitForStall(ctx, node, pubkey, dataRelayPollInterval, dataRelayStallTimeout); err != nil {
 			return
 		}
-		peers, err := node.Peers()
-		if err != nil {
-			continue
-		}
-		var rx int64
-		found := false
-		for _, p := range peers {
-			if p.PublicKeyHex == pubkey {
-				rx, found = p.RxBytes, true
-				break
-			}
-		}
-		// Admission may have removed or rotated this peer while we waited.
+		peer, found := relayPeerSnapshot(node, pubkey)
 		if !found || state.session(peerLabel, pubkey) != session {
 			continue
 		}
-		if rx > baselineRx {
+		if !confirmed && peer.RxBytes > baselineRx && peer.Endpoint == session.candidate {
 			confirmed = true
 			failures = 0
 		}
@@ -847,30 +860,43 @@ func watchDataRelayFailover(ctx context.Context, node *wgnode.Node, m relayPayer
 		if err != nil {
 			continue
 		}
+		// Backoff and relay discovery may outlive admission or a recovered link.
+		current, found := relayPeerSnapshot(node, pubkey)
+		if !found || state.session(peerLabel, pubkey) != session || current.RxBytes != peer.RxBytes {
+			continue
+		}
 		if !reuse {
-			session, err = buyDataRelaySession(m, remaining, sessionBytes, policy)
+			next, err := buyDataRelaySession(m, remaining, sessionBytes, policy)
 			if err != nil {
 				failures++
 				fmt.Fprintf(os.Stderr, "data-relay: %s: allocation failed, will retry: %v\n", peerLabel, err)
 				continue
 			}
-			// Preserve a new allocation even if its first publication times out. Until
-			// bytes arrive on it, silence means bootstrap, bounded by its actual TTL.
-			observed, baselineRx, confirmed = session, rx, false
-			state.set(peerLabel, pubkey, session)
-			endpoint, err := netip.ParseAddrPort(session.candidate)
+			current, found = relayPeerSnapshot(node, pubkey)
+			if !found || state.session(peerLabel, pubkey) != session || current.RxBytes != peer.RxBytes {
+				continue
+			}
+			endpoint, err := netip.ParseAddrPort(next.candidate)
 			if err != nil {
 				failures++
 				continue
 			}
-			// Point the buyer before publishing, so an adopter can use the candidate
-			// immediately. Do not re-add a peer after a long exchange may see revocation.
-			if err := node.AddPeer(pubkey, allowedIP, &endpoint); err != nil {
+			// update_only prevents this transport update from resurrecting a key that
+			// admission removes concurrently. It never writes allowed IPs.
+			if err := node.UpdatePeerEndpoint(pubkey, endpoint, dataRelayKeepaliveSeconds); err != nil {
 				failures++
 				continue
 			}
+			current, found = relayPeerSnapshot(node, pubkey)
+			if !found || !state.replace(peerLabel, pubkey, session, next) {
+				continue
+			}
+			// Sample after the switch. Old traffic received during network calls must
+			// not confirm the replacement; confirmation also requires its endpoint.
+			session = next
+			observed, baselineRx, confirmed = next, current.RxBytes, false
 		}
-		if _, err := publishDataRelaySession(node, m, session, relays, ownPubkey, pubkey, ttl); err != nil {
+		if err := publishDataRelaySession(m, session, relays, ownPubkey, pubkey, ttl); err != nil {
 			failures++
 			fmt.Fprintf(os.Stderr, "data-relay: %s: publication failed, will retry the allocation until expiry: %v\n", peerLabel, err)
 			continue
@@ -1416,7 +1442,7 @@ func runServe(args []string) error {
 			continue
 		}
 		p := p
-		go watchDataRelayFailover(ctx, node, payer, relState, p.Label, p.AllowedIP, dataRelays, *relaySessionBytes, relayPurchasePolicy, relaySet, ownPubkey, *ttl)
+		go watchDataRelayFailover(ctx, node, payer, relState, p.Label, dataRelays, *relaySessionBytes, relayPurchasePolicy, relaySet, ownPubkey, *ttl)
 	}
 
 	// The other half of Gate 4.3: every tracked peer that ISN'T a

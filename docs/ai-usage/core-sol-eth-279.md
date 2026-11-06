@@ -5,6 +5,7 @@ Demo beat 4: sponsored relay bootstrap and failover.
 Paths written:
 
 - `brambled/main.go`
+- `brambled/wgnode/node.go`
 - `brambled/live_demo.go`
 - `brambled/datarelay_endpoint_test.go`
 - `brambled/sponsored_relay_e2e_test.go`
@@ -26,6 +27,18 @@ sponsorship limits, byte caps, and privacy behavior stay unchanged.
 Verified: the existing primary-relay kill tests reconnect through the backup,
 including recovery after initial relay discovery fails. The existing sponsored
 byte-cap test renews and returns HTTP 200.
+
+The first local review reports zero Standards findings and three Spec findings.
+The correction refreshes the byte baseline at endpoint switch, rechecks traffic
+and admission after network calls, and applies endpoint changes with WireGuard's
+atomic `update_only` setting. Publication does not edit the peer table.
+
+Verified: removing `update_only` makes the admission regression restore a revoked
+peer. Restoring it makes the test pass. The test also checks that transport
+updates preserve allowed IPs. The depleted-budget integration test exhausts the
+shared six-poll burst, verifies a 200-second default delay, then scales the limiter
+interval to 15 seconds at the test boundary to exercise a real handshake. This
+is not a measurement of the live 200-second recovery latency.
 
 Open: ETH-244 owns installed-device and cloud acceptance. This task does not
 modify or validate that runtime.

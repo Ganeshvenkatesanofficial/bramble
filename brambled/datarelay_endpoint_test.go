@@ -16,6 +16,7 @@ import (
 	"github.com/WhyAsh5114/bramble/brambled/sidecar"
 	"github.com/WhyAsh5114/bramble/brambled/sponsor"
 	"github.com/WhyAsh5114/bramble/brambled/wgnode"
+	"golang.org/x/time/rate"
 )
 
 // startTestRendezvousRelay is a minimal honest rendezvous relay, hand-rolled
@@ -701,7 +702,7 @@ func testDataRelayFailover(t *testing.T, watcherSource func([]sidecar.Rendezvous
 	// adopting side) gets watchDataRelayAdopt — the asymmetric pairing
 	// runServe now wires for real (main.go's non-relay-peer watcher loop),
 	// not two independent buyers racing for the same lucky port.
-	go watchDataRelayFailover(ctx, alice, aliceM, aliceState, "bob", bobIP, pool, 1_000_000, unrestrictedDataRelayPurchasePolicy, watcherSource(relays), alicePub, 15*time.Second)
+	go watchDataRelayFailover(ctx, alice, aliceM, aliceState, "bob", pool, 1_000_000, unrestrictedDataRelayPurchasePolicy, watcherSource(relays), alicePub, 15*time.Second)
 	go watchDataRelayAdopt(ctx, bob, bobM, "alice", bobPub, alicePub, "", aliceIP, watcherSource(relays), nil)
 
 	// Kill "the primary relay process": both its data relay and its
@@ -743,8 +744,9 @@ func pingUntilConnected(t *testing.T, node *wgnode.Node, addr netip.Addr, timeou
 // adopter may still be waiting for admission or the shared sponsored poll
 // budget. Keep its advertised session usable while it catches up.
 func TestSponsoredRelay_BootstrapKeepsSessionUntilPeerHandshakes(t *testing.T) {
-	t.Run("live allocation", func(t *testing.T) { testSponsoredRelayBootstrap(t, false) })
-	t.Run("expired allocation", func(t *testing.T) { testSponsoredRelayBootstrap(t, true) })
+	t.Run("live allocation", func(t *testing.T) { testSponsoredRelayBootstrap(t, false, false) })
+	t.Run("expired allocation", func(t *testing.T) { testSponsoredRelayBootstrap(t, true, false) })
+	t.Run("depleted shared budget", func(t *testing.T) { testSponsoredRelayBootstrap(t, false, true) })
 }
 
 // Shorten only the first server-provided deadline, so expiry is tested without
@@ -763,7 +765,7 @@ func (p *expiringFirstSessionPayer) DataRelaySession(url string, bytes int64) (*
 	return response, err
 }
 
-func testSponsoredRelayBootstrap(t *testing.T, expireFirst bool) {
+func testSponsoredRelayBootstrap(t *testing.T, expireFirst, depletedBudget bool) {
 	rdvAddr, sidecarURL := startRealSponsoringRelay(t, "device1,cloud1", 1<<20)
 	relays := []sidecar.RendezvousRelay{{Label: "relay1", Address: rdvAddr, SidecarURL: sidecarURL}}
 	pool := dataRelayFlag{"relay1": sidecarURL}
@@ -817,7 +819,7 @@ func testSponsoredRelayBootstrap(t *testing.T, expireFirst bool) {
 	state.set("cloud1", cloudPub, session)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go watchDataRelayFailover(ctx, device, bootstrapPayer, state, "cloud1", netip.PrefixFrom(cloudIP, 32), pool, 10_000,
+	go watchDataRelayFailover(ctx, device, bootstrapPayer, state, "cloud1", pool, 10_000,
 		unrestrictedDataRelayPurchasePolicy, staticRendezvous(relays), devicePub, 15*time.Second)
 	// Hold cloud admission beyond the six-second stall timeout. No handshake
 	// or received bytes exist yet, so that silence must not replace the session.
@@ -829,9 +831,33 @@ func testSponsoredRelayBootstrap(t *testing.T, expireFirst bool) {
 	if n := payer.sessions.Load(); n != want {
 		t.Fatalf("bootstrap allocated %d sessions, want %d", n, want)
 	}
+	var pace *rate.Limiter
+	if depletedBudget {
+		pace, err = sponsor.PollLimiter(30)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Six inactive peers have consumed the shared startup burst.
+		if !pace.AllowN(time.Now(), 6) {
+			t.Fatal("missing initial six-poll burst")
+		}
+		reservation := pace.Reserve()
+		delay := reservation.Delay()
+		reservation.Cancel()
+		if delay < 199*time.Second || delay > 201*time.Second {
+			t.Fatalf("default depleted poll budget waits %s, want 200s", delay)
+		}
+		// Scale only test time. Production keeps the 200s interval; this test
+		// needs one subsequent poll and never raises the relay's hourly cap.
+		pace.SetLimit(rate.Every(15 * time.Second))
+		stale := netip.MustParseAddrPort("127.0.0.1:9")
+		if err := cloud.AddPeer(devicePub, netip.PrefixFrom(deviceIP, 32), &stale); err != nil {
+			t.Fatal(err)
+		}
+	}
 	go watchDataRelayAdopt(ctx, cloud, &sponsor.Payer{Label: "cloud1"}, "device1", cloudPub, devicePub, "",
-		netip.PrefixFrom(deviceIP, 32), staticRendezvous(relays), nil)
-	if !pingUntilConnected(t, device, cloudIP, 10*time.Second) {
+		netip.PrefixFrom(deviceIP, 32), staticRendezvous(relays), pace)
+	if !pingUntilConnected(t, device, cloudIP, 40*time.Second) {
 		t.Fatal("delayed cloud adopter could not handshake through the retained session")
 	}
 }
@@ -857,7 +883,7 @@ func TestSponsoredRelay_RenewalKeepsSessionWhileAdopterWaits(t *testing.T) {
 	state.set("cloud1", p.cloudPub, p.session)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go watchDataRelayFailover(ctx, p.device, payer, state, "cloud1", netip.PrefixFrom(p.cloudIP, 32), p.pool, 10_000,
+	go watchDataRelayFailover(ctx, p.device, payer, state, "cloud1", p.pool, 10_000,
 		unrestrictedDataRelayPurchasePolicy, staticRendezvous(p.relays), p.devicePub, 3*time.Second)
 	deadline := time.Now().Add(15 * time.Second)
 	for payer.sessions.Load() < 2 && time.Now().Before(deadline) {
@@ -878,5 +904,132 @@ func TestSponsoredRelay_RenewalKeepsSessionWhileAdopterWaits(t *testing.T) {
 	}
 	if n := payer.sessions.Load(); n != 2 {
 		t.Fatalf("recovery needed %d sessions, want 2", n)
+	}
+}
+
+// Pause the external allocation response to model admission or traffic changing
+// while a relay request is in flight.
+type pausedSessionPayer struct {
+	relayPayer
+	allocated chan struct{}
+	release   chan struct{}
+	once      sync.Once
+}
+
+func (p *pausedSessionPayer) DataRelaySession(url string, bytes int64) (*sidecar.DataRelaySessionResponse, error) {
+	response, err := p.relayPayer.DataRelaySession(url, bytes)
+	p.once.Do(func() { close(p.allocated); <-p.release })
+	return response, err
+}
+
+func TestSponsoredRelay_FailoverRechecksAdmissionAndTrafficAfterAllocation(t *testing.T) {
+	for _, revoked := range []bool{true, false} {
+		name := "recovered traffic"
+		if revoked {
+			name = "revoked peer"
+		}
+		t.Run(name, func(t *testing.T) {
+			p := connectSponsoredPair(t, 1<<20, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "connected") }))
+			if status, _, err := getUntil(p.httpClient(time.Second), "http://cloud1.mesh/", 10*time.Second); err != nil || status != http.StatusOK {
+				t.Fatalf("initial GET: %d %v", status, err)
+			}
+			if err := p.cloud.RemovePeer(p.devicePub); err != nil {
+				t.Fatal(err)
+			}
+			payer := &pausedSessionPayer{relayPayer: &sponsor.Payer{Label: "device1"}, allocated: make(chan struct{}), release: make(chan struct{})}
+			state := newRelayState()
+			state.set("cloud1", p.cloudPub, p.session)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			go watchDataRelayFailover(ctx, p.device, payer, state, "cloud1", p.pool, 10_000,
+				unrestrictedDataRelayPurchasePolicy, staticRendezvous(p.relays), p.devicePub, 3*time.Second)
+			select {
+			case <-payer.allocated:
+			case <-time.After(20 * time.Second):
+				close(payer.release)
+				t.Fatal("no replacement allocation after the stall")
+			}
+			// Release even when an assertion below fails.
+			var release sync.Once
+			resume := func() { release.Do(func() { close(payer.release) }) }
+			defer resume()
+			if revoked {
+				if err := p.device.RemovePeer(p.cloudPub); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err := p.cloud.SetPersistentKeepalive(p.devicePub, dataRelayKeepaliveSeconds); err != nil {
+					t.Fatal(err)
+				}
+				if err := p.cloud.AddPeer(p.devicePub, netip.PrefixFrom(p.deviceIP, 32), p.deviceEndpoint); err != nil {
+					t.Fatal(err)
+				}
+				if status, _, err := getUntil(p.httpClient(time.Second), "http://cloud1.mesh/", 10*time.Second); err != nil || status != http.StatusOK {
+					t.Fatalf("GET while allocation waits: %d %v", status, err)
+				}
+			}
+			resume()
+			// Observe the peer table through a full watcher turn after the request.
+			deadline := time.Now().Add(2 * time.Second)
+			for time.Now().Before(deadline) {
+				peers, err := p.device.Peers()
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, peer := range peers {
+					if revoked && peer.PublicKeyHex == p.cloudPub {
+						t.Fatal("relay completion restored a revoked peer")
+					}
+				}
+				if !revoked && state.session("cloud1", p.cloudPub) != p.session {
+					t.Fatal("old-session recovery was credited to a replacement allocation")
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+		})
+	}
+}
+
+func TestDataRelayEndpointUpdatePreservesAdmission(t *testing.T) {
+	private, _, err := wgnode.GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, peerKey, err := wgnode.GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	node, err := wgnode.New(wgnode.Config{PrivateKeyHex: private, LocalAddress: netip.MustParseAddr("10.100.0.1"), Netstack: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer node.Close()
+	endpoint := netip.MustParseAddrPort("127.0.0.1:9")
+	route := netip.MustParsePrefix("10.100.0.2/32")
+	if err := node.AddPeer(peerKey, route, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := node.UpdatePeerEndpoint(peerKey, endpoint, dataRelayKeepaliveSeconds); err != nil {
+		t.Fatal(err)
+	}
+	peers, err := node.Peers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(peers) != 1 || peers[0].Endpoint != endpoint.String() || len(peers[0].AllowedIPs) != 1 || peers[0].AllowedIPs[0] != route.String() {
+		t.Fatalf("transport update changed admission: %+v", peers)
+	}
+	if err := node.RemovePeer(peerKey); err != nil {
+		t.Fatal(err)
+	}
+	if err := node.UpdatePeerEndpoint(peerKey, endpoint, dataRelayKeepaliveSeconds); err != nil {
+		t.Fatal(err)
+	}
+	peers, err = node.Peers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(peers) != 0 {
+		t.Fatalf("transport update restored a revoked peer: %+v", peers)
 	}
 }
