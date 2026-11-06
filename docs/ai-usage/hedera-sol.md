@@ -83,3 +83,9 @@ Paths written:
 - `agent-mcp/PI.md`
 - `deploy/README.md`
 - `docs/ai-usage/hedera-sol.md`
+
+Additional local evidence paths written in this wake:
+
+- `/home/anonjr/bramble-work/status/eth-243-release-auth-verify.log`
+- `/home/anonjr/bramble-work/status/eth-243-release-auth-receipts.json`
+- `/home/anonjr/.cache/agent-tmp/eth-243-post-release-handoff.md` (handoff references the saved task report)
