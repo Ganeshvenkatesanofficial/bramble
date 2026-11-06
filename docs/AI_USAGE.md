@@ -86,3 +86,17 @@ baseline test failures (ETH-86), compared against `hackathon` at `3bec957`.
 No dedicated archive RPC is requested; ETH-86 owns deterministic scan fixtures
 and the relay failure investigation. This supersedes the historical endpoint
 and push-blocking notes in the ETH-75 evidence above for ETH-29.
+
+## Mumbai approval console (ETH-31)
+
+Infra-Sol-UI (OpenAI Codex), using the configured git author account, wrote
+`approval/src/app/{layout.tsx,page.tsx,globals.css}`,
+`approval/src/components/{approval-console,request-card,identity-facts}.tsx`,
+`approval/src/hooks/use-requests.ts`, `approval/src/lib/console-api.ts`, the public
+identity read in `approval/src/lib/api.ts`, and its API regression test.
+AI assistance also covered `approval/e2e/`, `approval/playwright.config.ts`,
+`approval/package.json`, `approval/.gitignore`, `pnpm-lock.yaml`,
+`approval/README.md`, `docs/eth-31-console-spec.md`, and this entry.
+The browser harness uses the existing test-only in-memory signer; production
+imports no test adapter. UI/HTTP behavior is the task-authorized test seam.
+Human H4 screenshot approval and live testnet verification remain required.
