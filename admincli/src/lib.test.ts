@@ -9,12 +9,16 @@ import {
   parseServiceNames,
   revokeAcl,
   setDeviceRevoked,
+  enrollDevice,
+  LabelRegisteredError,
+  type EnrollProgress,
   type LibDeps,
   type PendingTx,
   type Resolver,
   type Signer,
 } from './lib'
 import { aclDigestECDH } from './roles'
+import { memoryEnrollChain } from './enroll-memory'
 
 const TAILNET = 'mesh.eth'
 
@@ -230,5 +234,75 @@ describe('setDeviceRevoked', () => {
     const cleared = await setDeviceRevoked(t.deps, { deviceLabel: 'agent', value: false })
     expect(cleared.after).toBe('false')
     expect(t.chain.writes.map((w) => `${w.key}=${w.value}`)).toEqual(['revoked=true', 'revoked=false'])
+  })
+})
+
+describe('enrollDevice with an in-memory chain', () => {
+  const pubkey = 'ab'.repeat(32)
+  const enrollDeps = (m: ReturnType<typeof memoryEnrollChain>) => ({
+    resolver: m.resolver,
+    chain: m.chain,
+    tailnetName: m.tailnetName,
+    sleep: async () => {},
+  })
+
+  it('writes subname, pubkey and mesh-ip in order', async () => {
+    const m = memoryEnrollChain({ tailnetName: TAILNET })
+    const result = await enrollDevice(enrollDeps(m), { deviceLabel: 'lap', pubkey })
+    expect(m.steps).toEqual(['deploy', 'register', 'setText:pubkey', 'setText:mesh-ip'])
+    expect(m.registered.has('lap')).toBe(true)
+    expect(m.records.get(`lap.${TAILNET}|pubkey`)).toBe(pubkey)
+    expect(result.meshCidr).toBe('10.77.0.2/24')
+    expect(result.meshIp).toBe('10.77.0.2')
+    expect(Object.keys(result.txHashes).sort()).toEqual(['deploy', 'meshIp', 'pubkey', 'register'])
+  })
+
+  it('gives the next device the next free address', async () => {
+    const m = memoryEnrollChain({ tailnetName: TAILNET })
+    await enrollDevice(enrollDeps(m), { deviceLabel: 'one', pubkey })
+    const two = await enrollDevice(enrollDeps(m), { deviceLabel: 'two', pubkey })
+    expect(two.meshIp).toBe('10.77.0.3')
+  })
+
+  it('refuses a label that is already registered before any write', async () => {
+    const m = memoryEnrollChain({ tailnetName: TAILNET })
+    m.registered.add('taken')
+    await expect(enrollDevice(enrollDeps(m), { deviceLabel: 'taken', pubkey })).rejects.toBeInstanceOf(
+      LabelRegisteredError
+    )
+    expect(m.steps).toEqual([])
+  })
+
+  it('resumes a failed enrollment without deploying a second resolver', async () => {
+    const m = memoryEnrollChain({ tailnetName: TAILNET })
+    const progress: EnrollProgress = { txHashes: {} }
+    m.failNext('register')
+    await expect(enrollDevice(enrollDeps(m), { deviceLabel: 'lap', pubkey, progress })).rejects.toThrow(
+      /injected register failure/
+    )
+    expect(progress.resolverAddress).toBeDefined()
+    expect(progress.registered).toBeUndefined()
+    const result = await enrollDevice(enrollDeps(m), { deviceLabel: 'lap', pubkey, progress })
+    expect(m.steps).toEqual(['deploy', 'register', 'setText:pubkey', 'setText:mesh-ip'])
+    expect(result.resolverAddress).toBe(progress.resolverAddress!)
+  })
+
+  it('keeps the allocated mesh-ip when only its write failed', async () => {
+    const m = memoryEnrollChain({ tailnetName: TAILNET })
+    const progress: EnrollProgress = { txHashes: {} }
+    m.failNext('setText:mesh-ip')
+    await expect(enrollDevice(enrollDeps(m), { deviceLabel: 'lap', pubkey, progress })).rejects.toThrow()
+    expect(progress.meshCidr).toBe('10.77.0.2/24')
+    const result = await enrollDevice(enrollDeps(m), { deviceLabel: 'lap', pubkey, progress })
+    expect(result.meshCidr).toBe('10.77.0.2/24')
+    expect(m.steps.filter((s) => s === 'deploy')).toHaveLength(1)
+  })
+
+  it('fails when the pubkey never reads back', async () => {
+    const m = memoryEnrollChain({ tailnetName: TAILNET })
+    const stale = { ...m.resolver, getText: async () => null }
+    await expect(
+      enrollDevice({ ...enrollDeps(m), resolver: stale, readbackAttempts: 2 }, { deviceLabel: 'lap', pubkey })
+    ).rejects.toThrow(/pubkey did not round-trip/)
   })
 })
