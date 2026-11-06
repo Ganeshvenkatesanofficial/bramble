@@ -137,17 +137,29 @@ func (d *Daemon) Run(ctx context.Context) {
 // DefaultTailnet are additions: the admin compares the key, and the UI can
 // prefill the tailnet this install was set up for.
 type State struct {
-	Phase          Phase      `json:"phase"`
-	Name           string     `json:"name"`
-	Fingerprint    string     `json:"fingerprint"`
-	PublicKey      string     `json:"publicKey"`
-	Tailnet        string     `json:"tailnet,omitempty"`
-	DefaultTailnet string     `json:"defaultTailnet,omitempty"`
-	JoinID         string     `json:"joinId,omitempty"`
-	MeshIP         string     `json:"meshIp,omitempty"`
-	IsAdmin        bool       `json:"isAdmin"`
-	Peers          []Peer     `json:"peers"`
-	Error          *ErrorInfo `json:"error,omitempty"`
+	Phase          Phase  `json:"phase"`
+	Name           string `json:"name"`
+	Fingerprint    string `json:"fingerprint"`
+	PublicKey      string `json:"publicKey"`
+	Tailnet        string `json:"tailnet,omitempty"`
+	DefaultTailnet string `json:"defaultTailnet,omitempty"`
+	JoinID         string `json:"joinId,omitempty"`
+	MeshIP         string `json:"meshIp,omitempty"`
+	IsAdmin        bool   `json:"isAdmin"`
+	Peers          []Peer `json:"peers"`
+	// Services lists the tailnet services this device can open in a
+	// browser, once it is approved. Each URL is its loopback forward.
+	Services []ServiceLink `json:"services,omitempty"`
+	Error    *ErrorInfo    `json:"error,omitempty"`
+}
+
+// ServiceLink is one service from the node config and the loopback URL
+// that reaches it. A link only says where the forward listens; the gateway
+// still decides each connection.
+type ServiceLink struct {
+	Peer    string `json:"peer"`
+	Service string `json:"service"`
+	URL     string `json:"url"`
 }
 
 // Fingerprint is the first 16 hex digits of the public key in groups of
@@ -183,6 +195,16 @@ func (d *Daemon) State() State {
 	}
 	if d.cfg != nil {
 		st.DefaultTailnet = d.cfg.Tailnet
+	}
+	if base := d.m.Base(); (base == PhaseConnected || base == PhaseApproved) && d.node != nil && d.cfg != nil {
+		for _, s := range d.cfg.Services {
+			if s.Peer == st.Name {
+				continue
+			}
+			if port, ok := d.node.ForwardPort(s.Peer, s.Service); ok {
+				st.Services = append(st.Services, ServiceLink{Peer: s.Peer, Service: s.Service, URL: fmt.Sprintf("http://127.0.0.1:%d%s", port, s.Path)})
+			}
+		}
 	}
 	return st
 }

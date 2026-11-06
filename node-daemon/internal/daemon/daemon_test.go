@@ -383,6 +383,9 @@ func TestTestEndpoint(t *testing.T) {
 	if body.OK || body.Error == nil {
 		t.Fatalf("test before joining = %+v", body)
 	}
+	if links := hs.state().Services; len(links) != 0 {
+		t.Fatalf("services before joining = %+v", links)
+	}
 
 	hs.do("POST", "/api/setup", `{"name":"laptop"}`, nil)
 	hs.do("POST", "/api/join", `{"tailnet":"demo.eth"}`, nil)
@@ -391,6 +394,9 @@ func TestTestEndpoint(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	for hs.lastNode() == nil && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
+	}
+	if links := hs.state().Services; len(links) != 1 || links[0] != (ServiceLink{Peer: "gateway", Service: "health", URL: "http://127.0.0.1:4242/"}) {
+		t.Fatalf("approved state services = %+v", links)
 	}
 	var gotURL string
 	ok := hs.d.Test(context.Background(), "", "", func(_ context.Context, u string) (int, error) { gotURL = u; return 200, nil })

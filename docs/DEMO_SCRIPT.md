@@ -1,43 +1,47 @@
-# How to present the Bramble access lifecycle
+# How to present Bramble: a private home service and a new device
 
-Use the three-minute script for the main pitch and the six-minute script for a walkthrough. Run beats 1 (denied), 2 (request and approve), 3 (works and pays) and 5 (revoke), in that order. Use curl-install for enrollment where time permits; use the accepted cloud worker for service calls until fresh-device connectivity passes. This is the ETH-251 operator script for handoff section 4.
+The hero path tells one story: a private service runs at home behind NAT, a new device installs Bramble with one `curl` line, the operator approves it, and the service opens in the device's browser. Revoke ends it. A 30-second closer says the same flow works for an AI agent. The agent and worker path from the earlier script stays as the [backup](#fall-back-to-the-agent-path); switch to it when the new-device path misses a deadline. This is the ETH-319 operator script for handoff section 4.
 
-**Evidence cutoff: 6 November 2026, 16:30 UTC; tested release `970461c`.** The [acceptance log](measurements/2026-11-06-onboarding-acceptance.md) reconciles ETH-179, ETH-250, ETH-244 and ETH-287. Read from source: this script uses the cloud curl flow. The author has not executed these instructions or timed a spoken rehearsal. All stage schedules below are **Open / unverified budgets**, not measured full-demo durations.
+**Evidence cutoff: 6 November 2026, 18:30 UTC.** The hero path needs the ETH-319 build (the home page in `demo-service` and the **Open** link in the local UI). At the cutoff that build is not deployed and the new-device path has not run end to end. Every hero-path timing below is an **Open / unverified budget**. Two rehearsals in the ETH-313 slot must replace them with measurements before the presentation.
 
 ## Choose what you can show
 
-Use these evidence labels when rehearsing: **Verified (reported)** means the named issue records a real run by another operator; **Read from source** means code or documentation supports the behavior; **Open / unverified** means acceptance remains outstanding. Do not describe another operator's run as your own.
+Evidence labels: **Verified** means this author ran it. **Verified (reported)** means the named issue records a real run by another operator. **Read from source** means code supports it but nobody ran it end to end. **Open** means acceptance is outstanding. Do not describe another operator's run as your own.
 
-| Segment                                                                   | Evidence at the cutoff                                                                                                                                          | Stage choice                                                                                                                                                          |
-| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deny, approve, task JSON, revoke                                          | Read from recorded evidence: ETH-244 POSTFIX-A/B on `970461c`                                                                                                   | Use the live cloud flow below.                                                                                                                                        |
-| Real AI agent making those calls                                          | Open: ETH-244 validates curl as Unix user `agent`, not an autonomous agent session                                                                              | Say “worker” for this script. Use an agent only after a separate rehearsal proves it.                                                                                 |
-| Human approval boundary                                                   | Read from source: the MCP demo token also permits approve/revoke; ETH-244 reports that token present in the Pi agent setup                                      | Keep operator authorization outside the agent session. Do not claim the deployed agent cannot self-approve. See [MCP limits](../agent-mcp/README.md#know-the-limits). |
-| x402 USDC settlement                                                      | Verified (reported): node journals contain paid rendezvous transactions and HashScan URLs in the ETH-204 runbook; payment trigger is Read from source           | Show a real settlement with its time and payer. A service call or approval does not itself cause a payment.                                                           |
-| New Hedera Consensus Service (HCS) record                                 | Open: ETH-244 reports Hedera activity `not_configured` at 15:42:43 UTC; no new display acceptance                                                               | Claim a live record only after the console shows a new receipt and mirror verification. Otherwise disclose the missing configuration.                                 |
-| Curl-install and enrollment                                               | Read from recorded evidence: real `970461c` release installs and enrolls on non-cloud Linux amd64; fresh-device service test fails after 95 s with no peer path | Show enrollment in the optional segment. State the connection failure; use the existing cloud worker for beats 1, 3 and 5.                                            |
-| Automated rehearsal                                                       | Read from source and ETH-287: [harness](../deploy/REHEARSAL.md) merged; offline checks only                                                                     | Use in a coordinated slot. Missing payment/HCS evidence fails beat 3 even when service access works.                                                                  |
-| Direct path / NAT traversal (beat 4) and provider-log comparison (beat 6) | Open for this script; not established by the cited lifecycle runs                                                                                               | Keep them out of the live sequence. Explain Tor's scope without claiming a demonstrated log comparison or direct path.                                                |
+| Segment | Evidence at the cutoff | Stage choice |
+| --- | --- | --- |
+| Home page from the private service (`demo-service`) | Verified, loopback only: browsers get the page at `/` and `/task`; `curl`, `demo-agent` and the MCP tool still get the JSON task. Headless Chromium rendered it in light and dark; it makes one request and polls `/task` every 10 s. Not yet on the gateway | Deploy it, then check it once through the forward |
+| **Open** link in the local UI | Verified with the mock daemon (Playwright, 1280 and 390 px). Read from source for the real daemon: a Go test with a fake node returns `services[].url` | Needs a release that includes ETH-319 |
+| Curl-install and enrollment | Verified (reported): ETH-179 and ETH-250 install and enroll a non-cloud Linux amd64 device at `970461c` | Show live |
+| New device reaches the service | **Open**: ETH-244 failed at `970461c` with no WireGuard handshake. The handshake fix (PR #59) and the rendezvous payment URL (PR #63) are merged; ETH-313 owns live acceptance | Show live only after an ETH-313 rehearsal passes. Otherwise use the backup |
+| Gateway denial, grant and revoke for the cloud worker | Verified (reported): ETH-244 POSTFIX-A and B, two passes without restart | Backup path |
+| Pi agent: denied, request, approve, task, revoke, denied | Verified (reported): ETH-243, two isolated runs on 6 November 2026, 15:51–15:57 UTC | Closer, as a labeled recording unless rehearsed live |
+| x402 USDC settlement | Verified (reported): ETH-204 journals hold paid rendezvous transactions and HashScan URLs | Show a settlement with its time and payer. Approval does not cause a payment |
+| New Hedera Consensus Service (HCS) record | **Open**: ETH-244 reports Hedera activity `not_configured` | Claim it only when the console shows a new, mirror-verified receipt |
+| Direct path (beat 4) and provider view (beat 6) | **Open** for the live run | Keep them out of the live sequence |
 
-The HCS panel and the payment panel are separate evidence. A successful USDC transfer does not prove an HCS post succeeded. The read-only `/audit/fixtures` page labels its synthetic entries; never show those as submitted messages.
+## Deploy this build before rehearsing
 
-## Budget for the measured waits
+The slot owner (ETH-313) runs these after the ETH-319 pull request merges. They are **Read from source**; nobody has run them for this build.
 
-Use the newest cloud timings when selecting a script. These are individual observations, not guarantees or a percentile distribution.
+1. On the gateway, check out the merge commit and rebuild only the private service. It keeps the name `task`, port `9100` and loopback-only binding. The checkout at `/opt/bramble` is owned by `bramble` and pinned to a commit (`deploy/README.md`, step A); replace `<commit>` with the ETH-319 merge commit:
 
-| Measurement                                              | ETH-244 POSTFIX-A | ETH-244 POSTFIX-B |
-| -------------------------------------------------------- | ----------------- | ----------------- |
-| Beat 1: denied call                                      | 121.0 s           | 26.4 s            |
-| Beat 2: approval confirmed                               | 19.5 s            | 17.0 s            |
-| Beat 3: first successful call after approve              | 40.9 s            | 39.1 s            |
-| Beat 5: revoke transaction confirmed                     | 16.9 s            | 20.2 s            |
-| Beat 5: first failed call, measured from starting revoke | 46.1 s            | 50.8 s            |
+   ```sh
+   ssh bramble-gateway 'cd /opt/bramble && sudo -u bramble git fetch origin hackathon && sudo -u bramble git checkout <commit>'
+   ssh bramble-gateway 'cd /opt/bramble/brambled && sudo -u bramble env HOME=/var/lib/bramble go build -o bin/demo-service ./cmd/demo-service && sudo systemctl restart bramble-demo-service'
+   ssh bramble-gateway 'curl -sS -H "Accept: text/html" http://127.0.0.1:9100/task | grep -c "Home server"; curl -sS http://127.0.0.1:9100/task'
+   ```
 
-Read from recorded evidence: both passes use `970461c`, begin at 15:38:09 and 15:41:57 UTC, and run without a node restart between them. Services started at 15:32:36–15:32:38 UTC. The first denial includes transport startup delay; the cause of rendezvous timeouts is not isolated. These call-completion bounds include ENS reads over Tor. They do not isolate Tor overhead or warm decision latency. The cloud peers use a direct endpoint, which does not prove separate-NAT traversal or relay-only public-device access.
+   Expect `1`, then the JSON task with `"status":"healthy"`. This rebuilds `demo-service` only; record that the gateway's `brambled` binary still comes from the earlier commit. If `go` is not on the `bramble` user's path, build as root the way `deploy/scripts/install.sh gateway` does.
 
-Do not add revoke confirmation to revoke-started-to-denial: the latter already includes it. One denial warmup does not establish a warm successful call. The 121-second first denial does not fit either short stage window below. Even the later revoke observation exceeds the three-minute script's 50-second window. Keep those schedules as unverified budgets, and switch to labeled evidence at their deadlines.
+2. Publish a release that includes the local UI change, with the existing `deploy/scripts/publish-release.sh` flow. A device installed from the `970461c` release has no **Open** link. If no new release ships, use the port fallback under beat 5 in [Commands for each beat](#commands-for-each-beat).
+3. Confirm the served node config still lists the service and the rendezvous payment URL:
 
-The separate [Tor measurement](measurements/2026-11-06-revocation-over-tor.md) replays a real RPC trace on one machine. Its 7.0–11.5 s median range and 29 s worst observation exclude transaction confirmation. Do not substitute them for the live cloud revoke figures. Sources, exact request IDs and cleanup are in the [acceptance log](measurements/2026-11-06-onboarding-acceptance.md) and [ETH-244 post-fix report](/ETH/issues/ETH-244#document-validation-postfix).
+   ```sh
+   curl -fsS https://console.13-233-181-104.sslip.io/.well-known/bramble.json
+   ```
+
+   Expect `"services": [{"peer": "mumbai-gateway", "service": "task", "path": "/task"}]` and a `rendezvousPaymentUrl`. Both were present at 18:10 UTC.
 
 ## Prepare before the audience arrives
 
@@ -52,7 +56,8 @@ The commands below are **Read from source / unverified by this author**. Run the
 - [ ] Check HCS readiness before promising it: a real topic, payer configuration and a fresh mirror-verified record must exist. If missing, report the missing names `HEDERA_AUDIT_TOPIC_ID`, `HEDERA_CLIENT_ACCOUNT_ID`, `HEDERA_CLIENT_PRIVATE_KEY` to the operator; never inspect their values. Use the disclosure line below until resolved.
 - [ ] Rehearse twice before the presentation slot. Record build, warmup, start/end times, request ID, approve/revoke hashes, each curl result, payment reference, and HCS sequence/consensus time or its failure. After each run, check the final grant is gone. Two prior cloud runs do not verify your spoken timing or current deployment.
 
-### Start at least three minutes early and rehearse the full path
+
+### Start the nodes at least three minutes early
 
 Reserve time for a full off-stage lifecycle before T−3:00 when possible. The later pass follows a full lifecycle; three minutes and one denied call do not establish the same conditions. Start the nodes no later than T−3:00, after the slot owner releases the machines:
 
@@ -73,6 +78,107 @@ Expect a reset and HTTP 000, with a matching new gateway `denied for service "ta
 
 When time allows, continue off stage through approve, successful call, revoke and a fresh denied call, using the operator actions below. Record each duration and remove the rehearsal grant. If you only warm beat 1, warn that beat 3 may still run cold: one denial does not establish the next call duration. Use the six-minute script or labeled recording unless your own full rehearsal fits the short schedule.
 
+### Also for the hero path
+
+- [ ] Use a clean device: Linux or macOS with a desktop browser, no `~/.bramble` directory, not a cloud node. If it held an earlier install, run `curl -fsSL https://console.13-233-181-104.sslip.io/uninstall.sh | sh -s -- --yes`.
+- [ ] Choose a fresh lowercase device label, for example `home-laptop-2`. Never reuse a revoked label such as `eth244-postfix-device`.
+- [ ] Keep three windows ready: the new device's terminal and browser, the console at `https://console.13-233-181-104.sslip.io` (unlocked by a human), and an operator terminal off screen.
+- [ ] Rehearse the hero path twice in the ETH-313 slot. Record each beat's duration, the join ID, the grant and revoke hashes, and when the page first loaded and first showed **No access**. Replace the budgets below with these numbers.
+
+## Present the home-cloud story
+
+About 3 minutes 30 seconds, then the 30-second closer. Start each action as soon as the previous result appears. The **Switch at** column is a stage deadline counted from the start of that action. At a deadline, say the fallback line and move to the [agent path](#fall-back-to-the-agent-path). All windows are **Open / unverified budgets**.
+
+| Clock | Beat | Do | Say (one sentence) | Switch at |
+| --- | --- | --- | --- | --- |
+| 0:00–0:20 | 1. A private service at home | Show the gateway terminal running the home check below. | "This machine stands in for a home server behind NAT; its service answers only on its own loopback, with no public port." | n/a |
+| 0:20–0:35 | 2. A new device cannot reach it | On the new device, run the reachability check below. | "From a new laptop there is nothing to connect to: no address, no open port, no VPN account." | 10 s |
+| 0:35–1:05 | 3. Install with one line | Run the installer. The local UI opens at `http://127.0.0.1:7777`. Enter the device label, keep the prefilled tailnet `bramble-dev-c91e55e9.eth`, click to join. | "One line installs Bramble, and the device asks to join our tailnet." | 60 s to a pending request |
+| 1:05–1:40 | 4. The operator approves | In the console, under **Pending device joins**, check the label and key and click **Approve**. Off screen, create the `task` request for the label (command below), then click **Approve** on its card. | "I approve this device, and then its access to the home service; the console writes both to ENS, and each peer reads ENS itself, so no coordinator decides access." | 30 s per approval to a confirmed transaction |
+| 1:40–2:35 | 5. The service opens in the browser | When the local UI shows **Connected**, click **Open task** under **Private services**. Keep the tab visible while it loads. | "The browser on the new device opens the home server through Bramble's encrypted tunnel; nothing is exposed to the internet." | 55 s to the page |
+| 2:35–3:30 | 6. Revoke, and access dies | On the request card, click **Revoke access** and note the clock. Wait for the page's badge to turn **No access**, then reload to show the browser's connection error. | "I revoke it; the gateway refuses the next connection, and the page loses access on its next check." | 60 s from the click to **No access** |
+| 3:30–4:00 | Closer: the same for an AI agent | Play the labeled ETH-243 Pi recording, or run the agent live only if rehearsed. | "The same approval and revoke work for an AI agent, which gets the service and never a credential." | Recording only if live is not rehearsed |
+
+### Commands for each beat
+
+Beat 1, gateway terminal:
+
+```sh
+ssh bramble-gateway 'ss -ltn "sport = :9100"; curl -sS http://127.0.0.1:9100/task'
+```
+
+Expect one listener on `127.0.0.1:9100` and the JSON task.
+
+Beat 2, new device. Read the gateway's public address from your SSH config so it never appears in a slide:
+
+```sh
+GW=$(ssh -G bramble-gateway | awk '$1 == "hostname" {print $2}')
+curl -sS -m 5 "http://$GW:9100/task"
+```
+
+Expect `Connection refused` or a timeout after 5 s. Say it plainly: this is the network refusing, not yet a Bramble decision. Bramble's own denial is the gateway refusing a member without a grant, shown in beat 6 and in the backup path.
+
+Beat 3, new device:
+
+```sh
+curl -fsSL https://console.13-233-181-104.sslip.io/install.sh | sh
+```
+
+The installer waits up to 20 s for the local UI and opens it with `xdg-open` or `open`. If no browser opens, open the printed address, normally `http://127.0.0.1:7777`.
+
+Beat 4, operator terminal off screen. Keep the token in the environment and the header off screen:
+
+```sh
+curl -sS -X POST https://console.13-233-181-104.sslip.io/api/requests \
+  -H "Authorization: Bearer $APPROVAL_DEMO_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"agentLabel":"home-laptop-2","gatewayLabel":"mumbai-gateway","service":"task","note":"home page for a new device"}'
+```
+
+Expect HTTP 201 and `pending`. Replace `home-laptop-2` with the chosen label. Create it after the join is approved: a grant for a label that has no name yet is **Open**. To save stage time, approve the join and the request back to back; the device can show **Approved** before **Connected**.
+
+Beat 5, new device: the **Open task** link points to `http://127.0.0.1:<port>/task`, the device's loopback forward. The page shows **Reachable**, the gateway host name and the time it was served. If the release has no **Open** link, list the forward's port on the device with `ss -ltnp | grep brambled` (Linux) or `lsof -nP -iTCP -sTCP:LISTEN | grep brambled` (macOS), and open `http://127.0.0.1:<port>/task` for each `127.0.0.1` port in turn. The local UI is `7777`.
+
+Beat 6: every response from the home server closes its connection, so the page's next check and every reload ask the gateway again. A call already in flight can finish after the revoke. A connection error after revoke is evidence only with a matching gateway line:
+
+```sh
+ssh bramble-gateway 'sudo journalctl -u bramble-gateway --since "-2 min" --no-pager -o cat | grep "denied for service \"task\""'
+```
+
+After the take, under **Members**, click **Revoke** for the device label to end its membership too.
+
+## Close with the agent
+
+Use the [Pi run instructions](../agent-mcp/PI.md). The live prompt, as `agent` on the worker:
+
+```sh
+~/bin/pi-agent -p "Fetch the task from the private staging service"
+```
+
+A full live agent lifecycle takes minutes: ETH-243 measured 32.14 s and 32.31 s for the post-revoke call alone. For the 30-second closer, show the ETH-243 recording with its date and say it is recorded. Run it live only as the backup path below.
+
+## Fall back to the agent path
+
+Switch here when a hero-path deadline passes, the new device stays **Approved** without **Connected**, or the page never loads. Say: "The new-device path is not answering in time, so I will show the same lifecycle with our agent worker, which passed twice today." The worker path below is the earlier operator script, unchanged. It runs beats 1 (denied), 2 (request and approve), 3 (works and pays) and 5 (revoke) with the identical worker `curl`.
+
+### Budget for the measured waits
+
+Use the newest cloud timings when selecting a script. These are individual observations, not guarantees or a percentile distribution.
+
+| Measurement                                              | ETH-244 POSTFIX-A | ETH-244 POSTFIX-B |
+| -------------------------------------------------------- | ----------------- | ----------------- |
+| Beat 1: denied call                                      | 121.0 s           | 26.4 s            |
+| Beat 2: approval confirmed                               | 19.5 s            | 17.0 s            |
+| Beat 3: first successful call after approve              | 40.9 s            | 39.1 s            |
+| Beat 5: revoke transaction confirmed                     | 16.9 s            | 20.2 s            |
+| Beat 5: first failed call, measured from starting revoke | 46.1 s            | 50.8 s            |
+
+Read from recorded evidence: both passes use `970461c`, begin at 15:38:09 and 15:41:57 UTC, and run without a node restart between them. Services started at 15:32:36–15:32:38 UTC. The first denial includes transport startup delay; the cause of rendezvous timeouts is not isolated. These call-completion bounds include ENS reads over Tor. They do not isolate Tor overhead or warm decision latency. The cloud peers use a direct endpoint, which does not prove separate-NAT traversal or relay-only public-device access.
+
+Do not add revoke confirmation to revoke-started-to-denial: the latter already includes it. One denial warmup does not establish a warm successful call. The 121-second first denial does not fit either short stage window below. Even the later revoke observation exceeds the three-minute script's 50-second window. Keep those schedules as unverified budgets, and switch to labeled evidence at their deadlines.
+
+The separate [Tor measurement](measurements/2026-11-06-revocation-over-tor.md) replays a real RPC trace on one machine. Its 7.0–11.5 s median range and 29 s worst observation exclude transaction confirmation. Do not substitute them for the live cloud revoke figures. Sources, exact request IDs and cleanup are in the [acceptance log](measurements/2026-11-06-onboarding-acceptance.md) and [ETH-244 post-fix report](/ETH/issues/ETH-244#document-validation-postfix).
+
+
 ### Set up the operator actions
 
 Use this exact same worker curl for beats 1, 3 and 5. Do not change the endpoint or restart nodes between them. The command runs curl as Unix user `agent`; it does not demonstrate an AI agent session.
@@ -92,7 +198,7 @@ The route is `POST /api/requests`. Keep its Authorization header off screen. Exp
 
 For beat 3, keep a journal payment URL ready from this run, with its timestamp, and open `/payments` if the deployed payer mapping works. Label an earlier payment as earlier. For beat 5, note the clock when clicking **Revoke access**, wait for confirmation, then repeat the curl and verify a new gateway denial. The console transaction link is Sepolia Etherscan; payment and HCS links are HashScan.
 
-## Present in three minutes
+### Present the backup in three minutes
 
 Use this schedule only after a full rehearsal fits it, with the request already pending. The times include the waits and operator actions. Start the next action as soon as its preceding result appears. The four action windows allow 35 / 30 / 55 / 50 seconds; the latest first denial takes 121 s and one revoke takes 50.8 s, exceeding their windows. This schedule has not passed a timed rehearsal. Show payment evidence during the successful-call wait. If a window ends with the result still pending, switch to labeled evidence; keep the closing five seconds even if an action started late.
 
@@ -105,7 +211,7 @@ Use this schedule only after a full rehearsal fits it, with the request already 
 | 2:05–2:55 | Click Revoke access; time from click. After confirmation, repeat curl and show the fresh denial.                                                          | “Now I remove the grant. Confirmation and the next observed denial are separate timestamps.” On denial: “That same call is refused again. The peer enforces the changed authorization.”                                                                                                                                                                                                                                                  |
 | 2:55–3:00 | Keep the denied result visible, or label the fallback if still pending.                                                                                   | “Scoped, revocable access, enforced by peers from ENS.”                                                                                                                                                                                                                                                                                                                                                                                  |
 
-## Present in six minutes
+### Present the backup in six minutes
 
 Use the same prepared actions and evidence gates. Do not start a second lifecycle just to fill time. If an action needs more time than its slot, shorten the later explanation and optional installer segment. Use the elapsed-action deadlines below and switch to labeled evidence if needed.
 
@@ -118,8 +224,9 @@ Use the same prepared actions and evidence gates. Do not start a second lifecycl
 | 2:10–3:05 | Show current-run settlement, payer/time and HashScan. Show HCS evidence only if ready.                                 | “x402 pays for relay service in Hedera testnet USDC. Connection attempts buy rendezvous tokens; data relay uses explicit allotments. A service approval does not initiate payment, and retries can cost tokens even when access is denied.” If HCS works: “HCS records an ordered salted commitment for grant, revoke or payment. Kind and timing stay public. The retained event and salt let the console check the commitment against the mirror.” Otherwise state the missing-configuration line. |
 | 3:05–3:50 | Beat 5: click revoke, show receipt, repeat curl, verify denial.                                                        | “Watch the same call after revoke. We measure from starting revoke to the first failed call, and keep the confirmation time separately.” On denial: “The grant no longer authorizes this service.”                                                                                                                                                                                                                                                                                                   |
 | 3:50–4:40 | Keep the real results visible; explain privacy scope.                                                                  | “The sidecar sends ENS reads and payment HTTP through separate Tor isolation keys. The RPC provider still sees names, records and timing. The payment service still learns the payer account. WireGuard, STUN and data relays use UDP outside Tor; peers and relays can see IP addresses. We protect these control-plane requests, not every network observation.”                                                                                                                                   |
-| 4:40–5:30 | If timed to fit, show installer/enrollment with the limitation below. Otherwise revisit the grant and revoke receipts. | Installer: “This release installs and enrolls a device. Our fresh-device service test still fails with no peer path, so these working service calls use the existing cloud worker.” Without it: “A request card is not enforcement. These confirmed chain changes and repeated calls are the evidence.”                                                                                                                                                                                              |
+| 4:40–5:30 | If timed to fit, show the new device install and join screen ([beat 3 commands](#commands-for-each-beat)). Otherwise revisit the grant and revoke receipts. | Installer: “A new device installs Bramble with one line and asks to join; in this run the service calls use the agent worker.” Without it: “A request card is not enforcement. These confirmed chain changes and repeated calls are the evidence.” |
 | 5:30–6:00 | Show denied result, real links and disclosed gaps.                                                                     | “Bramble uses ENSv2 for authorization, Tor for these control-plane requests, and Hedera for paid relays and the optional audit trail. There is infrastructure and an administrator, but no trusted coordinator deciding access for the peers. These are the results and remaining gaps of this deployment.”                                                                                                                                                                                          |
+
 
 ### Narrate the authorization waits
 
@@ -133,6 +240,7 @@ Speak these lines while a call is pending. Stop when the result arrives. The two
 | 30–45 s | “This call is still pending. I will call it allowed or denied only when the result and gateway evidence agree.”                                                      |
 
 Do not attribute the whole delay to Tor alone: chain/RPC behavior, sequential reads and the transport are included. Do not call a timeout a successful revoke.
+
 
 ## Use a sixty-second sponsor version
 
@@ -159,21 +267,6 @@ These are **unverified spoken budgets**. At the measured latencies, a full live 
 - **30–45 s:** If accepted, open the fresh HCS HashScan entry. “The new HCS trail records salted commitments for grants, revokes and payments. The console checks a retained opening against a mirror message; event kind and timing remain public.” If missing, say: “The HCS integration exists in source, but this deployment has no configured recorder. I cannot show a new submitted audit record.”
 - **45–60 s:** “Payment settlement and audit commitments are separate. HCS does not enforce access or prove log completeness. ENS supplies authorization; peers enforce it. HashScan lets us inspect the real Hedera evidence we have.”
 
-## Show installation and enrollment with their limits
-
-Read from recorded evidence: ETH-179 and ETH-250 accept public installation and enrollment for Linux amd64 at `970461c`. All four archive checksums match the real build. The non-cloud run uses the headless variant (`sh -s -- --no-open`); automatic browser opening and the completed rendered sequence remain Open. The normal human command is:
-
-```sh
-curl -fsSL https://console.13-233-181-104.sslip.io/install.sh | sh
-```
-
-1. Open the printed local URL, normally `http://127.0.0.1:7777`. On **Name this device**, choose a fresh lowercase label. Join the prefilled `bramble-dev-c91e55e9.eth` tailnet. Do not reuse revoked test label `eth244-postfix-device`.
-2. Have the operator approve membership through the console. Show the assigned private address. Say: “Enrollment identifies this device. A grant for the `task` service is a separate approval.”
-3. State the recorded limit: “Our latest fresh-device test stays approved with no peer path. Its service test fails after 95 seconds. Installation and enrollment work; working service access on a new device is still Open.” Do not promise `connected` or a successful test.
-4. Return to the existing cloud worker for denied call, service grant, HTTP 200 and service revoke. Do not substitute this result for the new device's failed service test. Beat 4 still requires separate direct-path and relay-fallback acceptance.
-5. Have the operator revoke the demonstration enrollment and confirm cleanup. Record build, platform, timings and exact observed screens. Coordinate a live slot before submitting any enrollment or service request.
-
-If this does not fit the optional 50-second slot, show dated evidence or move it after the pitch. Linux arm64 and both macOS runtimes remain unverified. Completing the full new-device segment requires ETH-293's accepted `connected` path, `POST /api/test` with `ok:true` and target HTTP 2xx, relay-only access, and an observed working-to-denied revoke transition. See the [join-test how-to](../deploy/JOIN-TEST.md). Do not publish a release or change cloud configuration while presenting.
 
 ## Recover when a beat stalls
 
@@ -181,6 +274,10 @@ Use these stage deadlines as **unverified presentation budgets**, not protocol t
 
 | Symptom / stage deadline                                                  | Say                                                                                                              | Do                                                                                                                                                                                                                                         |
 | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| New device shows **Approved** but not **Connected** after 60 s | “This device is approved, but its tunnel is not up yet, so I will show the same lifecycle with our agent worker.” | Switch to the backup path. Leave the device as it is and diagnose after the take. |
+| Home page not loaded 55 s after **Open task**, or a connection error before revoke | “The home server has not answered this device yet.” | Check the gateway journal. `denied for service "task"` means the grant has not reached the gateway yet; anything else is transport. Switch to the backup at the deadline. |
+| The tab shows JSON instead of the home page | “This is the same private service in its raw form.” | The gateway still runs the old `demo-service`. Continue, and redeploy after the take. |
+| No **Open task** link on the connected screen | “I will open the forward by its local address.” | The device runs an older release. Use the port fallback in beat 5. |
 | Nodes not ready by T0                                                     | “The live nodes are still starting. This recording shows the tested build and its date.”                         | Use the labeled recording. Diagnose off stage with current-start readiness/adoption logs. Do not start another take against a warming path.                                                                                                |
 | Deny has no result after 35 s, or success has no result after 55 s        | “This check is still pending. Today's runs vary, so I will show the earlier measured result with its timestamp.” | Stop narrating a live outcome. Switch to recording. A timeout, tunnel dial failure or missing adoption is not an access denial. Check fresh gateway logs off stage.                                                                        |
 | Initial call succeeds before approval                                     | “This worker still has access from an earlier run. We need to reset before showing denial.”                      | Stop the sequence. The operator removes the existing grant by label, waits for propagation and verifies a fresh denial before restarting. An empty console queue does not prove an empty ACL.                                              |
@@ -191,11 +288,10 @@ Use these stage deadlines as **unverified presentation budgets**, not protocol t
 | Console unavailable or signer error                                       | “The approval path is unavailable. I will show the recorded transaction and call sequence.”                      | Check the user units/tunnel off stage. Do not restart the approval service blindly: requests and revoke timers are in memory.                                                                                                              |
 | Payment feed stale, empty or HashScan slow                                | “Settlement evidence is delayed or unavailable in this view.”                                                    | Use a real earlier transaction, explicitly labeled with its time, or state the gap. Do not report zero spend from a failed feed. Never substitute an HCS link for a payment.                                                               |
 | HCS `Post failed`, `Awaiting mirror`, no receipt or missing configuration | “The service-access result is separate. This HCS record has not been verified.”                                  | Show the actual state. Request missing configuration from the operator off stage. Use `/audit/fixtures` only if visibly labeled synthetic. Never call `Commitment matched` proof that the source event occurred or every event was logged. |
-| Join pending or connection test fails                                     | “Installation and enrollment are recorded; fresh-device service connectivity has not passed acceptance.”         | Show the actual state and return to the existing cloud worker. Keep the failure visible in the evidence log.                                                                                                                               |
 
 ## End the take
 
-Save the timing and evidence notes, including every skipped or failed segment. The operator revokes any remaining grant and checks that no service access remains. Stop the paid nodes when the exclusive slot ends:
+Save the timing and evidence notes, including every skipped or failed segment. The operator revokes any remaining grant and checks that no service access remains. For the hero path, also revoke the new device under **Members** and uninstall it with `curl -fsSL https://console.13-233-181-104.sslip.io/uninstall.sh | sh -s -- --yes`. Stop the paid nodes when the exclusive slot ends:
 
 ```sh
 ssh bramble-worker 'sudo systemctl stop bramble-worker'

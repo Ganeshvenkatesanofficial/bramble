@@ -108,6 +108,28 @@ export function ConnectedScreen({ state, refresh }: { state: BrambleState; refre
         )}
       </div>
 
+      {state.services.length > 0 && (
+        <section aria-labelledby="services-title">
+          <div className="section-heading">
+            <h2 id="services-title">Private services</h2>
+            <span className="muted">The other device decides each visit</span>
+          </div>
+          <ul className="service-list">
+            {state.services.map((link) => (
+              <li key={`${link.peer}/${link.service}`} className="panel service">
+                <div className="peer-id">
+                  <strong className="mono wrap">{link.service}</strong>
+                  <span className="muted mono">on {link.peer}</span>
+                </div>
+                <a className="open-link" href={link.url} target="_blank" rel="noopener noreferrer">
+                  Open {link.service}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section aria-labelledby="peers-title">
         <div className="section-heading">
           <h2 id="peers-title">Devices on this network</h2>
