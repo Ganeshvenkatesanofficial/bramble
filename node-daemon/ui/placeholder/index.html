@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bramble</title>
+    <style>
+      body {
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+        max-width: 40rem;
+        margin: 3rem auto;
+        padding: 0 1rem;
+        color: #1f2933;
+      }
+      .muted {
+        color: #616e7c;
+      }
+      .error {
+        border-left: 4px solid #c0392b;
+        padding: 0.5rem 1rem;
+        background: #fdf2f2;
+      }
+      form,
+      section {
+        margin: 1.5rem 0;
+      }
+      input {
+        font: inherit;
+        padding: 0.4rem;
+      }
+      button {
+        font: inherit;
+        padding: 0.4rem 1rem;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      td,
+      th {
+        text-align: left;
+        padding: 0.3rem 0.5rem;
+        border-bottom: 1px solid #e4e7eb;
+      }
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Bramble</h1>
+    <p class="muted">This is the placeholder page. The full interface replaces it in release builds.</p>
+    <p>
+      Device: <strong id="name">…</strong> · Fingerprint:
+      <code id="fingerprint">…</code>
+    </p>
+    <p>Status: <strong id="phase">…</strong></p>
+    <div id="error" class="error" hidden></div>
+
+    <form id="setup" hidden>
+      <label>Device name <input name="name" required /></label>
+      <button>Save</button>
+    </form>
+
+    <form id="join" hidden>
+      <label>Tailnet <input name="tailnet" required /></label>
+      <button>Request to join</button>
+    </form>
+
+    <section id="connected" hidden>
+      <p>Mesh address: <code id="meshIp"></code></p>
+      <table>
+        <thead>
+          <tr>
+            <th>Peer</th>
+            <th>Address</th>
+            <th>Path</th>
+          </tr>
+        </thead>
+        <tbody id="peers"></tbody>
+      </table>
+      <p>
+        <button id="test" type="button">Test connection</button>
+        <span id="testResult"></span>
+      </p>
+    </section>
+
+    <p><button id="leave" type="button" hidden>Leave tailnet</button></p>
+
+    <script>
+      const $ = (id) => document.getElementById(id)
+      const post = (url, body) =>
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body || {}),
+        }).then((r) => r.json())
+
+      function render(s) {
+        $('name').textContent = s.name || '(not set)'
+        $('fingerprint').textContent = s.fingerprint
+        $('phase').textContent = s.phase + (s.tailnet ? ' · ' + s.tailnet : '')
+        $('error').hidden = !s.error
+        if (s.error) $('error').textContent = s.error.message + ' ' + s.error.nextStep
+        const base = s.phase
+        $('setup').hidden = !(base === 'setup' || base === 'ready' || base === 'denied')
+        $('join').hidden = !(base === 'ready' || base === 'denied' || (base === 'error' && !s.joinId))
+        if (!$('join').hidden && !$('join').tailnet.value && s.defaultTailnet) {
+          $('join').tailnet.value = s.defaultTailnet
+        }
+        $('connected').hidden = !(base === 'approved' || base === 'connected')
+        $('leave').hidden = !s.tailnet
+        $('meshIp').textContent = s.meshIp || ''
+        $('peers').replaceChildren(
+          ...s.peers.map((p) => {
+            const tr = document.createElement('tr')
+            for (const v of [p.label, p.meshIp, p.path]) {
+              const td = document.createElement('td')
+              td.textContent = v
+              tr.append(td)
+            }
+            return tr
+          })
+        )
+      }
+
+      async function refresh() {
+        try {
+          render(await fetch('/api/state').then((r) => r.json()))
+        } catch {
+          $('phase').textContent = 'Bramble is not running'
+        }
+      }
+
+      $('setup').addEventListener('submit', async (e) => {
+        e.preventDefault()
+        await post('/api/setup', { name: e.target.name.value })
+        refresh()
+      })
+      $('join').addEventListener('submit', async (e) => {
+        e.preventDefault()
+        await post('/api/join', { tailnet: e.target.tailnet.value })
+        refresh()
+      })
+      $('leave').addEventListener('click', async () => {
+        await post('/api/leave')
+        refresh()
+      })
+      $('test').addEventListener('click', async () => {
+        $('testResult').textContent = 'Testing… this can take up to a minute.'
+        const r = await post('/api/test')
+        $('testResult').textContent = r.ok
+          ? `OK, HTTP ${r.status} in ${r.ms} ms`
+          : r.error
+            ? r.error.message + ' ' + r.error.nextStep
+            : 'Failed'
+      })
+
+      refresh()
+      setInterval(refresh, 1000)
+    </script>
+  </body>
+</html>
