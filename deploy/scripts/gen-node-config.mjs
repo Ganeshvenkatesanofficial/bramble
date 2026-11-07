@@ -25,6 +25,7 @@ export const WANTED = [
   'BRAMBLE_RELAY_PEERS',
   'BRAMBLE_APPROVAL_URL',
   'BRAMBLE_PUBLIC_SERVICES',
+  'BRAMBLE_PUBLIC_PEERS',
 ]
 
 export function parseEnv(text) {
@@ -150,6 +151,11 @@ export function buildConfig(env, version) {
   }
   const relayPeers = list(env.BRAMBLE_RELAY_PEERS).map((v) => label(v, 'relayPeers entry'))
   if (relayPeers.length) config.relayPeers = relayPeers
+
+  // Limits a device to these peers. Each ENS read goes over Tor, so reading every
+  // member of the tailnet delays a new device's first connect by minutes.
+  const peers = list(env.BRAMBLE_PUBLIC_PEERS).map((v) => label(v, 'peers entry'))
+  if (peers.length) config.peers = peers
 
   // peer:service[:/path], comma-separated
   const services = list(env.BRAMBLE_PUBLIC_SERVICES).map((entry) => {
