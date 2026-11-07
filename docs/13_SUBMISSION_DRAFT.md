@@ -80,7 +80,7 @@ CROPS, with the dependencies we disclose ([README](../README.md#crops)):
 
 State these in the form; they are true today.
 
-- Tor-backed decisions take time. Reported 6 Nov cloud observations: about 27 s to deny and 37–44 s to succeed. We have not isolated Tor's share.
+- Tor-backed decisions take time. Measured 7 Nov on the live cloud setup: about 25 s per gateway decision, 24 s to deny and 35–41 s to succeed. A fresh device reached its first task result 204 s after approval began (one run). Revoke to first denied call took 33 s (worker) and 42 s (fresh device). We have not isolated Tor's share. Batching the reads (`core-sol/eth-267-fast-resolve`, unmerged and unmeasured on the cloud pair) is the next step.
 - Revocation is not instant. It depends on the ENS poll interval, RPC behavior and Tor. Confirmation and first failed call are separate times.
 - Tor covers the control plane only. Data-plane UDP, STUN and relays expose addresses to their counterparties.
 - Node, admin and Hedera payer keys are software keys. Relay admission is capped but not production-hardened.
