@@ -106,7 +106,7 @@ export function JoinConsole({ token, view }: { token: string; view: 'pending' | 
       }
     }
     void poll('joins')
-    if (view === 'members') void poll('members')
+    void poll('members')
     return () => {
       controller.abort()
       clearTimeout(joinTimer)
@@ -160,7 +160,12 @@ export function JoinConsole({ token, view }: { token: string; view: 'pending' | 
             </p>
           )
         )}
-        <RequestAccess token={token} rows={joins} />
+        <RequestAccess
+          token={token}
+          rows={[...joins, ...members.filter((member) => !joins.some((join) => join.label === member.label))].filter(
+            (row) => row.label !== 'relays' && !row.label.startsWith('mumbai-')
+          )}
+        />
       </>
     )
   return (
