@@ -8,9 +8,9 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/WhyAsh5114/bramble/brambled/admission"
-	"github.com/WhyAsh5114/bramble/brambled/gateway"
-	"github.com/WhyAsh5114/bramble/brambled/wgnode"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/admission"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/gateway"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/wgnode"
 )
 
 type fakePeerTable []wgnode.PeerInfo

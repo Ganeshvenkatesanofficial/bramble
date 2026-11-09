@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/brambled/sidecar"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/sidecar"
 )
 
 const callTimeout = 30 * time.Second

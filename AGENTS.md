@@ -36,4 +36,4 @@ Your `GH_TOKEN` environment variable holds a fine-grained PAT. Codex agents see 
 git -c credential.helper='!f() { echo username=x-access-token; echo password=${GH_TOKEN:-$GH_PAT}; }; f' push origin <branch>
 ```
 
-Your git author name and email are already set in the environment. Check access with `curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${GH_TOKEN:-$GH_PAT}" https://api.github.com/repos/WhyAsh5114/bramble` (expect 200). Never echo the token or write it to a file.
+Your git author name and email are already set in the environment. Check access with `curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${GH_TOKEN:-$GH_PAT}" https://api.github.com/repos/Ganeshvenkatesanofficial/bramble` (expect 200). Never echo the token or write it to a file.

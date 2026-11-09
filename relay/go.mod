@@ -1,3 +1,3 @@
-module github.com/WhyAsh5114/bramble/relay
+module github.com/Ganeshvenkatesanofficial/bramble/relay
 
 go 1.27.0

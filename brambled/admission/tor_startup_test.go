@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/brambled/sidecar"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/sidecar"
 )
 
 // torSidecar stands in for the real sidecar's routes/tor.ts gate: while

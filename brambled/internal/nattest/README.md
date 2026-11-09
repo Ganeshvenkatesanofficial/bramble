@@ -16,7 +16,7 @@ after dependencies are installed. All real sockets bind to loopback IPv4.
 To use the fixture in another `brambled` integration test:
 
 1. Add `//go:build nattest` as the first line of the test file.
-2. Import `github.com/WhyAsh5114/bramble/brambled/internal/nattest`.
+2. Import `github.com/Ganeshvenkatesanofficial/bramble/brambled/internal/nattest`.
 3. Create a NAT and register cleanup:
 
    ```go

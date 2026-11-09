@@ -22,8 +22,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/brambled/internal/testport"
-	"github.com/WhyAsh5114/bramble/brambled/wgnode"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/internal/testport"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/wgnode"
 )
 
 // TestManual_RealPostgresAndHTTPBackendsProxyCorrectly requires, running

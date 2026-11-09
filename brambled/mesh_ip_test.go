@@ -5,8 +5,8 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/WhyAsh5114/bramble/brambled/admission"
-	"github.com/WhyAsh5114/bramble/brambled/sidecar"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/admission"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/sidecar"
 )
 
 // fakeMeshResolver is a minimal admission.Resolver for resolvePeerMeshIPs'

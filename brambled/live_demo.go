@@ -20,8 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/brambled/sidecar"
-	"github.com/WhyAsh5114/bramble/brambled/wgnode"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/sidecar"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/wgnode"
 )
 
 // hashscanTestnetTxURL turns a Hedera consensus transaction ID (the

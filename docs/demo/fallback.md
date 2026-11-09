@@ -15,12 +15,12 @@ cloud pair; ETH-313 now owns the exclusive live slot.
 
 If the new-device path misses a stage deadline, use the
 [agent backup](../DEMO_SCRIPT.md#fall-back-to-the-agent-path). Worker MCP sends
-approval requests to `https://get-bramble.whyash5114.com`. The operator
+approval requests to `https://<console-name>`. The operator
 reported this route on 6 November 2026 at 18:44 UTC; a new Pi lifecycle through
 that URL remains **Open** for this author.
 
 1. Before the slot, follow the [Pi installation step](../../agent-mcp/PI.md#steps)
-   with `BRAMBLE_APPROVAL_URL=https://get-bramble.whyash5114.com`. The
+   with `BRAMBLE_APPROVAL_URL=https://<console-name>`. The
    installer saves it in Pi's MCP configuration. Rerun that step for an existing
    install that used `http://127.0.0.1:3001`.
 2. Run the [worker reachability check](../DEMO_SCRIPT.md#close-with-the-agent).
@@ -125,7 +125,7 @@ copy secrets onto the screen.
    human supplies `APPROVAL_DEMO_TOKEN` in the environment without displaying it:
 
    ```sh
-   python3 deploy/scripts/rehearse.py --base https://get-bramble.whyash5114.com
+   python3 deploy/scripts/rehearse.py --base https://<console-name>
    ```
 
    Record the screen while the harness runs, then repeat once by hand in the

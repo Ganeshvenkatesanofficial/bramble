@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/brambled/stun"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/stun"
 
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/net/icmp"

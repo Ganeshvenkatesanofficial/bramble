@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/WhyAsh5114/bramble/brambled/datarelay"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/datarelay"
 )
 
 func TestValidateDataRelayQuote(t *testing.T) {

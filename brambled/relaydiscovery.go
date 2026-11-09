@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/brambled/sidecar"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/sidecar"
 )
 
 // rendezvousPool is the set of rendezvous relays the endpoint resolver

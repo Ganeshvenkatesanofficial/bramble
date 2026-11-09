@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/brambled/internal/nattest"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/internal/nattest"
 )
 
 func server(t *testing.T, ip string) *net.UDPConn {

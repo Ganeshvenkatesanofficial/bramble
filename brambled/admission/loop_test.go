@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/brambled/sidecar"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/sidecar"
 )
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/brambled/sidecar"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/sidecar"
 )
 
 // TestGate2_2_FreshLoopReadsCurrentChainStateNotPriorMemory is Gate 2.2's

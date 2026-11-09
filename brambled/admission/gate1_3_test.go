@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/brambled/internal/testport"
-	"github.com/WhyAsh5114/bramble/brambled/sidecar"
-	"github.com/WhyAsh5114/bramble/brambled/wgnode"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/internal/testport"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/sidecar"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/wgnode"
 )
 
 func pingUntil(t *testing.T, from *wgnode.Node, to netip.Addr, deadline time.Duration) bool {

@@ -1,8 +1,8 @@
-module github.com/WhyAsh5114/bramble/node-daemon
+module github.com/Ganeshvenkatesanofficial/bramble/node-daemon
 
 go 1.27.0
 
-require github.com/WhyAsh5114/bramble/brambled v0.0.0
+require github.com/Ganeshvenkatesanofficial/bramble/brambled v0.0.0
 
 require (
 	github.com/google/btree v1.1.2 // indirect
@@ -15,4 +15,4 @@ require (
 	gvisor.dev/gvisor v0.0.0-20250503011706-39ed1f5ac29c // indirect
 )
 
-replace github.com/WhyAsh5114/bramble/brambled => ../brambled
+replace github.com/Ganeshvenkatesanofficial/bramble/brambled => ../brambled

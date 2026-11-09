@@ -27,8 +27,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/node-daemon/internal/daemon"
-	"github.com/WhyAsh5114/bramble/node-daemon/ui"
+	"github.com/Ganeshvenkatesanofficial/bramble/node-daemon/internal/daemon"
+	"github.com/Ganeshvenkatesanofficial/bramble/node-daemon/ui"
 )
 
 // version is set by the release build with -ldflags "-X main.version=...".

@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/brambled/admission"
-	"github.com/WhyAsh5114/bramble/brambled/sidecar"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/admission"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/sidecar"
 )
 
 // liveTailnet is a fake sidecar whose device list and records can change

@@ -25,7 +25,7 @@ All hero-path windows are **Open / unverified budgets** until the ETH-313 rehear
 | --- | --- | --- | --- | --- |
 | 0:00–0:20 | 1. Private service at home | The gateway answers only on its loopback (`127.0.0.1:9100`) | n/a | Read from source |
 | 0:20–0:35 | 2. A new device cannot reach it | `curl` from the new device to the gateway's public address fails | 10 s | Read from source |
-| 0:35–1:05 | 3. Install with one line | `curl -fsSL https://get-bramble.whyash5114.com/install.sh \| sh`; the local UI asks to join | 60 s | Verified (reported): ETH-179, ETH-250 |
+| 0:35–1:05 | 3. Install with one line | `curl -fsSL https://<console-name>/install.sh \| sh`; the local UI asks to join | 60 s | Verified (reported): ETH-179, ETH-250 |
 | 1:05–1:40 | 4. Operator approves | **Pending device joins** → **Approve**; then the `task` request → **Approve** | 30 s per approval | Join: Verified (reported). New device's grant: Verified (reported) in ETH-244 |
 | 1:40–2:35 | 5. Opens in the browser | **Open task** on the connected screen shows the home page | 55 s | **Open**: needs ETH-313 acceptance |
 | 2:35–3:30 | 6. Revoke | **Revoke access**; the page badge turns **Unreachable**; a reload fails | 60 s | **Open** for the new device; Verified (reported) for the worker |
@@ -51,7 +51,7 @@ All hero-path windows are **Open / unverified budgets** until the ETH-313 rehear
 
 ## After the take
 
-- [ ] Revoke the new device's `task` grant and its membership (**Members** → **Revoke**). Uninstall it with `curl -fsSL https://get-bramble.whyash5114.com/uninstall.sh | sh -s -- --yes`.
+- [ ] Revoke the new device's `task` grant and its membership (**Members** → **Revoke**). Uninstall it with `curl -fsSL https://<console-name>/uninstall.sh | sh -s -- --yes`.
 - [ ] Remove any remaining `mumbai-worker` grant and confirm the next call is denied.
 - [ ] Stop the paid nodes, then check both units report `inactive` (commands in the operator script).
 - [ ] Record build, times, join ID, request ID, transaction hashes, payment reference and HCS sequence (or its failure) in ETH-313.

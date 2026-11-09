@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/WhyAsh5114/bramble/brambled/wgnode"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/wgnode"
 )
 
 // PeerLister is satisfied by *wgnode.Node — narrowed to what WaitForStall

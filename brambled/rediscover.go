@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/brambled/admission"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/admission"
 )
 
 // defaultRediscoverInterval is how often serve re-lists the tailnet for

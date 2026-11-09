@@ -14,7 +14,7 @@ Pair it with the [demo checklist](DEMO_CHECKLIST.md) and the [pre-existing vs ne
 
 **Short description:** Bramble is a WireGuard mesh whose device identities and scoped service grants live in an ENSv2 registry. Every peer resolves that registry itself, so no coordinator and no relay can add a member or keep a revoked one. Workers reach a private service without holding its credential. A human approves each grant and can revoke it live. Public relays are paid per session or byte allotment through x402 on Hedera. For Mumbai we moved the control plane onto Tor and added an audit trail on Hedera Consensus Service (HCS).
 
-**Repository:** https://github.com/WhyAsh5114/bramble
+**Repository:** https://github.com/Ganeshvenkatesanofficial/bramble
 
 **Demo video:** [2–4 minute video URL]
 
@@ -33,7 +33,7 @@ At `pre-mumbai` Bramble already had: userspace WireGuard nodes in Go (`brambled/
 | Approval console (W1, W4) | Access requests, approve and revoke, device join, activity feed | [fill from README table] |
 | Agent access (W2, W3) | MCP server for requesting access; per-agent spend with a HashScan link | [fill from README table] |
 | Tor control plane (W9) | Sidecar ENS reads and payment HTTP go through Tor with separate isolation keys | ENS and payment fetches routed; Tor-exit check and revocation-over-Tor measurement recorded 6 Nov; before/after provider-log comparison **Open** |
-| Hedera HCS audit trail (W10) | Salted commitment per grant, revoke and settled payment, posted by the approval service | [PR #22](https://github.com/WhyAsh5114/bramble/pull/22); a fresh mirror-verified record from the cloud deployment **Open** |
+| Hedera HCS audit trail (W10) | Salted commitment per grant, revoke and settled payment, posted by the approval service | HCS audit module implemented; a fresh mirror-verified record from the cloud deployment **Open** |
 | Direct paths (W8) | STUN discovery, hole punching, relay fallback | **Open** unless rehearsed on camera |
 | Distribution (W5, ETH-177) | Self-contained device binaries, `bramble up`, local web UI, sponsored relay sessions | [fill from README table] |
 | Demo infrastructure (W11) | Cloud nodes, logging RPC proxy, public console, preflight | [fill from README table] |

@@ -101,8 +101,7 @@ Agent: Net-Claude, committing as `Net-Claude (agent, Chaitanya Kelkar)` (Verifie
 
 ## Mumbai approval API (ETH-29)
 
-Core-Sol (OpenAI Codex), committing as Core-Sol (agent, Yash Kolekar) through
-the `whyash-paperclip` commit account,
+Core-Sol (OpenAI Codex), committing as Core-Sol (agent, Yash Kolekar),
 implemented `approval/` and its API tests from ETH-29. AI assistance also covered
 `pnpm-workspace.yaml`, `pnpm-lock.yaml`, `.prettierignore`, `eslint.config.js`,
 this file, `approval/README.md`, and the duration draft
@@ -179,7 +178,7 @@ Each agent commits under the git identity shown here. Confirm yours with `git co
 
 ## Mumbai formatting gate correction (ETH-75)
 
-On 6 November 2026 India Standard Time (IST), Astra (OpenAI Codex) updated exactly `.prettierignore` and `docs/AI_USAGE.md` on a branch from `hackathon` commit `3bec957e435283617d44499f13c83eaabf884edc`. The commit account is `Astra (agent, Yash Kolekar) <153986822+whyash-paperclip@users.noreply.github.com>`.
+On 6 November 2026 India Standard Time (IST), Astra (OpenAI Codex) updated exactly `.prettierignore` and `docs/AI_USAGE.md` on a branch from `hackathon` commit `3bec957e435283617d44499f13c83eaabf884edc`. The commit account is `Astra (agent, Yash Kolekar)`.
 
 - **Read from source:** Atlas directed the narrow remedy: exclude the vendored `.agents/skills/` and `.claude/skills/` trees from Prettier. Their contents stay unchanged. This restores the baseline gate needed to validate demo beats 1–6.
 - **Verified:** Before the correction, Prettier 3.9.6 rejected `code-review/agents/openai.yaml` in both trees. `pnpm install --frozen-lockfile` passed with pnpm 10.33.3.
@@ -207,8 +206,7 @@ Commit identity: `QA-Sol (agent, Aayush Nair) <aayushnair@gmail.com>`.
 
 ### ETH-34 — agent payments panel (Core-Sol)
 
-- Agent: Core-Sol; committing as `Core-Sol (agent, Yash Kolekar)
-<153986822+whyash-paperclip@users.noreply.github.com>`.
+- Agent: Core-Sol; committing as `Core-Sol (agent, Yash Kolekar)`.
 - Task/spec: ETH-34 and `docs/14_MUMBAI_BUILD_BRIEF.md` W3, superseded where
   applicable by `docs/15_MUMBAI_HANDOFF.md`; demo beat 3.
 - Prompt: inspect real rendezvous/data-relay purchase timing, reuse the read-only

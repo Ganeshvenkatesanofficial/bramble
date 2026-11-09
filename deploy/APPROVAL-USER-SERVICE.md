@@ -10,7 +10,7 @@ Run these commands as the admin user. Node.js, pnpm, Bun, OpenSSL and the
    temporary directories. Use a reviewed commit from `origin/hackathon`.
 
    ```sh
-   git clone --branch hackathon https://github.com/WhyAsh5114/bramble.git ~/bramble-work/approval-runtime
+   git clone --branch hackathon https://github.com/Ganeshvenkatesanofficial/bramble.git ~/bramble-work/approval-runtime
    cd ~/bramble-work/approval-runtime
    pnpm install --frozen-lockfile
    pnpm exec turbo run build --filter=@bramble/approval...

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/brambled/wgnode"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/wgnode"
 )
 
 // Store owns every file the daemon keeps under its data directory

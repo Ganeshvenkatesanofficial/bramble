@@ -32,8 +32,7 @@ interrupted investigation resumed. The documented source check ran again at
 cutoff correlation. They validate the source contract locally, not the deployed
 revision or a live repair.
 
-[ETH-249](/ETH/issues/ETH-249) supplies the earlier desktop/mobile evidence and
-[PR #45](https://github.com/WhyAsh5114/bramble/pull/45). This report reuses that
+[ETH-249](/ETH/issues/ETH-249) supplies the earlier desktop/mobile evidence. This report reuses that
 presentation evidence rather than repeating browser QA.
 
 ## Read from source

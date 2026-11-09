@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/brambled/statusapi"
-	"github.com/WhyAsh5114/bramble/brambled/wgnode"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/statusapi"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/wgnode"
 )
 
 func TestSTUNEndpointRootless(t *testing.T) {

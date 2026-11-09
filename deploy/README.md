@@ -60,7 +60,7 @@ On each machine, install what its role needs:
 On each machine, as root:
 
 ```sh
-git clone https://github.com/WhyAsh5114/bramble.git /opt/bramble
+git clone https://github.com/Ganeshvenkatesanofficial/bramble.git /opt/bramble
 cd /opt/bramble && git checkout <commit>
 ```
 

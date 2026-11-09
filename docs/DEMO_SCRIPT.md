@@ -39,7 +39,7 @@ The slot owner (ETH-313) runs these after the ETH-319 pull request merges. They 
 3. Confirm the served node config still lists the service and the rendezvous payment URL:
 
    ```sh
-   curl -fsS https://get-bramble.whyash5114.com/.well-known/bramble.json
+   curl -fsS https://<console-name>/.well-known/bramble.json
    ```
 
    Expect `"services": [{"peer": "mumbai-gateway", "service": "task", "path": "/task"}]` and a `rendezvousPaymentUrl`. Both were present at 18:10 UTC.
@@ -49,7 +49,7 @@ The slot owner (ETH-313) runs these after the ETH-319 pull request merges. They 
 The commands below are **Read from source / unverified by this author**. Run them on the operator workstation with the existing SSH aliases. Do not run them during another operator's slot. Keep a browser and one terminal visible. The latest recorded gateway and worker state is stopped (16:10 UTC). Obtain a new operator slot before starting them. Prepare a recording with its date, build and evidence limits; the recording's existence is **Open** until the operator checks it.
 
 - [ ] Reserve exclusive use of the cloud pair and `mumbai-worker` grants. Agree that nobody restarts units, changes grants or calls the forward during the take. ETH-244 discarded an overlapping pass.
-- [ ] Confirm the deployed build and open the public console at `https://get-bramble.whyash5114.com`. Confirm `GET /api/requests` returns 200. On the workstation, check `systemctl --user is-active bramble-approval bramble-console-tunnel`. On relays, check `systemctl is-active bramble-relay@relay1 rpc-proxy caddy coturn` through SSH.
+- [ ] Confirm the deployed build and open the public console at `https://<console-name>`. Confirm `GET /api/requests` returns 200. On the workstation, check `systemctl --user is-active bramble-approval bramble-console-tunnel`. On relays, check `systemctl is-active bramble-relay@relay1 rpc-proxy caddy coturn` through SSH.
 - [ ] Have the human enter the existing demo token in the console's password field and click **Unlock**, before recording. Reloading locks the console. Keep secret files, headers, shell tracing and agent configuration off screen. Do not give the operator token to an agent to perform this script.
 - [ ] Remove any previous grant through the existing operator revoke-by-label flow for `mumbai-worker`, even if no console card exists. Requests live in process memory; a restart can hide the card while ENS keeps the grant. HTTP 409 `not_granted` means no grant to remove. Verify the next denied call against a new gateway journal line.
 - [ ] Check current Sepolia ETH, Hedera testnet HBAR and USDC balances through the existing operator balance check. Historical balances are not current funds. Testnet USDC is token `0.0.429274`; the reported payer is `0.0.11334961`. Confirm the actual payer mapping before attributing spend to a worker.
@@ -81,9 +81,9 @@ When time allows, continue off stage through approve, successful call, revoke an
 
 ### Also for the hero path
 
-- [ ] Use a clean device: Linux or macOS with a desktop browser, no `~/.bramble` directory, not a cloud node. If it held an earlier install, run `curl -fsSL https://get-bramble.whyash5114.com/uninstall.sh | sh -s -- --yes`.
+- [ ] Use a clean device: Linux or macOS with a desktop browser, no `~/.bramble` directory, not a cloud node. If it held an earlier install, run `curl -fsSL https://<console-name>/uninstall.sh | sh -s -- --yes`.
 - [ ] Choose a fresh lowercase device label, for example `home-laptop-2`. Never reuse a revoked label such as `eth244-postfix-device`.
-- [ ] Keep three windows ready: the new device's terminal and browser, the console at `https://get-bramble.whyash5114.com` (unlocked by a human), and an operator terminal off screen.
+- [ ] Keep three windows ready: the new device's terminal and browser, the console at `https://<console-name>` (unlocked by a human), and an operator terminal off screen.
 - [ ] Rehearse the hero path twice in the ETH-313 slot. Record each beat's duration, the join ID, the grant and revoke hashes, and when the page first loaded and first showed **Unreachable**. Replace the budgets below with these numbers.
 
 ## Present the home-cloud story
@@ -125,7 +125,7 @@ Expect `Connection refused` or a timeout after 5 s. Say it plainly: this is the 
 Beat 3, new device:
 
 ```sh
-curl -fsSL https://get-bramble.whyash5114.com/install.sh | sh
+curl -fsSL https://<console-name>/install.sh | sh
 ```
 
 The installer waits up to 20 s for the local UI and opens it with `xdg-open` or `open`. If no browser opens, open the printed address, normally `http://127.0.0.1:7777`.
@@ -133,7 +133,7 @@ The installer waits up to 20 s for the local UI and opens it with `xdg-open` or 
 Beat 4, operator terminal off screen. Keep the token in the environment and the header off screen:
 
 ```sh
-curl -sS -X POST https://get-bramble.whyash5114.com/api/requests \
+curl -sS -X POST https://<console-name>/api/requests \
   -H "Authorization: Bearer $APPROVAL_DEMO_TOKEN" -H 'Content-Type: application/json' \
   -d '{"agentLabel":"home-laptop-2","gatewayLabel":"mumbai-gateway","service":"task","note":"home page for a new device"}'
 ```
@@ -154,12 +154,12 @@ After the take, under **Members**, click **Revoke** for the device label to end 
 
 ## Close with the agent
 
-Use the [Pi run instructions](../agent-mcp/PI.md). Per the operator update on 6 November 2026 at 18:44 UTC, worker MCP uses `https://get-bramble.whyash5114.com` for the approval API. Set `BRAMBLE_APPROVAL_URL` to that URL when installing Pi; the installer saves it in the MCP configuration. The agent beat needs no worker reverse tunnel. The private service still uses the worker's `http://127.0.0.1:8080` Bramble forward.
+Use the [Pi run instructions](../agent-mcp/PI.md). Per the operator update on 6 November 2026 at 18:44 UTC, worker MCP uses `https://<console-name>` for the approval API. Set `BRAMBLE_APPROVAL_URL` to that URL when installing Pi; the installer saves it in the MCP configuration. The agent beat needs no worker reverse tunnel. The private service still uses the worker's `http://127.0.0.1:8080` Bramble forward.
 
 Before the slot, check the public route from the worker:
 
 ```sh
-ssh bramble-worker 'curl -sS -m 10 -o /dev/null -w "console HTTP %{http_code}\n" https://get-bramble.whyash5114.com/api/requests'
+ssh bramble-worker 'curl -sS -m 10 -o /dev/null -w "console HTTP %{http_code}\n" https://<console-name>/api/requests'
 ```
 
 Expect `console HTTP 200`. This checks reachability only; it does not prove authenticated request creation or private service access. The public route is **operator-reported**; this author has not rehearsed the Pi lifecycle with it. The ETH-243 measurements below used the earlier temporary worker tunnel. The workstation's `bramble-console-tunnel` still serves the public console and remains in preflight.
@@ -307,7 +307,7 @@ Use these stage deadlines as **unverified presentation budgets**, not protocol t
 
 ## End the take
 
-Save the timing and evidence notes, including every skipped or failed segment. The operator revokes any remaining grant and checks that no service access remains. For the hero path, also revoke the new device under **Members** and uninstall it with `curl -fsSL https://get-bramble.whyash5114.com/uninstall.sh | sh -s -- --yes`. Stop the paid nodes when the exclusive slot ends:
+Save the timing and evidence notes, including every skipped or failed segment. The operator revokes any remaining grant and checks that no service access remains. For the hero path, also revoke the new device under **Members** and uninstall it with `curl -fsSL https://<console-name>/uninstall.sh | sh -s -- --yes`. Stop the paid nodes when the exclusive slot ends:
 
 ```sh
 ssh bramble-worker 'sudo systemctl stop bramble-worker'

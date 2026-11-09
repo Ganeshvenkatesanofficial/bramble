@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/WhyAsh5114/bramble/brambled/sidecar"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/sidecar"
 )
 
 // fakeResolver is an in-memory stand-in for *sidecar.Manager, keyed by

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/WhyAsh5114/bramble/brambled/sidecar"
-	"github.com/WhyAsh5114/bramble/brambled/sponsor"
-	"github.com/WhyAsh5114/bramble/brambled/wgnode"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/sidecar"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/sponsor"
+	"github.com/Ganeshvenkatesanofficial/bramble/brambled/wgnode"
 )
 
 // ETH-301: a curl-installed device gets -rendezvous from the public node config
